@@ -53,6 +53,43 @@ from ..dump import dump  # noqa: F401
 from .chat_chunks import ChatChunks
 
 
+def compute_line_hash(line_num, line_content):
+    """Compute a 6-char hex hash from line content and 1-indexed position."""
+    raw = f"{line_num}:{line_content}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:6]
+
+
+def add_line_hashes(content):
+    """Prefix every line of *content* with a hash and separator.
+
+    Output format per line: ``abcdef | original line``
+    The hash encodes both the line text and its 1-based position so that
+    identical lines at different positions get distinct hashes.
+    """
+    lines = content.splitlines(keepends=True)
+    result = []
+    for i, line in enumerate(lines):
+        line_num = i + 1
+        line_content = line.rstrip('\n').rstrip('\r\n')
+        h = compute_line_hash(line_num, line_content)
+        result.append(f"{h} | {line}")
+    return "".join(result)
+
+
+def strip_line_hashes(text):
+    """Remove hash prefixes (``abcdef | ``) from every line in *text*.
+
+    This is the inverse of :func:`add_line_hashes` and is used when parsing
+    SEARCH blocks so that downstream matching works on clean source code.
+    """
+    lines = text.splitlines(keepends=True)
+    stripped = []
+    for line in lines:
+        cleaned = re.sub(r'^[0-9a-f]{6} \| ', '', line)
+        stripped.append(cleaned)
+    return "".join(stripped)
+
+
 class UnknownEditFormat(ValueError):
     def __init__(self, edit_format, valid_formats):
         self.edit_format = edit_format
@@ -646,11 +683,7 @@ class Coder:
                 prompt += relative_fname
                 prompt += f"\n{self.fence[0]}\n"
 
-                prompt += content
-
-                # lines = content.splitlines(keepends=True)
-                # lines = [f"{i+1:03}:{line}" for i, line in enumerate(lines)]
-                # prompt += "".join(lines)
+                prompt += add_line_hashes(content)
 
                 prompt += f"{self.fence[1]}\n"
 
@@ -665,7 +698,7 @@ class Coder:
                 prompt += "\n"
                 prompt += relative_fname
                 prompt += f"\n{self.fence[0]}\n"
-                prompt += content
+                prompt += add_line_hashes(content)
                 prompt += f"{self.fence[1]}\n"
         return prompt
 

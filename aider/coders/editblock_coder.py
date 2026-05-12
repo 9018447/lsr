@@ -8,7 +8,7 @@ from pathlib import Path
 from aider import utils
 
 from ..dump import dump  # noqa: F401
-from .base_coder import Coder
+from .base_coder import Coder, strip_line_hashes
 from .editblock_prompts import EditBlockPrompts
 
 
@@ -525,7 +525,7 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
                 ):
                     raise ValueError(f"Expected `{UPDATED_ERR}` or `{DIVIDER_ERR}`")
 
-                yield filename, "".join(original_text), "".join(updated_text)
+                yield filename, strip_line_hashes("".join(original_text)), "".join(updated_text)
 
             except ValueError as e:
                 processed = "".join(lines[: i + 1])

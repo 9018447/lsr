@@ -131,6 +131,11 @@ Every *SEARCH/REPLACE block* must use this format:
 
 Use the *FULL* file path, as shown to you by the user.
 {quad_backtick_reminder}
+Every source code line shown to you is prefixed with a 6-character hash and " | " separator (e.g., `a1b2c3 | def foo():`).
+The hash is computed from the line's content and its position in the file.
+When writing *SEARCH* sections, you MUST include the hash prefix on each line exactly as shown in the source code.
+The *REPLACE* section should NOT include hash prefixes — write only the new code without hashes.
+
 Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character for character, including all comments, docstrings, etc.
 If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
 
