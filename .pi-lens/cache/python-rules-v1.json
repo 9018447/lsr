@@ -1,7 +1,7 @@
 {
   "version": "v1",
-  "timestamp": 1778575846447,
-  "ruleHash": "597158c85ebba477",
+  "timestamp": 1778747436952,
+  "ruleHash": "23c8539625768402",
   "queries": [
     {
       "id": "bare-except",
@@ -354,8 +354,9 @@
       "severity": "error",
       "language": "python",
       "message": "Potential SQL injection sink — use parameterized queries",
-      "query": "  (call\n    function: (attribute\n      attribute: (identifier) @FN)\n    arguments: (argument_list\n      [(binary_operator) (identifier) (call)] @SQL\n      (_)*)\n    (#match? @FN \"^(execute|executemany|query|raw)$\"))",
+      "query": "  (call\n    function: (attribute\n      object: (_) @OBJ\n      attribute: (identifier) @FN)\n    arguments: (argument_list\n      [(binary_operator) (identifier) (call)] @SQL\n      (_)*))",
       "metavars": [
+        "OBJ",
         "FN",
         "SQL"
       ],
@@ -445,8 +446,9 @@
       "severity": "error",
       "language": "python",
       "message": "'return' with a value should not be used in a generator function",
-      "query": "  (function_definition\n    body: (block\n      (return_statement\n        (_) @RETURN_VAL) @RETURN))",
+      "query": "  (function_definition\n    body: (block\n      (return_statement\n        (_) @RETURN_VAL) @RETURN)) @FUNCTION",
       "metavars": [
+        "FUNCTION",
         "RETURN",
         "RETURN_VAL"
       ],

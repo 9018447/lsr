@@ -683,7 +683,10 @@ class Coder:
                 prompt += relative_fname
                 prompt += f"\n{self.fence[0]}\n"
 
-                prompt += add_line_hashes(content)
+                if self.edit_format == "hashline":
+                    prompt += add_line_hashes(content)
+                else:
+                    prompt += content
 
                 prompt += f"{self.fence[1]}\n"
 
@@ -698,7 +701,10 @@ class Coder:
                 prompt += "\n"
                 prompt += relative_fname
                 prompt += f"\n{self.fence[0]}\n"
-                prompt += add_line_hashes(content)
+                if self.edit_format == "hashline":
+                    prompt += add_line_hashes(content)
+                else:
+                    prompt += content
                 prompt += f"{self.fence[1]}\n"
         return prompt
 
@@ -1591,13 +1597,21 @@ class Coder:
             content = ""
 
         if not interrupted:
-            add_rel_files_message = self.check_for_file_mentions(content)
-            if add_rel_files_message:
-                if self.reflected_message:
-                    self.reflected_message += "\n\n" + add_rel_files_message
-                else:
-                    self.reflected_message = add_rel_files_message
-                return
+            # For hashline format with CREATE blocks, skip file mention check
+            # because CREATE blocks contain filenames that don't exist yet
+            skip_file_mentions = (
+                self.edit_format == "hashline"
+                and "<<<<<<< CREATE" in (content or "")
+            )
+
+            if not skip_file_mentions:
+                add_rel_files_message = self.check_for_file_mentions(content)
+                if add_rel_files_message:
+                    if self.reflected_message:
+                        self.reflected_message += "\n\n" + add_rel_files_message
+                    else:
+                        self.reflected_message = add_rel_files_message
+                    return
 
             try:
                 if self.reply_completed():
