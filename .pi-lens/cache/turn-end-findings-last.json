@@ -1,0 +1,4 @@
+{
+  "signature": "aider/crg_repomap.py::Unresolved from this turn — aider/crg_repomap.py:\n🔴 STOP — 1 issue(s) must be fixed:\n  L378: 'return' with a value should not be used in a generator function\n    💡 Fix: Refactor this pattern to a safer, explicit form matching project conventions.",
+  "sessionId": "lens-mp2eg5yz-ecd0f261"
+}
