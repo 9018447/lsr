@@ -1,60 +1,60 @@
 ;; derived from: https://github.com/tree-sitter/tree-sitter-julia
+;; Compatible with tree-sitter-language-pack v0.13.0+ (new grammar)
 ;; License: MIT
 
-(module
+;; Module definitions
+(module_definition
   name: (identifier) @name.definition.module) @definition.module
 
-(module
-  name: (scoped_identifier) @name.definition.module) @definition.module
-
+;; Struct definitions (covers both mutable and non-mutable)
 (struct_definition
-  name: (type_identifier) @name.definition.class) @definition.class
+  (type_head (identifier) @name.definition.class)) @definition.class
 
-(mutable_struct_definition
-  name: (type_identifier) @name.definition.class) @definition.class
+;; Abstract type definitions
+(abstract_definition
+  (type_head (identifier) @name.definition.class)) @definition.class
 
-(abstract_type_declaration
-  name: (type_identifier) @name.definition.class) @definition.class
+;; Constant assignments
+(const_statement
+  (assignment (identifier) @name.definition.constant)) @definition.constant
 
-(constant_assignment
-  left: (identifier) @name.definition.class) @definition.class
+;; Function definitions
+(function_definition
+  (signature (call_expression (identifier) @name.definition.function))) @definition.function
 
 (function_definition
-  name: (identifier) @name.definition.function) @definition.function
+  (signature (call_expression (field_expression) @name.definition.function))) @definition.function
 
-(function_definition
-  name: (scoped_identifier) @name.definition.function) @definition.function
+;; Short-form method definitions: f(x) = ...
+(assignment
+  (call_expression (identifier) @name.definition.function)) @definition.function
 
 (assignment
-  left: (call_expression
-          function: (identifier) @name.definition.function)) @definition.function
+  (call_expression (field_expression) @name.definition.function)) @definition.function
 
-(method_definition
-  name: (identifier) @name.definition.method) @definition.method
-
+;; Macro definitions
 (macro_definition
-  name: (identifier) @name.definition.macro) @definition.macro
+  (signature (call_expression (identifier) @name.definition.macro))) @definition.macro
 
-(macro_call
-  name: (identifier) @name.reference.call) @reference.call
+;; Macro call references
+(macrocall_expression
+  (macro_identifier (identifier) @name.reference.call)) @reference.call
+
+;; Function call references
+(call_expression
+  (identifier) @name.reference.call) @reference.call
 
 (call_expression
-  function: (identifier) @name.reference.call) @reference.call
+  (field_expression) @name.reference.call) @reference.call
 
-(call_expression
-  function: (scoped_identifier) @name.reference.call) @reference.call
-
-(type_expression
-  name: (type_identifier) @name.reference.type) @reference.type
-
-(constant_assignment
-  left: (identifier) @name.definition.constant) @definition.constant
-
+;; Export statements
 (export_statement
   (identifier) @name.reference.export) @reference.export
 
+;; Using statements
 (using_statement
   (identifier) @name.reference.module) @reference.module
 
+;; Import statements
 (import_statement
-  (identifier) @name.reference.module) @reference.module
+  (import_path (identifier) @name.reference.module)) @reference.module
