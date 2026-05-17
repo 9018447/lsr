@@ -30,6 +30,23 @@ The following XML tags invoke CRG toolkit commands. Place them in your response 
 <crg_tool subcommand="communities" args="[--detail NAME]" />
 <crg_tool subcommand="status" args="" />
 
+## IMPORTANT RULES
+
+1. Each <crg_tool> tag executes ONE command. To search multiple keywords, emit MULTIPLE tags, one per keyword.
+2. For `search`, the PATTERN must be a single word or identifier (no spaces). If you need to search multiple concepts, use separate tags.
+
+## EXAMPLES
+
+Good (one search per keyword):
+<crg_tool subcommand="search" args="hashline" />
+<crg_tool subcommand="search" args="agent" />
+
+Bad (multiple keywords in one search):
+<crg_tool subcommand="search" args="hashline agent code-review" />
+
+Good (query with options):
+<crg_tool subcommand="query" args="value --callers --callees --limit 10" />
+
 Results are returned automatically.
 """
 
@@ -159,10 +176,17 @@ def run_crg_tool(subcommand: str, args_str: str, root: str | Path) -> str:
     from aider import crg_toolkit as crg_mod
 
     parser = _build_parser()
-    try:
-        ns = parser.parse_args([subcommand] + tokens)
-    except SystemExit:
-        return f"Error: invalid arguments for /crg {subcommand} {' '.join(tokens)}"
+    # Capture argparse errors by redirecting stderr during parse_args
+    parse_err = io.StringIO()
+    with redirect_stderr(parse_err):
+        try:
+            ns = parser.parse_args([subcommand] + tokens)
+        except SystemExit:
+            err_msg = parse_err.getvalue().strip()
+            hint = ""
+            if subcommand == "search" and len(tokens) > 1:
+                hint = "\nHint: `search` accepts only one PATTERN. Use multiple <crg_tool> tags for multiple keywords."
+            return f"Error parsing arguments for /crg {subcommand}: {err_msg or 'invalid arguments'}{hint}"
 
     try:
         db_path = str(Path(root) / ".code-review-graph/graph.db")
