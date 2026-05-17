@@ -31,13 +31,12 @@
 - 代码变更的风险评估，自动识别高风险修改点
 - 项目结构可视化，快速理解陌生代码库的架构逻辑
 
-### 🆕 多角色专业Agent体系
-内置四类专业编程辅助Agent，覆盖全开发流程：
+### 🆕 多角色专业Agent体系（规划中，暂未实现）
+后续版本将内置四类专业编程辅助Agent，覆盖全开发流程：
 - 代码评审Agent：基于行业规范和项目最佳实践给出评审意见
 - 重构辅助Agent：提供安全重构方案，自动识别重构影响范围
 - 调试排障Agent：结合报错信息和代码链路定位根因，给出修复方案
 - 架构设计Agent：基于项目现状给出合理的架构演进建议
-
 ---
 
 ### 原生Aider优秀特性保留
@@ -69,11 +68,6 @@ aider --model deepseek --api-key deepseek=<your-key>
 # 自动查询所有调用get_user_info函数的位置和链路
 ```
 
-2. **调用代码评审Agent**
-```
-> /agent review src/api/user.py
-# 自动对指定文件进行代码评审，输出规范问题、性能问题、安全风险
-```
 
 3. **Hashline精准修改**
 ```
@@ -91,7 +85,7 @@ aider --model deepseek --api-key deepseek=<your-key>
 | 变更管控 | 仅支持提交前确认 | 支持变更粒度校验、影响范围预评估 |
 
 ## 📚 文档
-- [Agent体系使用指南](./docs/agents.md)
+- [Agent体系使用指南](./docs/agents.md)（规划中，暂未实现）
 - [Hashline功能详解](./docs/hashline.md)
 - [Code-Review-Graph查询语法](./docs/crg.md)
 - [原版Aider官方文档](https://aider.chat/docs/)
