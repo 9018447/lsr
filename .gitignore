@@ -18,3 +18,5 @@ aider/_version.py
 tmp.benchmarks/
 .docker_bash_history
 .worktrees/
+# Added by code-review-graph
+.code-review-graph/
