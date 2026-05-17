@@ -424,6 +424,7 @@ class Coder:
         auto_accept_architect=True,
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
         current_plan=None,
+        parallel_hashline=None,
     ):
         # Fill in a dummy Analytics if needed, but it is never .enable()'d
         self.analytics = analytics if analytics is not None else Analytics()
