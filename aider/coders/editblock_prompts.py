@@ -21,6 +21,7 @@ End your reply and wait for their approval.
 You can keep asking if you then decide you need to edit more files.
 
 2. Think step-by-step and explain the needed changes in a few short sentences.
+   If a plan has been previously discussed, follow it closely. Use CRG tools if you need to verify call chains or impact during implementation.
 
 3. Describe each change with a *SEARCH/REPLACE block* per the examples below.
 

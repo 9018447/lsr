@@ -18,9 +18,9 @@ import subprocess
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-CRG_TOOL_PROMPT = """\
+CRG_BASE_PROMPT = """\
 You have access to a local code-review-graph database (.code-review-graph/graph.db).
-When you need to understand symbol relationships, find callers/callees, analyze change impact, or explore architecture, output one or more XML tags:
+The following XML tags invoke CRG toolkit commands. Place them in your response to execute them:
 
 <crg_tool subcommand="query" args="SYMBOL [--callers] [--callees] [--tests] [--limit N]" />
 <crg_tool subcommand="search" args="PATTERN [--limit N]" />
@@ -30,8 +30,41 @@ When you need to understand symbol relationships, find callers/callees, analyze 
 <crg_tool subcommand="communities" args="[--detail NAME]" />
 <crg_tool subcommand="status" args="" />
 
-Place these tags anywhere in your response. They will be executed and the results returned to you automatically.
+Results are returned automatically.
 """
+
+CRG_PLAN_PROMPT = (
+    CRG_BASE_PROMPT
+    + "\n\nMANDATORY: Before writing any plan, you MUST use at least 2 CRG tools to explore callers, callees, or impact."
+)
+
+CRG_ASK_PROMPT = (
+    CRG_BASE_PROMPT
+    + "\n\nUse CRG tools proactively to provide evidence-based answers about code relationships."
+)
+
+CRG_CODE_PROMPT = (
+    CRG_BASE_PROMPT
+    + "\n\nIf you encounter unexpected code behavior or need to verify call chains, use CRG tools on-the-fly."
+)
+
+CRG_ARCHITECT_PROMPT = (
+    CRG_BASE_PROMPT
+    + "\n\nBefore designing changes, use CRG tools to analyze execution flows and risk hotspots."
+)
+
+# Backward compatibility alias
+CRG_TOOL_PROMPT = CRG_BASE_PROMPT
+
+
+def get_crg_prompt_for_mode(mode: str) -> str:
+    mapping = {
+        "plan": CRG_PLAN_PROMPT,
+        "ask": CRG_ASK_PROMPT,
+        "code": CRG_CODE_PROMPT,
+        "architect": CRG_ARCHITECT_PROMPT,
+    }
+    return mapping.get(mode, CRG_BASE_PROMPT)
 
 ALLOWED_SUBCOMMANDS = {
     "status",

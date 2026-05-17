@@ -136,6 +136,7 @@ class Coder:
     last_keyboard_interrupt = None
     num_reflections = 0
     max_reflections = 3
+    current_plan = None
     edit_format = None
     yield_stream = False
     temperature = None
@@ -223,6 +224,7 @@ class Coder:
                 total_tokens_sent=from_coder.total_tokens_sent,
                 total_tokens_received=from_coder.total_tokens_received,
                 file_watcher=from_coder.file_watcher,
+                current_plan=from_coder.current_plan,
             )
             use_kwargs.update(update)  # override to complete the switch
             use_kwargs.update(kwargs)  # override passed kwargs
@@ -384,6 +386,7 @@ class Coder:
         auto_copy_context=False,
         auto_accept_architect=True,
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
+        current_plan=None,
     ):
         # Fill in a dummy Analytics if needed, but it is never .enable()'d
         self.analytics = analytics if analytics is not None else Analytics()
@@ -393,6 +396,7 @@ class Coder:
         self.commit_language = commit_language
         self.commit_before_message = []
         self.aider_commit_hashes = set()
+        self.current_plan = current_plan
         self.rejected_urls = set()
         self.abs_root_path_cache = {}
 
@@ -1034,6 +1038,13 @@ class Coder:
                 if tool_result:
                     self.reflected_message = tool_result
 
+            # Extract and store plan when in plan mode
+            if getattr(self, "edit_format", None) == "plan" and self.partial_response_content:
+                content = self.partial_response_content
+                if "## Plan:" in content or "Type `/code` to execute" in content:
+                    self.current_plan = content
+                    self.io.tool_output("Plan saved. Type `/code` to execute it.")
+
             if not self.reflected_message:
                 break
 
@@ -1334,9 +1345,24 @@ class Coder:
         self.choose_fence()
         main_sys = self.fmt_system_prompt(self.gpt_prompts.main_system)
         if getattr(self, "crg_tool_enabled", False):
-            from aider.crg_tool_adapter import CRG_TOOL_PROMPT
+            from aider.crg_tool_adapter import get_crg_prompt_for_mode
 
-            main_sys += "\n\n" + CRG_TOOL_PROMPT
+            crg_prompt = get_crg_prompt_for_mode(getattr(self, "edit_format", "code"))
+            main_sys += "\n\n" + crg_prompt
+
+        # Inject current plan context when not in plan mode
+        if (
+            getattr(self, "current_plan", None)
+            and getattr(self, "edit_format", None) != "plan"
+        ):
+            plan_summary = self.current_plan[:2000]
+            if len(self.current_plan) > 2000:
+                plan_summary += "\n... (plan truncated)"
+            main_sys += (
+                "\n\n## ACTIVE PLAN\nFollow this approved plan closely:\n"
+                + plan_summary
+            )
+
         if self.main_model.system_prompt_prefix:
             main_sys = self.main_model.system_prompt_prefix + "\n" + main_sys
 

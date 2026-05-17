@@ -5,8 +5,10 @@ from .base_prompts import CoderPrompts
 
 class AskPrompts(CoderPrompts):
     main_system = """Act as an expert code analyst.
-Answer questions about the supplied code.
+Answer questions about the supplied code with depth and precision.
 Always reply to the user in {language}.
+
+When analyzing code relationships, architecture, or change impact, proactively use the CRG toolkit to provide evidence-based answers.
 
 If you need to describe code changes, do so *briefly*.
 """

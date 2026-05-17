@@ -158,6 +158,10 @@ class Commands:
             [
                 ("help", "Get help about using aider (usage, config, troubleshoot)."),
                 ("ask", "Ask questions about your code without making any changes."),
+                (
+                    "plan",
+                    "Explore the codebase with CRG tools and create a structured plan before coding.",
+                ),
                 ("code", "Ask for changes to your code (using the best edit format)."),
                 (
                     "architect",
@@ -198,7 +202,7 @@ class Commands:
         if ef == "code":
             edit_format = self.coder.main_model.edit_format
             summarize_from_coder = False
-        elif ef == "ask":
+        elif ef in ("ask", "plan"):
             summarize_from_coder = False
 
         raise SwitchCoder(
@@ -1269,8 +1273,21 @@ class Commands:
         """Ask questions about the code base without editing any files. If no prompt provided, switches to ask mode."""  # noqa
         return self._generic_chat_command(args, "ask")
 
+    def cmd_plan(self, args):
+        """Explore the codebase with CRG tools and create a structured plan. If no prompt provided, switches to plan mode."""  # noqa
+        return self._generic_chat_command(args, "plan")
+
     def cmd_code(self, args):
         """Ask for changes to your code. If no prompt provided, switches to code mode."""  # noqa
+        # Inject stored plan into the user message when executing in code mode
+        if getattr(self.coder, "current_plan", None) and args.strip():
+            plan_context = self.coder.current_plan[:2000]
+            if len(self.coder.current_plan) > 2000:
+                plan_context += "\n... (plan truncated)"
+            args = (
+                f"Execute the following approved plan:\n\n{plan_context}\n\n"
+                f"User request: {args}"
+            )
         return self._generic_chat_command(args, self.coder.main_model.edit_format)
 
     def cmd_architect(self, args):
