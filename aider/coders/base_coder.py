@@ -1038,12 +1038,22 @@ class Coder:
                 if tool_result:
                     self.reflected_message = tool_result
 
-            # Extract and store plan when in plan mode
+            # Extract and persist plan when in plan mode
             if getattr(self, "edit_format", None) == "plan" and self.partial_response_content:
                 content = self.partial_response_content
                 if "## Plan:" in content or "Type `/code` to execute" in content:
                     self.current_plan = content
-                    self.io.tool_output("Plan saved. Type `/code` to execute it.")
+                    try:
+                        from aider.plan_manager import save_plan
+
+                        plan = save_plan(content, title="", root=self.root)
+                        self.io.tool_output(
+                            f"Plan saved as '{plan.title}' (id={plan.short_id}). "
+                            f"Type `/code` to execute, or `/plan list` to see all plans."
+                        )
+                    except Exception as exc:
+                        self.io.tool_warning(f"Plan saved in memory, but disk write failed: {exc}")
+                        self.io.tool_output("Type `/code` to execute it.")
 
             if not self.reflected_message:
                 break

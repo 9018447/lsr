@@ -1274,7 +1274,64 @@ class Commands:
         return self._generic_chat_command(args, "ask")
 
     def cmd_plan(self, args):
-        """Explore the codebase with CRG tools and create a structured plan. If no prompt provided, switches to plan mode."""  # noqa
+        """Explore the codebase with CRG tools and create a structured plan. Subcommands: list, show, use, delete."""  # noqa
+        from aider.plan_manager import (
+            delete_plan,
+            find_plan_by_id_or_latest,
+            list_plans,
+            load_plan,
+        )
+
+        tokens = args.strip().split(None, 1)
+        subcommand = tokens[0].lower() if tokens else ""
+
+        # Subcommand routing
+        if subcommand == "list":
+            plans = list_plans(self.coder.root)
+            if not plans:
+                self.io.tool_output("No plans found.")
+                return
+            self.io.tool_output("Saved plans:")
+            self.io.tool_output(f"  {'ID':<10s}  {'Status':<10s}  Title")
+            self.io.tool_output(f"  {'-'*10}  {'-'*10}  {'-'*40}")
+            for p in plans:
+                self.io.tool_output(f"  {p.short_id:<10s}  {p.status:<10s}  {p.title}")
+            return
+
+        if subcommand == "show":
+            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
+            plan = find_plan_by_id_or_latest(plan_id or None, self.coder.root)
+            if not plan:
+                self.io.tool_error(f"Plan not found: {plan_id or '(latest)'}")
+                return
+            self.io.tool_output(f"Plan: {plan.title}  (id={plan.short_id}, status={plan.status})")
+            self.io.tool_output("")
+            self.io.tool_output(plan.content)
+            return
+
+        if subcommand == "use":
+            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
+            plan = load_plan(plan_id, self.coder.root) if plan_id else None
+            if not plan:
+                self.io.tool_error(f"Plan not found: {plan_id}")
+                return
+            self.coder.current_plan = plan.content
+            self.io.tool_output(f"Loaded plan '{plan.title}' ({plan.short_id}) into context.")
+            self.io.tool_output("Type `/code` to execute it.")
+            return
+
+        if subcommand == "delete":
+            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
+            if not plan_id:
+                self.io.tool_error("Usage: /plan delete <id>")
+                return
+            if delete_plan(plan_id, self.coder.root):
+                self.io.tool_output(f"Deleted plan {plan_id}.")
+            else:
+                self.io.tool_error(f"Plan not found: {plan_id}")
+            return
+
+        # No subcommand → generate a new plan via LLM
         return self._generic_chat_command(args, "plan")
 
     def cmd_code(self, args):
