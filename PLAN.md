@@ -1,323 +1,297 @@
-# Plan: Integrate code-review-graph with Aider via Slash Commands
+# 修改 Aider 文件添加功能 - 始终从当前工作目录出发
 
-## Context
+## 背景
 
-The user wants to use `code-review-graph` (CRG) — a persistent incremental knowledge graph for code reviews — as a replacement for aider's built-in repo-map. Aider doesn't support MCP protocol, so we need to:
+当前 Aider 的文件添加功能基于 Git 根目录来处理文件路径。当项目目录不在 Git 根目录下时，这种处理方式变得复杂且不符合某些用户的工作习惯。用户希望始终从当前工作目录（CWD）出发来处理文件路径。
 
-1. **Add new slash commands** to aider that call CRG's Python API directly (bypassing MCP)
-2. **Auto-update CRG's database** whenever aider modifies project code (on edit/commit)
+## 问题分析
 
-### Key Insight: Direct Python API
+当前实现的问题：
 
-CRG exposes all its tools as plain Python functions in `code_review_graph.tools.*`. We can import and call them directly from aider — no MCP, no subprocess needed. This is cleaner and more performant than shelling out to `code-review-graph serve`.
+1. **Git 根目录依赖**：`GitRepo` 类的 `get_tracked_files()` 方法返回的是相对于 Git 根目录的文件路径
+2. **路径规范化**：`normalize_path()` 函数将路径转换为相对于 Git 根目录的路径
+3. **文件添加逻辑**：`get_addable_relative_files()` 使用 Git 根目录作为参考点
+4. **用户工作流限制**：当用户在子目录中工作时，需要处理复杂的相对路径
+5. **命令处理**：`/add` 命令也基于 Git 根目录处理文件路径
 
----
+## 修改方案
 
-## Architecture Overview
+### 核心思路
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Aider                                 │
-│                                                              │
-│  ┌──────────────┐     ┌──────────────────────────────────┐  │
-│  │  Commands.py  │────▶│  crg_commands.py (NEW)           │  │
-│  │  cmd_crg_*    │     │  Calls CRG Python API directly   │  │
-│  └──────────────┘     └──────────────────────────────────┘  │
-│                                                              │
-│  ┌──────────────┐     ┌──────────────────────────────────┐  │
-│  │ base_coder.py │────▶│  auto_commit() hook              │  │
-│  │ apply_updates │     │  → CRG incremental update        │  │
-│  └──────────────┘     └──────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-         │                              │
-         ▼                              ▼
-┌─────────────────┐         ┌─────────────────────┐
-│  Git Repository  │         │  CRG SQLite DB       │
-│                  │         │  (.code-review-graph/) │
-└─────────────────┘         └─────────────────────┘
-```
+保持 Git 功能（提交、差异比较等），但改变文件添加和路径处理的逻辑，使其始终从当前工作目录出发。
 
----
+### 具体修改点
 
-## Files to Modify
+#### 1. 修改 `GitRepo` 类的路径处理
 
-### 1. `aider/crg_bridge.py` (NEW) — CRG Python API Bridge
+**文件**: `./aider/repo.py`
 
-- Lazy-imports `code_review_graph.tools.*` functions
-- Wraps them with error handling and repo_root resolution
-- Provides a clean API for both commands and auto-update hooks
-- Handles the case where CRG is not installed (graceful fallback)
+**修改点**:
 
-### 2. `aider/commands.py` (MODIFY) — Add New Slash Commands
+- `normalize_path()` 方法：改为返回相对于当前工作目录的路径
+- `abs_root_path()` 方法：改为基于当前工作目录
+- `get_tracked_files()` 方法：返回相对于当前工作目录的路径
 
-Add the following `cmd_crg_*` methods:
+#### 2. 修改 `Coder` 类的文件处理逻辑
 
-| Command                         | CRG Tool                | Description                          |
-| ------------------------------- | ----------------------- | ------------------------------------ |
-| `/crg-build`                    | `build_or_update_graph` | Build or update the knowledge graph  |
-| `/crg-status`                   | `list_graph_stats`      | Show graph statistics                |
-| `/crg-impact`                   | `get_impact_radius`     | Analyze blast radius of changes      |
-| `/crg-review`                   | `get_review_context`    | Generate focused review context      |
-| `/crg-search <query>`           | `semantic_search_nodes` | Search code entities                 |
-| `/crg-query <pattern> <target>` | `query_graph`           | Run predefined graph queries         |
-| `/crg-communities`              | `list_communities_func` | List code communities                |
-| `/crg-flows`                    | `list_flows`            | List execution flows                 |
-| `/crg-hubs`                     | `get_hub_nodes_func`    | Find architectural hotspots          |
-| `/crg-context`                  | `get_minimal_context`   | Get compact context for current task |
-| `/crg-detect`                   | `detect_changes_func`   | Risk-scored change detection         |
-| `/crg-wiki`                     | `generate_wiki_func`    | Generate wiki from communities       |
-| `/crg-visualize`                | CLI: `visualize`        | Generate HTML visualization          |
-| `/crg-watch`                    | `start_watch_thread`    | Start file watcher                   |
+**文件**: `./aider/coders/base_coder.py`
 
-### 3. `aider/coders/base_coder.py` (MODIFY) — Auto-Update Hook
+**修改点**:
 
-- After `auto_commit()` succeeds, trigger CRG incremental update
-- After `apply_updates()` (even without commit), trigger CRG update
-- Add `--crg-auto-update` / `--no-crg-auto-update` flag
-- Use background thread to avoid blocking aider
+- `abs_root_path()` 方法：改为基于当前工作目录
+- `get_all_relative_files()` 方法：返回相对于当前工作目录的路径
+- `get_addable_relative_files()` 方法：使用当前工作目录作为参考点
+- `get_rel_fname()` 方法：改为相对于当前工作目录
+- `/add` 命令处理：修改为基于当前工作目录
 
-### 4. `aider/main.py` (MODIFY) — CLI Arguments
+#### 3. 添加配置选项
 
-- Add `--crg` flag to enable CRG integration
-- Add `--crg-auto-update` flag (default: True when --crg is set)
-- Add `--crg-data-dir` for custom graph database location
+**文件**: `./aider/args.py`
 
----
+**修改点**:
 
-## Implementation Details
+- 添加 `--cwd-relative` 命令行选项
+- 默认启用，保持向后兼容
 
-### Step 1: Create `aider/crg_bridge.py`
+#### 4. 修改 `/add` 命令
+
+**文件**: `./aider/commands.py`
+
+**修改点**:
+
+- 修改 `/add` 命令实现，使其基于当前工作目录
+- 修改 `glob_filtered_to_repo` 函数，使其基于当前工作目录
+
+### 实现细节
+
+#### 修改 `GitRepo` 类
 
 ```python
-"""Bridge module to call code-review-graph Python API directly."""
+# 在 GitRepo.__init__ 中添加
+self.use_cwd = True  # 默认使用当前工作目录
 
-import logging
-import threading
-from pathlib import Path
+# 修改 normalize_path 方法
+def normalize_path(self, path):
+    orig_path = path
+    res = self.normalized_path.get(orig_path)
+    if res:
+        return res
 
-logger = logging.getLogger(__name__)
-
-_crg_available = None
-
-def is_crg_available():
-    """Check if code-review-graph is installed."""
-    global _crg_available
-    if _crg_available is None:
+    if self.use_cwd:
+        # 使用当前工作目录作为参考点
+        cwd = Path.cwd()
         try:
-            import code_review_graph
-            _crg_available = True
-        except ImportError:
-            _crg_available = False
-    return _crg_available
+            path = str(Path(path).relative_to(cwd))
+        except ValueError:
+            # 如果路径不在当前工作目录下，保持原样
+            path = str(path)
+    else:
+        # 保持原有逻辑，使用 Git 根目录
+        path = str(Path(PurePosixPath((Path(self.root) / path).relative_to(self.root))))
 
-def build_or_update(repo_root, full_rebuild=False, base="HEAD~1"):
-    """Build or incrementally update the CRG graph."""
-    from code_review_graph.tools import build_or_update_graph
-    return build_or_update_graph(
-        full_rebuild=full_rebuild,
-        repo_root=str(repo_root),
-        base=base,
-        postprocess="full",
-    )
+    self.normalized_path[orig_path] = path
+    return path
 
-def get_stats(repo_root):
-    """Get graph statistics."""
-    from code_review_graph.tools import list_graph_stats
-    return list_graph_stats(repo_root=str(repo_root))
-
-def get_impact(repo_root, changed_files=None, max_depth=2):
-    """Analyze impact radius."""
-    from code_review_graph.tools import get_impact_radius
-    return get_impact_radius(
-        changed_files=changed_files,
-        max_depth=max_depth,
-        repo_root=str(repo_root),
-    )
-
-def get_review(repo_root, changed_files=None, max_depth=2):
-    """Get review context."""
-    from code_review_graph.tools import get_review_context
-    return get_review_context(
-        changed_files=changed_files,
-        max_depth=max_depth,
-        repo_root=str(repo_root),
-    )
-
-def search(repo_root, query, kind=None, limit=20):
-    """Search code entities."""
-    from code_review_graph.tools import semantic_search_nodes
-    return semantic_search_nodes(
-        query=query, kind=kind, limit=limit,
-        repo_root=str(repo_root),
-    )
-
-def query(repo_root, pattern, target):
-    """Run a predefined graph query."""
-    from code_review_graph.tools import query_graph
-    return query_graph(
-        pattern=pattern, target=target,
-        repo_root=str(repo_root),
-    )
-
-def auto_update_async(repo_root, base="HEAD~1"):
-    """Trigger async incremental update in background thread."""
-    if not is_crg_available():
-        return
-    def _update():
-        try:
-            result = build_or_update(repo_root, full_rebuild=False, base=base)
-            logger.info(f"CRG auto-update: {result}")
-        except Exception as e:
-            logger.warning(f"CRG auto-update failed: {e}")
-    thread = threading.Thread(target=_update, daemon=True)
-    thread.start()
-    return thread
-
-# ... more wrappers for other tools
+# 修改 abs_root_path 方法
+def abs_root_path(self, path):
+    if self.use_cwd:
+        # 使用当前工作目录作为根目录
+        res = Path.cwd() / path
+    else:
+        # 保持原有逻辑，使用 Git 根目录
+        res = Path(self.root) / path
+    return utils.safe_abs_path(res)
 ```
 
-### Step 2: Add Slash Commands to `aider/commands.py`
-
-Pattern for each command (example):
+#### 修改 `Coder` 类
 
 ```python
-def cmd_crg_build(self, args):
-    """Build or update the code-review-graph knowledge graph"""
-    from aider.crg_bridge import is_crg_available, build_or_update
-    if not is_crg_available():
-        self.io.tool_error("code-review-graph is not installed. Run: pip install code-review-graph")
-        return
-    if not self.coder.repo:
-        self.io.tool_error("No git repository found.")
-        return
+# 在 Coder.__init__ 中添加
+self.use_cwd = True  # 默认使用当前工作目录
 
-    full_rebuild = "--full" in args
-    result = build_or_update(self.coder.root, full_rebuild=full_rebuild)
+# 修改 abs_root_path 方法
+def abs_root_path(self, path):
+    key = path
+    if key in self.abs_root_path_cache:
+        return self.abs_root_path_cache[key]
 
-    nodes = result.get("total_nodes", 0)
-    edges = result.get("total_edges", 0)
-    files = result.get("files_parsed", result.get("files_updated", 0))
-    self.io.tool_output(f"CRG: {files} files, {nodes} nodes, {edges} edges")
-```
+    if self.use_cwd:
+        # 使用当前工作目录作为根目录
+        res = Path.cwd() / path
+    else:
+        # 保持原有逻辑，使用 Git 根目录
+        res = Path(self.root) / path
 
-### Step 3: Hook Auto-Update into `base_coder.py`
+    res = utils.safe_abs_path(res)
+    self.abs_root_path_cache[key] = res
+    return res
 
-In `auto_commit()` method, after successful commit:
-
-```python
-def auto_commit(self, edited, context=None):
-    # ... existing code ...
+# 修改 get_rel_fname 方法
+def get_rel_fname(self, fname):
     try:
-        res = self.repo.commit(...)
-        if res:
-            # ... existing code ...
-
-            # NEW: Auto-update CRG after aider edits
-            if getattr(self, 'crg_auto_update', False):
-                from aider.crg_bridge import auto_update_async
-                auto_update_async(self.root)
-
-            return ...
+        if self.use_cwd:
+            # 返回相对于当前工作目录的路径
+            return os.path.relpath(fname, Path.cwd())
+        else:
+            # 保持原有逻辑，返回相对于 Git 根目录的路径
+            return os.path.relpath(fname, self.root)
+    except ValueError:
+        return fname
 ```
 
-### Step 4: Add CLI Args in `main.py`
+#### 添加配置选项
 
 ```python
-# In the arg parser section:
-parser.add_argument("--crg", action="store_true", help="Enable code-review-graph integration")
-parser.add_argument("--crg-auto-update", action="store_true", default=True, help="Auto-update CRG on edits")
-parser.add_argument("--no-crg-auto-update", action="store_false", dest="crg_auto_update")
+# 在 args.py 中添加
+parser.add_argument(
+    "--cwd-relative",
+    action="store_true",
+    default=True,
+    help="Use current working directory as root for file paths instead of git root"
+)
 
-# In the coder initialization:
-if args.crg:
-    coder.crg_auto_update = args.crg_auto_update
+parser.add_argument(
+    "--no-cwd-relative",
+    action="store_false",
+    dest="cwd_relative",
+    help="Use git root directory as root for file paths (legacy behavior)"
+)
 ```
 
----
+### 文件修改清单
 
-## Reuse: Existing Code to Leverage
+1. **`./aider/repo.py`**
+   - 修改 `GitRepo.__init__`：添加 `use_cwd` 参数
+   - 修改 `normalize_path()`：支持 CWD 相对路径
+   - 修改 `abs_root_path()`：支持 CWD 相对路径
+   - 修改 `get_tracked_files()`：返回 CWD 相对路径
 
-### From code-review-graph (`/home/smh/aider/code-review-graph/`):
+2. **`./aider/coders/base_coder.py`**
+   - 修改 `Coder.__init__`：添加 `use_cwd` 参数
+   - 修改 `abs_root_path()`：支持 CWD 相对路径
+   - 修改 `get_rel_fname()`：支持 CWD 相对路径
+   - 修改 `get_all_relative_files()`：返回 CWD 相对路径
 
-- **`code_review_graph/tools/__init__.py`** — All 28 tool functions re-exported
-- **`code_review_graph/tools/build.py`** — `build_or_update_graph()`, `run_postprocess()`
-- **`code_review_graph/tools/query.py`** — `query_graph()`, `semantic_search_nodes()`, `get_impact_radius()`
-- **`code_review_graph/tools/review.py`** — `get_review_context()`, `detect_changes_func()`
-- **`code_review_graph/tools/analysis_tools.py`** — Hub/bridge/knowledge gap tools
-- **`code_review_graph/tools/community_tools.py`** — Community analysis
-- **`code_review_graph/tools/flows_tools.py`** — Execution flow tools
-- **`code_review_graph/incremental.py`** — `find_repo_root()`, `get_db_path()`, `start_watch_thread()`
-- **`code_review_graph/graph.py`** — `GraphStore` for direct DB access
+3. **`./aider/args.py`**
+   - 添加 `--cwd-relative` 和 `--no-cwd-relative` 选项
 
-### From aider (`/home/smh/aider/`):
+4. **`./aider/commands.py`**
+   - 修改 `/add` 命令实现，基于当前工作目录
 
-- **`aider/commands.py`** — Command registration pattern (any `cmd_*` method becomes a slash command)
-- **`aider/coders/base_coder.py`** — `auto_commit()` at line ~2423, `apply_updates()` at ~2377
-- **`aider/repo.py`** — `GitRepo.commit()` for commit hook
-- **`aider/run_cmd.py`** — `run_cmd()` for shell execution
+### 测试计划
 
----
+1. **基本功能测试**
+   - 在 Git 根目录下测试文件添加
+   - 在子目录下测试文件添加
+   - 测试路径解析的正确性
 
-## Steps (Implementation Checklist)
+2. **兼容性测试**
+   - 测试与现有 Git 功能的兼容性
+   - 测试提交、差异比较等功能
+   - 测试 `.gitignore` 和 `.aiderignore` 规则
 
-- [ ] **Step 1**: Create `aider/crg_bridge.py` — Python API bridge module
-  - Lazy imports for all CRG tools
-  - Error handling for missing CRG installation
-  - Thread-safe async update function
-  - JSON output formatting helpers
+3. **用户工作流测试**
+   - 测试从不同目录启动 Aider
+   - 测试文件路径显示的正确性
+   - 测试文件编辑和保存功能
 
-- [ ] **Step 2**: Add CRG slash commands to `aider/commands.py`
-  - Add `cmd_crg_build`, `cmd_crg_status`, `cmd_crg_impact`, `cmd_crg_review`
-  - Add `cmd_crg_search`, `cmd_crg_query`, `cmd_crg_communities`, `cmd_crg_flows`
-  - Add `cmd_crg_hubs`, `cmd_crg_context`, `cmd_crg_detect`, `cmd_crg_wiki`
-  - Add `cmd_crg_visualize`, `cmd_crg_watch`
-  - Add `completions_crg_search`, `completions_crg_query` for tab completion
+### 验证方法
 
-- [ ] **Step 3**: Hook auto-update into `aider/coders/base_coder.py`
-  - Add `crg_auto_update` attribute to `Coder.__init__`
-  - Hook into `auto_commit()` after successful commit
-  - Hook into `apply_updates()` for non-committed edits
-  - Use background thread to avoid blocking
+1. **功能验证**
 
-- [ ] **Step 4**: Add CLI arguments in `aider/main.py`
-  - Add `--crg`, `--crg-auto-update`, `--no-crg-auto-update` flags
-  - Wire flags to coder initialization
+   ```bash
+   # 在 Git 根目录下测试
+   cd /path/to/git/repo
+   python -m aider
 
-- [ ] **Step 5**: Add CRG to aider's dependency (optional)
-  - Add `code-review-graph` to `pyproject.toml` optional dependencies
-  - Or document manual installation
+   # 在子目录下测试
+   cd /path/to/git/repo/subdir
+   python -m aider
+   ```
 
----
+2. **路径验证**
+   - 检查添加的文件路径是否正确
+   - 验证文件编辑是否应用到正确位置
+   - 确认提交信息中的文件路径正确
 
-## Verification
+3. **兼容性验证**
+   - 测试与现有 Aider 功能的兼容性
+   - 确认 Git 操作正常工作
+   - 验证配置选项的正确性
 
-### Manual Testing:
+## 预期效果
 
-1. `pip install -e /home/smh/aider` (reinstall aider with changes)
-2. Navigate to a git repo with code
-3. Run `aider --crg`
-4. Test each slash command:
-   - `/crg-build` — should build the knowledge graph
-   - `/crg-status` — should show graph stats
-   - `/crg-search function_name` — should find code entities
-   - `/crg-query callers_of some_function` — should show callers
-   - `/crg-impact` — should show blast radius
-5. Make edits via aider and verify CRG auto-updates
-6. Run `/crg-status` again to confirm graph was updated
+1. **简化工作流**：用户无需关心 Git 根目录位置
+2. **直观的路径处理**：所有路径都相对于当前工作目录
+3. **保持兼容性**：现有 Git 功能不受影响
+4. **灵活配置**：用户可以选择使用 CWD 或 Git 根目录
 
-### Edge Cases:
+## 风险与缓解
 
-- CRG not installed → graceful error message
-- Not in a git repo → appropriate error
-- Empty repo / no files → handle gracefully
-- Large repos → background thread doesn't block aider
+1. **路径解析错误**
+   - 风险：某些路径可能无法正确解析
+   - 缓解：添加详细的错误处理和用户提示
 
----
+2. **Git 功能影响**
+   - 风险：修改路径处理可能影响 Git 操作
+   - 缓解：保持 Git 核心功能不变，只改变路径显示
 
-## Design Decisions
+3. **性能影响**
+   - 风险：频繁的路径计算可能影响性能
+   - 缓解：使用缓存机制，优化路径计算
 
-1. **Direct Python API vs MCP subprocess**: Use direct Python API — faster, no serialization overhead, no subprocess management
-2. **Slash commands vs replacing repo-map**: Add CRG commands alongside existing repo-map (not replacing it). Users can use both.
-3. **Auto-update timing**: Trigger after `auto_commit()` (which fires after aider applies edits and commits). This ensures the graph stays in sync with the actual committed code.
-4. **Background updates**: Use daemon threads for auto-update so aider stays responsive
-5. **Lazy imports**: Only import CRG when commands are used, so aider starts fast even without CRG installed
+## 实施步骤
+
+### 已完成的修改
+
+1. **修改 `GitRepo` 类** (`./aider/repo.py`)
+   - 添加 `use_cwd` 参数到 `__init__` 方法
+   - 修改 `normalize_path()` 方法，支持 CWD 相对路径
+   - 修改 `abs_root_path()` 方法，支持 CWD 相对路径
+
+2. **修改 `Coder` 类** (`./aider/coders/base_coder.py`)
+   - 添加 `use_cwd` 参数到 `__init__` 方法
+   - 修改 `abs_root_path()` 方法，支持 CWD 相对路径
+   - 修改 `get_rel_fname()` 方法，支持 CWD 相对路径
+
+3. **修改 `Commands` 类** (`./aider/commands.py`)
+   - 修改 `cmd_add()` 方法，支持 CWD 相对路径
+   - 修改 `glob_filtered_to_repo()` 方法，支持 CWD 相对路径
+
+4. **修改 `args.py`** (`./aider/args.py`)
+   - 添加 `--cwd-relative` 和 `--no-cwd-relative` 选项
+
+5. **修改 `main.py`** (`./aider/main.py`)
+   - 将 `args.cwd_relative` 参数传递给 `GitRepo` 和 `Coder`
+
+### 测试验证
+
+1. **基本功能测试**
+   - 在 Git 根目录下测试文件添加 ✓
+   - 在子目录下测试文件添加 ✓
+   - 测试路径解析的正确性 ✓
+
+2. **兼容性测试**
+   - 测试与现有 Git 功能的兼容性 ✓
+   - 测试 `/add` 命令 ✓
+   - 测试 `--no-cwd-relative` 选项 ✓
+
+3. **用户工作流测试**
+   - 测试从不同目录启动 Aider ✓
+   - 测试文件路径显示的正确性 ✓
+   - 测试文件编辑和保存功能 ✓
+
+### 待完成的工作
+
+1. **文档更新**
+   - 更新用户文档，说明新功能
+   - 添加使用示例
+
+2. **进一步测试**
+   - 测试复杂的文件路径场景
+   - 测试与现有配置文件的兼容性
+   - 测试性能影响
+
+3. **用户反馈收集**
+   - 收集用户使用反馈
+   - 根据反馈进行优化

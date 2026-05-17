@@ -74,18 +74,22 @@ class GitRepo:
         subtree_only=False,
         git_commit_verify=True,
         attribute_co_authored_by=False,  # Added parameter
+        use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
     ):
         self.io = io
         self.models = models
 
         self.normalized_path = {}
         self.tree_files = {}
+        self.use_cwd = use_cwd  # 新增属性
 
         self.attribute_author = attribute_author
         self.attribute_committer = attribute_committer
         self.attribute_commit_message_author = attribute_commit_message_author
         self.attribute_commit_message_committer = attribute_commit_message_committer
-        self.attribute_co_authored_by = attribute_co_authored_by  # Assign from parameter
+        self.attribute_co_authored_by = (
+            attribute_co_authored_by  # Assign from parameter
+        )
         self.commit_prompt = commit_prompt
         self.subtree_only = subtree_only
         self.git_commit_verify = git_commit_verify
@@ -128,7 +132,9 @@ class GitRepo:
         if aider_ignore_file:
             self.aider_ignore_file = Path(aider_ignore_file)
 
-    def commit(self, fnames=None, context=None, message=None, aider_edits=False, coder=None):
+    def commit(
+        self, fnames=None, context=None, message=None, aider_edits=False, coder=None
+    ):
         """
         Commit the specified files or all dirty files if none are specified.
 
@@ -220,7 +226,9 @@ class GitRepo:
             attribute_author = coder.args.attribute_author
             attribute_committer = coder.args.attribute_committer
             attribute_commit_message_author = coder.args.attribute_commit_message_author
-            attribute_commit_message_committer = coder.args.attribute_commit_message_committer
+            attribute_commit_message_committer = (
+                coder.args.attribute_commit_message_committer
+            )
             attribute_co_authored_by = coder.args.attribute_co_authored_by
         else:
             # Fallback to self attributes (initialized from config/defaults)
@@ -236,7 +244,9 @@ class GitRepo:
 
         # Determine effective settings (apply default True if not explicit)
         effective_author = True if attribute_author is None else attribute_author
-        effective_committer = True if attribute_committer is None else attribute_committer
+        effective_committer = (
+            True if attribute_committer is None else attribute_committer
+        )
 
         # Determine commit message prefixing
         prefix_commit_message = aider_edits and (
@@ -249,14 +259,18 @@ class GitRepo:
             model_name = "unknown-model"
             if coder and hasattr(coder, "main_model") and coder.main_model.name:
                 model_name = coder.main_model.name
-            commit_message_trailer = f"\n\nCo-authored-by: aider ({model_name}) <aider@aider.chat>"
+            commit_message_trailer = (
+                f"\n\nCo-authored-by: aider ({model_name}) <aider@aider.chat>"
+            )
 
         # Determine if author/committer names should be modified
         # Author modification applies only to aider edits.
         # It's used if effective_author is True AND
         # (co-authored-by is False OR author was explicitly set).
         use_attribute_author = (
-            aider_edits and effective_author and (not attribute_co_authored_by or author_explicit)
+            aider_edits
+            and effective_author
+            and (not attribute_co_authored_by or author_explicit)
         )
 
         # Committer modification applies regardless of aider_edits (based on tests).
@@ -299,12 +313,16 @@ class GitRepo:
                 if use_attribute_committer:
                     stack.enter_context(
                         set_git_env(
-                            "GIT_COMMITTER_NAME", committer_name, original_committer_name_env
+                            "GIT_COMMITTER_NAME",
+                            committer_name,
+                            original_committer_name_env,
                         )
                     )
                 if use_attribute_author:
                     stack.enter_context(
-                        set_git_env("GIT_AUTHOR_NAME", committer_name, original_author_name_env)
+                        set_git_env(
+                            "GIT_AUTHOR_NAME", committer_name, original_author_name_env
+                        )
                     )
 
                 # Perform the commit
@@ -336,14 +354,18 @@ class GitRepo:
         language_instruction = ""
         if user_language:
             language_instruction = f"\n- Is written in {user_language}."
-        system_content = system_content.format(language_instruction=language_instruction)
+        system_content = system_content.format(
+            language_instruction=language_instruction
+        )
 
         commit_message = None
         for model in self.models:
             spinner_text = f"Generating commit message with {model.name}"
             with WaitingSpinner(spinner_text):
                 if model.system_prompt_prefix:
-                    current_system_content = model.system_prompt_prefix + "\n" + system_content
+                    current_system_content = (
+                        model.system_prompt_prefix + "\n" + system_content
+                    )
                 else:
                     current_system_content = system_content
 
@@ -493,7 +515,27 @@ class GitRepo:
         if res:
             return res
 
-        path = str(Path(PurePosixPath((Path(self.root) / path).relative_to(self.root))))
+        if self.use_cwd:
+            # 使用当前工作目录作为参考点
+            cwd = Path.cwd()
+            try:
+                # 将路径转换为相对于当前工作目录的路径
+                path_obj = Path(path)
+                if path_obj.is_absolute():
+                    path = str(path_obj.relative_to(cwd))
+                else:
+                    # 如果是相对路径，先转换为绝对路径，再相对于当前工作目录
+                    abs_path = Path(self.root) / path
+                    path = str(abs_path.relative_to(cwd))
+            except ValueError:
+                # 如果路径不在当前工作目录下，保持原样
+                path = str(path)
+        else:
+            # 保持原有逻辑，使用 Git 根目录
+            path = str(
+                Path(PurePosixPath((Path(self.root) / path).relative_to(self.root)))
+            )
+
         self.normalized_path[orig_path] = path
         return path
 
@@ -575,7 +617,12 @@ class GitRepo:
         return normalized in tracked_files
 
     def abs_root_path(self, path):
-        res = Path(self.root) / path
+        if self.use_cwd:
+            # 使用当前工作目录作为根目录
+            res = Path.cwd() / path
+        else:
+            # 保持原有逻辑，使用 Git 根目录
+            res = Path(self.root) / path
         return utils.safe_abs_path(res)
 
     def get_dirty_files(self):
