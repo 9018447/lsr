@@ -1060,6 +1060,33 @@ class Commands:
         self.io.tool_output(errors)
         return errors
 
+    def cmd_crg(self, args):
+        "Run the code-review-graph toolkit and add output to the chat"
+        from aider.crg_tool_adapter import ensure_graph_db, run_crg_tool
+
+        if not ensure_graph_db(self.coder.root):
+            err = "Failed to build code-review-graph database."
+            self.io.tool_error(err)
+            return err
+
+        if not args:
+            self.io.tool_output("Usage: /crg <subcommand> [args]")
+            self.io.tool_output(
+                "Subcommands: status, query, search, flows, communities, risk, impact, export, wiki"
+            )
+            return
+
+        import shlex
+
+        tokens = shlex.split(args)
+        if not tokens:
+            return
+        subcommand = tokens[0]
+        rest = " ".join(tokens[1:])
+        output = run_crg_tool(subcommand, rest, self.coder.root)
+        self.io.tool_output(output)
+        return output
+
     def cmd_run(self, args, add_on_nonzero_exit=False):
         "Run a shell command and optionally add the output to the chat (alias: !)"
         exit_status, combined_output = run_cmd(

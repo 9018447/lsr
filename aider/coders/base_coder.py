@@ -598,6 +598,19 @@ class Coder:
                 self.io.tool_output("JSON Schema:")
                 self.io.tool_output(json.dumps(self.functions, indent=4))
 
+        # Code-review-graph toolkit integration
+        try:
+            from aider.crg_tool_adapter import ensure_graph_db
+
+            self.crg_tool_enabled = ensure_graph_db(self.root)
+            if not self.crg_tool_enabled:
+                self.io.tool_warning(
+                    "Code-review-graph database not found and auto-build failed. "
+                    "/crg and auto-crg tools are disabled."
+                )
+        except Exception:
+            self.crg_tool_enabled = False
+
     def setup_lint_cmds(self, lint_cmds):
         if not lint_cmds:
             return
@@ -1014,6 +1027,13 @@ class Coder:
             self.reflected_message = None
             list(self.send_message(message))
 
+            if not self.reflected_message and getattr(self, "crg_tool_enabled", False):
+                from aider.crg_tool_adapter import execute_crg_tools
+
+                tool_result = execute_crg_tools(self.partial_response_content, root=self.root)
+                if tool_result:
+                    self.reflected_message = tool_result
+
             if not self.reflected_message:
                 break
 
@@ -1313,6 +1333,10 @@ class Coder:
     def format_chat_chunks(self):
         self.choose_fence()
         main_sys = self.fmt_system_prompt(self.gpt_prompts.main_system)
+        if getattr(self, "crg_tool_enabled", False):
+            from aider.crg_tool_adapter import CRG_TOOL_PROMPT
+
+            main_sys += "\n\n" + CRG_TOOL_PROMPT
         if self.main_model.system_prompt_prefix:
             main_sys = self.main_model.system_prompt_prefix + "\n" + main_sys
 
