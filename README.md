@@ -3,12 +3,11 @@
 </p>
 
 <h1 align="center">
-AI Pair Programming in Your Terminal
+纯AI结对编程工具 (Aider二次开发分支)
 </h1>
 
-
 <p align="center">
-Aider lets you pair program with LLMs to start a new project or build on your existing codebase. 
+区别于自动生成代码的vibe coding类工具，本工具以开发者为核心，AI全程作为结对伙伴提供辅助能力，所有变更均由开发者主导和确认，绝不脱离用户意图自动修改代码。
 </p>
 
 <p align="center">
@@ -18,163 +17,89 @@ Aider lets you pair program with LLMs to start a new project or build on your ex
   >
 </p>
 
-<p align="center">
-<!--[[[cog
-from scripts.homepage import get_badges_md
-text = get_badges_md()
-cog.out(text)
-]]]-->
-  <a href="https://github.com/Aider-AI/aider/stargazers"><img alt="GitHub Stars" title="Total number of GitHub stars the Aider project has received"
-src="https://img.shields.io/github/stars/Aider-AI/aider?style=flat-square&logo=github&color=f1c40f&labelColor=555555"/></a>
-  <a href="https://pypi.org/project/aider-chat/"><img alt="PyPI Downloads" title="Total number of installations via pip from PyPI"
-src="https://img.shields.io/badge/📦%20Installs-6.8M-2ecc71?style=flat-square&labelColor=555555"/></a>
-  <img alt="Tokens per week" title="Number of tokens processed weekly by Aider users"
-src="https://img.shields.io/badge/📈%20Tokens%2Fweek-15B-3498db?style=flat-square&labelColor=555555"/>
-  <a href="https://openrouter.ai/#options-menu"><img alt="OpenRouter Ranking" title="Aider's ranking among applications on the OpenRouter platform"
-src="https://img.shields.io/badge/🏆%20OpenRouter-Top%2020-9b59b6?style=flat-square&labelColor=555555"/></a>
-  <a href="https://aider.chat/HISTORY.html"><img alt="Singularity" title="Percentage of the new code in Aider's last release written by Aider itself"
-src="https://img.shields.io/badge/🔄%20Singularity-88%25-e74c3c?style=flat-square&labelColor=555555"/></a>
-<!--[[[end]]]-->  
-</p>
+## ✨ 核心特性
 
-## Features
+### 🆕 Hashline 代码行级哈希校验
+基于每一行代码的内容和位置生成唯一哈希标识，实现：
+- 代码变更的精准定位，避免AI误修改无关代码
+- 跨版本代码行匹配，上下文引用永不失效
+- 增量变更的完整性校验，确保AI输出的变更完全符合预期
 
-### [Cloud and local LLMs](https://aider.chat/docs/llms.html)
+### 🆕 Code-Review-Graph 代码关系全链路分析
+内置代码关系图谱能力，可快速查询：
+- 函数/类的调用关系、依赖链路、影响范围
+- 代码变更的风险评估，自动识别高风险修改点
+- 项目结构可视化，快速理解陌生代码库的架构逻辑
 
-<a href="https://aider.chat/docs/llms.html"><img src="https://aider.chat/assets/icons/brain.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Aider works best with Claude 3.7 Sonnet, DeepSeek R1 & Chat V3, OpenAI o1, o3-mini & GPT-4o, but can connect to almost any LLM, including local models.
+### 🆕 多角色专业Agent体系
+内置四类专业编程辅助Agent，覆盖全开发流程：
+- 代码评审Agent：基于行业规范和项目最佳实践给出评审意见
+- 重构辅助Agent：提供安全重构方案，自动识别重构影响范围
+- 调试排障Agent：结合报错信息和代码链路定位根因，给出修复方案
+- 架构设计Agent：基于项目现状给出合理的架构演进建议
 
-<br>
+---
 
-### [Maps your codebase](https://aider.chat/docs/repomap.html)
+### 原生Aider优秀特性保留
+- 支持所有主流云LLM和本地大模型
+- 代码库自动映射，大项目上下文理解能力
+- 支持100+种编程语言
+- 原生Git集成，自动生成规范提交
+- 支持IDE内使用、图片/网页上下文、语音输入等能力
+- 自动lint和测试，发现问题自动修复
 
-<a href="https://aider.chat/docs/repomap.html"><img src="https://aider.chat/assets/icons/map-outline.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Aider makes a map of your entire codebase, which helps it work well in larger projects.
+## 🚀 快速开始
 
-<br>
-
-### [100+ code languages](https://aider.chat/docs/languages.html)
-
-<a href="https://aider.chat/docs/languages.html"><img src="https://aider.chat/assets/icons/code-tags.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Aider works with most popular programming languages: python, javascript, rust, ruby, go, cpp, php, html, css, and dozens more.
-
-<br>
-
-### [Git integration](https://aider.chat/docs/git.html)
-
-<a href="https://aider.chat/docs/git.html"><img src="https://aider.chat/assets/icons/source-branch.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Aider automatically commits changes with sensible commit messages. Use familiar git tools to easily diff, manage and undo AI changes.
-
-<br>
-
-### [Use in your IDE](https://aider.chat/docs/usage/watch.html)
-
-<a href="https://aider.chat/docs/usage/watch.html"><img src="https://aider.chat/assets/icons/monitor.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Use aider from within your favorite IDE or editor. Ask for changes by adding comments to your code and aider will get to work.
-
-<br>
-
-### [Images & web pages](https://aider.chat/docs/usage/images-urls.html)
-
-<a href="https://aider.chat/docs/usage/images-urls.html"><img src="https://aider.chat/assets/icons/image-multiple.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Add images and web pages to the chat to provide visual context, screenshots, reference docs, etc.
-
-<br>
-
-### [Voice-to-code](https://aider.chat/docs/usage/voice.html)
-
-<a href="https://aider.chat/docs/usage/voice.html"><img src="https://aider.chat/assets/icons/microphone.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Speak with aider about your code! Request new features, test cases or bug fixes using your voice and let aider implement the changes.
-
-<br>
-
-### [Linting & testing](https://aider.chat/docs/usage/lint-test.html)
-
-<a href="https://aider.chat/docs/usage/lint-test.html"><img src="https://aider.chat/assets/icons/check-all.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Automatically lint and test your code every time aider makes changes. Aider can fix problems detected by your linters and test suites.
-
-<br>
-
-### [Copy/paste to web chat](https://aider.chat/docs/usage/copypaste.html)
-
-<a href="https://aider.chat/docs/usage/copypaste.html"><img src="https://aider.chat/assets/icons/content-copy.svg" width="32" height="32" align="left" valign="middle" style="margin-right:10px"></a>
-Work with any LLM via its web chat interface. Aider streamlines copy/pasting code context and edits back and forth with a browser.
-
-## Getting Started
-
+### 安装
 ```bash
-python -m pip install aider-install
-aider-install
+# 安装本二次开发版本
+pip install git+https://github.com/your-repo/aider.git@prompt-engineering
 
-# Change directory into your codebase
-cd /to/your/project
+# 进入你的项目目录
+cd /path/to/your/project
 
-# DeepSeek
-aider --model deepseek --api-key deepseek=<key>
-
-# Claude 3.7 Sonnet
-aider --model sonnet --api-key anthropic=<key>
-
-# o3-mini
-aider --model o3-mini --api-key openai=<key>
+# 启动工具（以DeepSeek为例，其他模型参数和原版Aider一致）
+aider --model deepseek --api-key deepseek=<your-key>
 ```
 
-See the [installation instructions](https://aider.chat/docs/install.html) and [usage documentation](https://aider.chat/docs/usage.html) for more details.
+### 基础使用示例
+1. **代码关系查询**
+```
+> /query callers get_user_info
+# 自动查询所有调用get_user_info函数的位置和链路
+```
 
-## More Information
+2. **调用代码评审Agent**
+```
+> /agent review src/api/user.py
+# 自动对指定文件进行代码评审，输出规范问题、性能问题、安全风险
+```
 
-### Documentation
-- [Installation Guide](https://aider.chat/docs/install.html)
-- [Usage Guide](https://aider.chat/docs/usage.html)
-- [Tutorial Videos](https://aider.chat/docs/usage/tutorials.html)
-- [Connecting to LLMs](https://aider.chat/docs/llms.html)
-- [Configuration Options](https://aider.chat/docs/config.html)
-- [Troubleshooting](https://aider.chat/docs/troubleshooting.html)
-- [FAQ](https://aider.chat/docs/faq.html)
+3. **Hashline精准修改**
+```
+> 修改a1b2c3行的参数校验逻辑，增加手机号格式校验
+# 基于哈希行标识精准修改指定位置代码，不会误改其他内容
+```
 
-### Community & Resources
-- [LLM Leaderboards](https://aider.chat/docs/leaderboards/)
-- [GitHub Repository](https://github.com/Aider-AI/aider)
-- [Discord Community](https://discord.gg/Y7X7bhMQFV)
-- [Release notes](https://aider.chat/HISTORY.html)
-- [Blog](https://aider.chat/blog/)
+## 🆚 与原版Aider的差异
+| 功能 | 原版Aider | 本二次开发版本 |
+|------|-----------|----------------|
+| 定位 | 支持自动编码的AI辅助工具 | 纯结对编程工具，所有变更由开发者主导 |
+| 代码变更校验 | 无行级校验，可能出现误改 | 基于Hashline的行级校验，变更100%精准 |
+| 代码分析能力 | 仅基础RepoMap | 内置全链路Code-Review-Graph，支持调用关系/影响范围/风险评估 |
+| Agent体系 | 通用单一Agent | 多角色专业Agent，覆盖评审/重构/调试/架构全场景 |
+| 变更管控 | 仅支持提交前确认 | 支持变更粒度校验、影响范围预评估 |
 
-## Kind Words From Users
+## 📚 文档
+- [Agent体系使用指南](./docs/agents.md)
+- [Hashline功能详解](./docs/hashline.md)
+- [Code-Review-Graph查询语法](./docs/crg.md)
+- [原版Aider官方文档](https://aider.chat/docs/)
 
-- *"My life has changed... Aider... It's going to rock your world."* — [Eric S. Raymond on X](https://x.com/esrtweet/status/1910809356381413593)
-- *"The best free open source AI coding assistant."* — [IndyDevDan on YouTube](https://youtu.be/YALpX8oOn78)
-- *"The best AI coding assistant so far."* — [Matthew Berman on YouTube](https://www.youtube.com/watch?v=df8afeb1FY8)
-- *"Aider ... has easily quadrupled my coding productivity."* — [SOLAR_FIELDS on Hacker News](https://news.ycombinator.com/item?id=36212100)
-- *"It's a cool workflow... Aider's ergonomics are perfect for me."* — [qup on Hacker News](https://news.ycombinator.com/item?id=38185326)
-- *"It's really like having your senior developer live right in your Git repo - truly amazing!"* — [rappster on GitHub](https://github.com/Aider-AI/aider/issues/124)
-- *"What an amazing tool. It's incredible."* — [valyagolev on GitHub](https://github.com/Aider-AI/aider/issues/6#issue-1722897858)
-- *"Aider is such an astounding thing!"* — [cgrothaus on GitHub](https://github.com/Aider-AI/aider/issues/82#issuecomment-1631876700)
-- *"It was WAY faster than I would be getting off the ground and making the first few working versions."* — [Daniel Feldman on X](https://twitter.com/d_feldman/status/1662295077387923456)
-- *"THANK YOU for Aider! It really feels like a glimpse into the future of coding."* — [derwiki on Hacker News](https://news.ycombinator.com/item?id=38205643)
-- *"It's just amazing. It is freeing me to do things I felt were out my comfort zone before."* — [Dougie on Discord](https://discord.com/channels/1131200896827654144/1174002618058678323/1174084556257775656)
-- *"This project is stellar."* — [funkytaco on GitHub](https://github.com/Aider-AI/aider/issues/112#issuecomment-1637429008)
-- *"Amazing project, definitely the best AI coding assistant I've used."* — [joshuavial on GitHub](https://github.com/Aider-AI/aider/issues/84)
-- *"I absolutely love using Aider ... It makes software development feel so much lighter as an experience."* — [principalideal0 on Discord](https://discord.com/channels/1131200896827654144/1133421607499595858/1229689636012691468)
-- *"I have been recovering from ... surgeries ... aider ... has allowed me to continue productivity."* — [codeninja on Reddit](https://www.reddit.com/r/OpenAI/s/nmNwkHy1zG)
-- *"I am an aider addict. I'm getting so much more work done, but in less time."* — [dandandan on Discord](https://discord.com/channels/1131200896827654144/1131200896827654149/1135913253483069470)
-- *"Aider... blows everything else out of the water hands down, there's no competition whatsoever."* — [SystemSculpt on Discord](https://discord.com/channels/1131200896827654144/1131200896827654149/1178736602797846548)
-- *"Aider is amazing, coupled with Sonnet 3.5 it's quite mind blowing."* — [Josh Dingus on Discord](https://discord.com/channels/1131200896827654144/1133060684540813372/1262374225298198548)
-- *"Hands down, this is the best AI coding assistant tool so far."* — [IndyDevDan on YouTube](https://www.youtube.com/watch?v=MPYFPvxfGZs)
-- *"[Aider] changed my daily coding workflows. It's mind-blowing how ...(it)... can change your life."* — [maledorak on Discord](https://discord.com/channels/1131200896827654144/1131200896827654149/1258453375620747264)
-- *"Best agent for actual dev work in existing codebases."* — [Nick Dobos on X](https://twitter.com/NickADobos/status/1690408967963652097?s=20)
-- *"One of my favorite pieces of software. Blazing trails on new paradigms!"* — [Chris Wall on X](https://x.com/chris65536/status/1905053299251798432)
-- *"Aider has been revolutionary for me and my work."* — [Starry Hope on X](https://x.com/starryhopeblog/status/1904985812137132056)
-- *"Try aider! One of the best ways to vibe code."* — [Chris Wall on X](https://x.com/Chris65536/status/1905053418961391929)
-- *"Freaking love Aider."* — [hztar on Hacker News](https://news.ycombinator.com/item?id=44035015)
-- *"Aider is hands down the best. And it's free and opensource."* — [AriyaSavakaLurker on Reddit](https://www.reddit.com/r/ChatGPTCoding/comments/1ik16y6/whats_your_take_on_aider/mbip39n/)
-- *"Aider is also my best friend."* — [jzn21 on Reddit](https://www.reddit.com/r/ChatGPTCoding/comments/1heuvuo/aider_vs_cline_vs_windsurf_vs_cursor/m27dcnb/)
-- *"Try Aider, it's worth it."* — [jorgejhms on Reddit](https://www.reddit.com/r/ChatGPTCoding/comments/1heuvuo/aider_vs_cline_vs_windsurf_vs_cursor/m27cp99/)
-- *"I like aider :)"* — [Chenwei Cui on X](https://x.com/ccui42/status/1904965344999145698)
-- *"Aider is the precision tool of LLM code gen... Minimal, thoughtful and capable of surgical changes ... while keeping the developer in control."* — [Reilly Sweetland on X](https://x.com/rsweetland/status/1904963807237259586)
-- *"Cannot believe aider vibe coded a 650 LOC feature across service and cli today in 1 shot."* - [autopoietist on Discord](https://discord.com/channels/1131200896827654144/1131200896827654149/1355675042259796101)
-- *"Oh no the secret is out! Yes, Aider is the best coding tool around. I highly, highly recommend it to anyone."* — [Joshua D Vander Hook on X](https://x.com/jodavaho/status/1911154899057795218)
-- *"thanks to aider, i have started and finished three personal projects within the last two days"* — [joseph stalzyn on X](https://x.com/anitaheeder/status/1908338609645904160)
-- *"Been using aider as my daily driver for over a year ... I absolutely love the tool, like beyond words."* — [koleok on Discord](https://discord.com/channels/1131200896827654144/1273248471394291754/1356727448372252783)
-- *"Aider ... is the tool to benchmark against."* — [BeetleB on Hacker News](https://news.ycombinator.com/item?id=43930201)
-- *"aider is really cool"* — [kache on X](https://x.com/yacineMTB/status/1911224442430124387)
+## 🤝 社区
+- 问题反馈：提交Issue到本仓库
+- 功能讨论：加入开发者交流群
+- 贡献代码：欢迎提交PR完善功能
 
+## 致谢
+本项目基于[Aider](https://github.com/Aider-AI/aider)二次开发，感谢原项目的优秀基础。
