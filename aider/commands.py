@@ -1091,6 +1091,25 @@ class Commands:
         self.io.tool_output(output)
         return output
 
+    def cmd_crg_setup(self, args):
+        """Setup automatic CRG database updates via git hooks"""
+        from aider.crg_tool_adapter import setup_git_hooks
+
+        if not self.coder.root:
+            self.io.tool_error("No git repository found.")
+            return
+
+        if setup_git_hooks(self.coder.root):
+            self.io.tool_output("✓ Git hooks installed for automatic CRG updates.")
+            self.io.tool_output("  - post-commit: rebuilds after commits")
+            self.io.tool_output("  - post-merge: rebuilds after pull/merge")
+            self.io.tool_output("")
+            self.io.tool_output(
+                "The database will now auto-update when you commit code."
+            )
+        else:
+            self.io.tool_error("Failed to install git hooks.")
+
     def cmd_run(self, args, add_on_nonzero_exit=False):
         "Run a shell command and optionally add the output to the chat (alias: !)"
         exit_status, combined_output = run_cmd(
@@ -1293,7 +1312,7 @@ class Commands:
                 return
             self.io.tool_output("Saved plans:")
             self.io.tool_output(f"  {'ID':<10s}  {'Status':<10s}  Title")
-            self.io.tool_output(f"  {'-'*10}  {'-'*10}  {'-'*40}")
+            self.io.tool_output(f"  {'-' * 10}  {'-' * 10}  {'-' * 40}")
             for p in plans:
                 self.io.tool_output(f"  {p.short_id:<10s}  {p.status:<10s}  {p.title}")
             return
@@ -1304,7 +1323,9 @@ class Commands:
             if not plan:
                 self.io.tool_error(f"Plan not found: {plan_id or '(latest)'}")
                 return
-            self.io.tool_output(f"Plan: {plan.title}  (id={plan.short_id}, status={plan.status})")
+            self.io.tool_output(
+                f"Plan: {plan.title}  (id={plan.short_id}, status={plan.status})"
+            )
             self.io.tool_output("")
             self.io.tool_output(plan.content)
             return
@@ -1316,7 +1337,9 @@ class Commands:
                 self.io.tool_error(f"Plan not found: {plan_id}")
                 return
             self.coder.current_plan = plan.content
-            self.io.tool_output(f"Loaded plan '{plan.title}' ({plan.short_id}) into context.")
+            self.io.tool_output(
+                f"Loaded plan '{plan.title}' ({plan.short_id}) into context."
+            )
             self.io.tool_output("Type `/code` to execute it.")
             return
 
@@ -1865,7 +1888,194 @@ Just show me the edits I need to make.
                 f"An unexpected error occurred while copying to clipboard: {str(e)}"
             )
 
+    def cmd_edit_file(self, args=""):
+        """Open file in editor with hashline annotations, then add to chat.
+        
+        Usage: /edit-file <filename>
+        
+        Opens the specified file in your editor with hashline annotations
+        showing the hash for each line. When you close the editor, the
+        original file is automatically added to the chat.
+        """
+        from aider.hashline_manager import HashlineManager
+        
+        if not args.strip():
+            self.io.tool_error("Usage: /edit-file <filename>")
+            self.io.tool_output("Open a file in editor with hashline annotations.")
+            return
+        
+        # Parse filename
+        filenames = parse_quoted_filenames(args)
+        if not filenames:
+            self.io.tool_error("No filename provided.")
+            return
+        
+        filename = filenames[0]
+        
+        # Resolve file path
+        if Path(filename).is_absolute():
+            file_path = Path(filename)
+        else:
+            if self.coder.use_cwd:
+                file_path = Path.cwd() / filename
+            else:
+                file_path = Path(self.coder.root) / filename
+        
+        # Check if file exists
+        if not file_path.exists():
+            if self.io.confirm_ask(f"File {filename} does not exist. Create it?"):
+                try:
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.touch()
+                except OSError as e:
+                    self.io.tool_error(f"Error creating file: {e}")
+                    return
+            else:
+                return
+        
+        # Check if it's a file
+        if not file_path.is_file():
+            self.io.tool_error(f"{filename} is not a file.")
+            return
+        
+        # Initialize hashline manager
+        hashline_mgr = HashlineManager(root_dir=self.coder.root)
+        
+        # Save hashes for the file
+        hashline_mgr.save_hashes(str(file_path))
+        
+        # Format content with hashline annotations for editor
+        annotated_content = hashline_mgr.format_for_editor(str(file_path))
+        
+        # Get file suffix for editor
+        suffix = file_path.suffix.lstrip(".") or "txt"
+        
+        # Open editor with annotated content
+        self.io.tool_output(f"Opening {filename} in editor with hashline annotations...")
+        self.io.tool_output("The hash values will help you reference specific lines when asking for edits.")
+        
+        edited_content = pipe_editor(annotated_content, suffix=suffix, editor=self.editor)
+        
+        if edited_content is None:
+            self.io.tool_output("Editor closed without changes.")
+            return
+        
+        # Note: We don't save the annotated version - user edits the original file
+        # The hashline display is just for reference
+        
+        # Add file to chat
+        abs_file_path = str(file_path.resolve())
+        
+        if abs_file_path in self.coder.abs_fnames:
+            self.io.tool_output(f"{filename} is already in the chat as an editable file.")
+        elif abs_file_path in self.coder.abs_read_only_fnames:
+            # Promote to editable
+            if self.coder.repo:
+                can_edit = self.coder.repo.path_in_repo(filename)
+            else:
+                can_edit = abs_file_path.startswith(self.coder.root)
+            
+            if can_edit:
+                self.coder.abs_read_only_fnames.remove(abs_file_path)
+                self.coder.abs_fnames.add(abs_file_path)
+                self.io.tool_output(f"Moved {filename} from read-only to editable files.")
+            else:
+                self.io.tool_error(f"Cannot add {filename} as it's not part of the repository.")
+        else:
+            content = self.io.read_text(abs_file_path)
+            if content is None:
+                self.io.tool_error(f"Unable to read {filename}")
+            else:
+                self.coder.abs_fnames.add(abs_file_path)
+                fname = self.coder.get_rel_fname(abs_file_path)
+                self.io.tool_output(f"Added {fname} to the chat.")
+                self.coder.check_added_files()
+        
+        # Show hashline summary
+        hashes = hashline_mgr.get_hashes(str(file_path))
+        if hashes:
+            self.io.tool_output(f"\nHashline info for {filename}:")
+            self.io.tool_output(f"  Total lines: {len(hashes)}")
+            self.io.tool_output(f"  First hash: {hashes[1]['hash']}")
+            self.io.tool_output(f"  Last hash: {hashes[len(hashes)]['hash']}")
+            self.io.tool_output("\nUse these hashes when asking for edits.")
+            self.io.tool_output("Example: 'Replace lines a1b2c3..d4e5f6 with ...'")
 
+    def cmd_hashline(self, args=""):
+        """Show hashline annotations for files in the chat.
+        
+        Usage: /hashline [filename]
+        
+        Shows the hash values for each line of the specified file,
+        or all files in the chat if no filename is given.
+        """
+        from aider.hashline_manager import HashlineManager
+        
+        hashline_mgr = HashlineManager(root_dir=self.coder.root)
+        
+        if args.strip():
+            # Show hashline for specific file
+            filenames = parse_quoted_filenames(args)
+            if not filenames:
+                self.io.tool_error("No filename provided.")
+                return
+            
+            filename = filenames[0]
+            
+            # Resolve file path
+            if Path(filename).is_absolute():
+                file_path = Path(filename)
+            else:
+                if self.coder.use_cwd:
+                    file_path = Path.cwd() / filename
+                else:
+                    file_path = Path(self.coder.root) / filename
+            
+            if not file_path.exists():
+                self.io.tool_error(f"File {filename} not found.")
+                return
+            
+            # Save and display hashes
+            hashline_mgr.save_hashes(str(file_path))
+            formatted = hashline_mgr.format_with_hashes(str(file_path))
+            
+            self.io.tool_output(f"\nHashline annotations for {filename}:")
+            self.io.tool_output("=" * 60)
+            self.io.tool_output(formatted)
+            self.io.tool_output("=" * 60)
+        else:
+            # Show hashline summary for all files in chat
+            self.io.tool_output("\nHashline summary for files in chat:")
+            self.io.tool_output("=" * 60)
+            
+            # Editable files
+            if self.coder.abs_fnames:
+                self.io.tool_output("\nEditable files:")
+                for fname in sorted(self.coder.abs_fnames):
+                    rel_fname = self.coder.get_rel_fname(fname)
+                    hashes = hashline_mgr.get_hashes(fname)
+                    if hashes:
+                        self.io.tool_output(f"  {rel_fname}: {len(hashes)} lines")
+                        self.io.tool_output(f"    First hash: {hashes[1]['hash']}")
+                        self.io.tool_output(f"    Last hash: {hashes[len(hashes)]['hash']}")
+                    else:
+                        self.io.tool_output(f"  {rel_fname}: unable to compute hashes")
+            
+            # Read-only files
+            if self.coder.abs_read_only_fnames:
+                self.io.tool_output("\nRead-only files:")
+                for fname in sorted(self.coder.abs_read_only_fnames):
+                    rel_fname = self.coder.get_rel_fname(fname)
+                    hashes = hashline_mgr.get_hashes(fname)
+                    if hashes:
+                        self.io.tool_output(f"  {rel_fname}: {len(hashes)} lines")
+                        self.io.tool_output(f"    First hash: {hashes[1]['hash']}")
+                        self.io.tool_output(f"    Last hash: {hashes[len(hashes)]['hash']}")
+                    else:
+                        self.io.tool_output(f"  {rel_fname}: unable to compute hashes")
+            
+            self.io.tool_output("\nUse /hashline <filename> to see full hashline annotations.")
+            self.io.tool_output("Use /edit-file <filename> to open a file with hashline annotations.")
 def expand_subdir(file_path):
     if file_path.is_file():
         yield file_path

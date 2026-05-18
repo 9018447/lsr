@@ -76,19 +76,20 @@ def add_line_hashes(content):
         result.append(f"{h} | {line}")
     return "".join(result)
 
+
 def batch_add_line_hashes(contents, max_workers=0):
     """批量并行对多个文件内容添加行哈希，CPU密集型计算使用进程池优化。
-    
+
     Args:
         contents: 待处理的文件内容列表，输出顺序和输入完全一致
         max_workers: 最大并行数，0表示自动适配（Linux/macOS默认min(CPU核心数,8)，Windows默认0回退串行）
-    
+
     Returns:
         处理后的内容列表，顺序和输入一致
     """
     if not contents:
         return []
-    
+
     # 自动配置并行数
     if max_workers <= 0:
         if platform.system() == "Windows":
@@ -96,21 +97,24 @@ def batch_add_line_hashes(contents, max_workers=0):
             max_workers = 0
         else:
             max_workers = min(os.cpu_count() or 4, 8)
-    
+
     # 并行数为0直接走原有串行逻辑，100%兼容原有输出
     if max_workers == 0:
         return [add_line_hashes(content) for content in contents]
-    
+
     # 进程池处理CPU密集型计算，异常时自动回退串行
     results = []
     try:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
             results = list(executor.map(add_line_hashes, contents, timeout=30))
     except (ImportError, OSError, RuntimeError, concurrent.futures.TimeoutError):
         # 任何异常都回退串行，保证功能可用
         results = [add_line_hashes(content) for content in contents]
-    
+
     return results
+
 
 _HASH_LINE_PATTERN = re.compile(r"^[0-9a-f]{6} \| ")
 _URL_PATTERN = re.compile(r'(https?://[^\s/$.?#].[^\s"]*)')
@@ -196,7 +200,10 @@ class Coder:
     commit_language = None
     file_watcher = None
 
-    parallel_hashline = min(os.cpu_count() or 4, 8) if platform.system() != "Windows" else 0
+    parallel_hashline = (
+        min(os.cpu_count() or 4, 8) if platform.system() != "Windows" else 0
+    )
+
     @classmethod
     def create(
         self,
@@ -649,8 +656,10 @@ class Coder:
 
         # Code-review-graph toolkit integration
         try:
-            from aider.crg_tool_adapter import ensure_graph_db
+            from aider.crg_tool_adapter import ensure_graph_db, refresh_graph_db
 
+            # Auto-refresh stale database
+            refresh_graph_db(self.root)
             self.crg_tool_enabled = ensure_graph_db(self.root)
             if not self.crg_tool_enabled:
                 self.io.tool_warning(
@@ -778,14 +787,20 @@ class Coder:
         # 批量并行处理行哈希（hashline格式时）
         if self.edit_format == "hashline" and file_entries:
             contents = [entry[1] for entry in file_entries]
-            processed_contents = batch_add_line_hashes(contents, max_workers=self.parallel_hashline)
+            processed_contents = batch_add_line_hashes(
+                contents, max_workers=self.parallel_hashline
+            )
             # 严格按原顺序拼接结果
             for i, (fname, content, relative_fname) in enumerate(file_entries):
-                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n")
+                parts.append(
+                    f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n"
+                )
         else:
             # 非hashline格式走原有串行逻辑
             for fname, content, relative_fname in file_entries:
-                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
+                parts.append(
+                    f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
+                )
 
         return "".join(parts)
 
@@ -802,14 +817,20 @@ class Coder:
         # 批量并行处理行哈希（hashline格式时）
         if self.edit_format == "hashline" and file_entries:
             contents = [entry[0] for entry in file_entries]
-            processed_contents = batch_add_line_hashes(contents, max_workers=self.parallel_hashline)
+            processed_contents = batch_add_line_hashes(
+                contents, max_workers=self.parallel_hashline
+            )
             # 严格按原顺序拼接结果
             for i, (content, relative_fname) in enumerate(file_entries):
-                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n")
+                parts.append(
+                    f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n"
+                )
         else:
             # 非hashline格式走原有串行逻辑
             for content, relative_fname in file_entries:
-                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
+                parts.append(
+                    f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
+                )
 
         return "".join(parts)
 
@@ -1092,12 +1113,17 @@ class Coder:
             if not self.reflected_message and getattr(self, "crg_tool_enabled", False):
                 from aider.crg_tool_adapter import execute_crg_tools
 
-                tool_result = execute_crg_tools(self.partial_response_content, root=self.root)
+                tool_result = execute_crg_tools(
+                    self.partial_response_content, root=self.root
+                )
                 if tool_result:
                     self.reflected_message = tool_result
 
             # Extract and persist plan when in plan mode
-            if getattr(self, "edit_format", None) == "plan" and self.partial_response_content:
+            if (
+                getattr(self, "edit_format", None) == "plan"
+                and self.partial_response_content
+            ):
                 content = self.partial_response_content
                 if "## Plan:" in content or "Type `/code` to execute" in content:
                     self.current_plan = content
@@ -1110,7 +1136,9 @@ class Coder:
                             f"Type `/code` to execute, or `/plan list` to see all plans."
                         )
                     except Exception as exc:
-                        self.io.tool_warning(f"Plan saved in memory, but disk write failed: {exc}")
+                        self.io.tool_warning(
+                            f"Plan saved in memory, but disk write failed: {exc}"
+                        )
                         self.io.tool_output("Type `/code` to execute it.")
 
             if not self.reflected_message:
@@ -1148,7 +1176,9 @@ class Coder:
             return inp
 
         # Exclude double quotes from the matched URL characters
-        urls = list(set(_URL_PATTERN_NO_COMMA.findall(inp)))  # Use set to remove duplicates
+        urls = list(
+            set(_URL_PATTERN_NO_COMMA.findall(inp))
+        )  # Use set to remove duplicates
         group = ConfirmGroup(urls)
         for url in urls:
             if url not in self.rejected_urls:

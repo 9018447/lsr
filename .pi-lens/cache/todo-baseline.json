@@ -4,21 +4,21 @@
       "type": "TODO",
       "message": "check for impact on image messages",
       "file": "aider/coders/base_coder.py",
-      "line": 1239,
+      "line": 1252,
       "column": 10
     },
     {
       "type": "TODO",
       "message": "review impact of token count on image messages",
       "file": "aider/coders/base_coder.py",
-      "line": 1518,
+      "line": 1531,
       "column": 10
     },
     {
       "type": "TODO",
       "message": "push this into subclasses",
       "file": "aider/coders/base_coder.py",
-      "line": 2096,
+      "line": 2108,
       "column": 18
     },
     {

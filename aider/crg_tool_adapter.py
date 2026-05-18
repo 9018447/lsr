@@ -83,6 +83,7 @@ def get_crg_prompt_for_mode(mode: str) -> str:
     }
     return mapping.get(mode, CRG_BASE_PROMPT)
 
+
 ALLOWED_SUBCOMMANDS = {
     "status",
     "query",
@@ -121,7 +122,7 @@ def ensure_graph_db(root: str | Path) -> bool:
         return True
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["code-review-graph", "build"],
             cwd=str(root),
             capture_output=True,
@@ -135,6 +136,105 @@ def ensure_graph_db(root: str | Path) -> bool:
         return False
 
     return db_path.exists()
+
+
+def _get_db_mtime(root: str | Path) -> float:
+    """Get the modification time of the graph database file."""
+    db_path = Path(root) / ".code-review-graph/graph.db"
+    if db_path.exists():
+        return db_path.stat().st_mtime
+    return 0.0
+
+
+def _get_git_head_time(root: str | Path) -> float:
+    """Get the timestamp of the latest git commit."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%ct"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return 0.0
+
+
+def is_graph_db_stale(root: str | Path) -> bool:
+    """Check if the graph database is stale compared to git HEAD."""
+    db_mtime = _get_db_mtime(root)
+    if db_mtime == 0:
+        return True  # DB doesn't exist
+    git_time = _get_git_head_time(root)
+    if git_time == 0:
+        return False  # Can't determine git time, assume OK
+    return git_time > db_mtime
+
+
+def refresh_graph_db(root: str | Path, force: bool = False) -> bool:
+    """Refresh the graph database if stale or forced.
+
+    Args:
+        root: Project root directory
+        force: Force rebuild even if not stale
+
+    Returns:
+        True if database is available after refresh
+    """
+    if not force and not is_graph_db_stale(root):
+        return True
+
+    db_path = Path(root) / ".code-review-graph/graph.db"
+    try:
+        result = subprocess.run(
+            ["code-review-graph", "build"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=_BUILD_TIMEOUT,
+        )
+        if result.returncode != 0:
+            return db_path.exists()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return db_path.exists()
+
+    return db_path.exists()
+
+
+def setup_git_hooks(root: str | Path) -> bool:
+    """Install git hooks for automatic CRG database updates.
+
+    Creates post-commit and post-merge hooks.
+    Returns True if hooks were installed successfully.
+    """
+    hooks_dir = Path(root) / ".git/hooks"
+    if not hooks_dir.exists():
+        return False
+
+    hook_script = """#!/bin/sh
+# Auto-update code-review-graph database
+cd "$(git rev-parse --show-toplevel)" || exit 0
+if command -v code-review-graph >/dev/null 2>&1; then
+    code-review-graph build &
+fi
+"""
+
+    for hook_name in ["post-commit", "post-merge"]:
+        hook_path = hooks_dir / hook_name
+        if hook_path.exists():
+            # Don't overwrite existing hooks
+            continue
+        try:
+            with open(hook_path, "w") as f:
+                f.write(hook_script)
+            hook_path.chmod(0o755)
+        except OSError:
+            return False
+
+    return True
 
 
 def parse_crg_tags(content: str) -> list[dict]:
@@ -218,14 +318,25 @@ def run_crg_tool(subcommand: str, args_str: str, root: str | Path) -> str:
     return output
 
 
-def execute_crg_tools(content: str, root: str | Path) -> str | None:
+def execute_crg_tools(
+    content: str, root: str | Path, auto_refresh: bool = True
+) -> str | None:
     """Parse <crg_tool> tags in *content*, run them, and return a combined result string.
+
+    Args:
+        content: Text containing <crg_tool> tags
+        root: Project root directory
+        auto_refresh: Automatically refresh stale database before execution
 
     Returns None if no tags are found.
     """
     tags = parse_crg_tags(content)
     if not tags:
         return None
+
+    # Auto-refresh if database is stale
+    if auto_refresh:
+        refresh_graph_db(root)
 
     if not ensure_graph_db(root):
         return (

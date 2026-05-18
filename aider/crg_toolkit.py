@@ -28,9 +28,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-import textwrap
 from pathlib import Path
 
 from aider.crg_common import (
@@ -152,27 +150,122 @@ def cmd_query(cm: CodeMap, args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # Subcommand: search
 # ---------------------------------------------------------------------------
+
+
+def _search_relevance_score(node, pattern: str) -> int:
+    """Score a node's relevance to a search pattern. Higher = more relevant."""
+    name_lower = node.name.lower()
+    qn_lower = node.qualified_name.lower()
+
+    # Exact name match = highest
+    if name_lower == pattern:
+        return 100
+    # Name starts with pattern
+    if name_lower.startswith(pattern):
+        return 80
+    # Name contains pattern
+    if pattern in name_lower:
+        return 60
+    # Qualified name contains pattern
+    if pattern in qn_lower:
+        return 40
+    # File path contains pattern (lowest)
+    return 20
+
+
+def _fuzzy_match_score(text: str, pattern: str) -> float:
+    """Calculate fuzzy match score using SequenceMatcher. Returns 0.0-1.0."""
+    from difflib import SequenceMatcher
+
+    if not text or not pattern:
+        return 0.0
+    return SequenceMatcher(None, text, pattern).ratio()
+
+
+def _fuzzy_search(nodes, pattern: str, threshold: float = 0.6):
+    """Fuzzy search nodes, returning (node, score) tuples above threshold."""
+    results = []
+    for n in nodes:
+        name_score = _fuzzy_match_score(n.name.lower(), pattern)
+        qn_score = _fuzzy_match_score(n.qualified_name.lower(), pattern)
+        best_score = max(name_score, qn_score)
+        if best_score >= threshold:
+            results.append((n, best_score))
+    results.sort(key=lambda x: -x[1])
+    return results
+
+
+def _print_context(node, num_lines: int = 3):
+    """Print surrounding code context for a node."""
+    try:
+        file_path = Path(node.file_path)
+        if not file_path.exists():
+            return
+        with open(file_path) as f:
+            lines = f.readlines()
+        start = max(0, node.line_start - 1 - num_lines)
+        end = min(len(lines), node.line_start - 1 + num_lines)
+        for i in range(start, end):
+            marker = ">>>" if i == node.line_start - 1 else "   "
+            print(f"             {marker} {i + 1:4d} | {lines[i].rstrip()}")
+    except (OSError, AttributeError):
+        pass
+
+
 def cmd_search(cm: CodeMap, args: argparse.Namespace) -> int:
     pattern = args.pattern.lower()
+    fuzzy = getattr(args, "fuzzy", False)
+    threshold = getattr(args, "threshold", 0.6)
+    context_lines = getattr(args, "context", 0)
+    use_regex = getattr(args, "regex", False)
     results = []
-    for n in cm.nodes:
-        if (
-            pattern in n.name.lower()
-            or pattern in n.qualified_name.lower()
-            or pattern in n.file_path.lower()
-        ):
+
+    if use_regex:
+        # Regex matching mode
+        import re
+
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            print(f"Invalid regex pattern: {e}", file=sys.stderr)
+            return 1
+
+        for n in cm.nodes:
+            if (
+                regex.search(n.name)
+                or regex.search(n.qualified_name)
+                or regex.search(n.file_path)
+            ):
+                results.append(n)
+    elif fuzzy:
+        # Fuzzy matching mode
+        fuzzy_results = _fuzzy_search(cm.nodes, pattern, threshold)
+        for n, _score in fuzzy_results:
             results.append(n)
+    else:
+        # Exact substring matching mode
+        for n in cm.nodes:
+            if (
+                pattern in n.name.lower()
+                or pattern in n.qualified_name.lower()
+                or pattern in n.file_path.lower()
+            ):
+                results.append(n)
 
     if not results:
         print(f"No matches for: {args.pattern}")
         return 0
 
+    # Sort by relevance: exact name > name start > name contains > qn contains > path contains
+    results.sort(key=lambda n: -_search_relevance_score(n, pattern))
+
     print(f"Found {len(results)} match(es) for '{args.pattern}':")
     print()
     for n in results[: args.limit]:
         print(f"  [{n.kind:8s}] {n.display_name:30s}  {n.short_path}:{n.line_start}")
-        if args.verbose:
-            print(f"             qn: {n.qualified_name}")
+        print(f"             qn: {n.qualified_name}")
+        if context_lines and n.file_path:
+            _print_context(n, context_lines)
     if len(results) > args.limit:
         print(f"  ... and {len(results) - args.limit} more")
     return 0
@@ -207,7 +300,14 @@ def cmd_flows(cm: CodeMap, args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_communities(cm: CodeMap, args: argparse.Namespace) -> int:
     if args.detail:
-        comm = next((c for c in cm.communities if c.name == args.detail or str(c.id) == args.detail), None)
+        comm = next(
+            (
+                c
+                for c in cm.communities
+                if c.name == args.detail or str(c.id) == args.detail
+            ),
+            None,
+        )
         if not comm:
             print(f"Community not found: {args.detail}", file=sys.stderr)
             return 1
@@ -220,13 +320,19 @@ def cmd_communities(cm: CodeMap, args: argparse.Namespace) -> int:
         if comm.purpose:
             print(f"  Purpose:  {comm.purpose}")
         if comm.key_symbols:
-            print(f"  Key symbols:")
+            print("  Key symbols:")
             for sym in comm.key_symbols[:10]:
                 print(f"    - {sym}")
         print()
-        members = [n for n in cm.nodes if n.community_id == comm.id and n.kind in ("Function", "Class")]
+        members = [
+            n
+            for n in cm.nodes
+            if n.community_id == comm.id and n.kind in ("Function", "Class")
+        ]
         print(f"  Members ({len(members)}):")
-        for n in sorted(members, key=lambda x: (x.file_path, x.line_start))[:args.limit]:
+        for n in sorted(members, key=lambda x: (x.file_path, x.line_start))[
+            : args.limit
+        ]:
             print(f"    {fmt_node(n)}")
         if len(members) > args.limit:
             print(f"    ... and {len(members) - args.limit} more")
@@ -235,7 +341,9 @@ def cmd_communities(cm: CodeMap, args: argparse.Namespace) -> int:
     print("Communities:")
     print()
     for comm in sorted(cm.communities, key=lambda c: -c.size):
-        print(f"  {comm.name:15s}  lang={comm.dominant_language:8s}  size={comm.size:4d}  cohesion={comm.cohesion:.2f}")
+        print(
+            f"  {comm.name:15s}  lang={comm.dominant_language:8s}  size={comm.size:4d}  cohesion={comm.cohesion:.2f}"
+        )
         if args.verbose:
             print(f"    {comm.description}")
             if comm.key_symbols:
@@ -255,7 +363,7 @@ def cmd_risk(cm: CodeMap, args: argparse.Namespace) -> int:
     print(f"Risk Hotspots (top {len(risks)}):")
     print()
     print(f"  {'Score':>6s}  {'Callers':>7s}  {'Security':>8s}  Symbol")
-    print(f"  {'-'*6}  {'-'*7}  {'-'*8}  {'-'*40}")
+    print(f"  {'-' * 6}  {'-' * 7}  {'-' * 8}  {'-' * 40}")
     for r in risks:
         sec = "YES" if r.security_relevant else "no"
         name = fmt_qn(r.qualified_name, 50)
@@ -294,7 +402,7 @@ def cmd_impact(cm: CodeMap, args: argparse.Namespace) -> int:
 
     changed = result["changed_nodes"]
     print(f"Changed nodes: {len(changed)}")
-    for n in changed[:args.limit]:
+    for n in changed[: args.limit]:
         print(f"  {fmt_node(n)}")
     if len(changed) > args.limit:
         print(f"  ... and {len(changed) - args.limit} more")
@@ -302,7 +410,7 @@ def cmd_impact(cm: CodeMap, args: argparse.Namespace) -> int:
 
     callers = result["direct_callers"]
     print(f"Direct callers affected: {len(callers)}")
-    for c in callers[:args.limit]:
+    for c in callers[: args.limit]:
         print(f"  <- {fmt_qn(c)}")
     if len(callers) > args.limit:
         print(f"  ... and {len(callers) - args.limit} more")
@@ -310,7 +418,7 @@ def cmd_impact(cm: CodeMap, args: argparse.Namespace) -> int:
 
     flows = result["affected_flows"]
     print(f"Affected execution flows: {len(flows)}")
-    for fl in sorted(flows, key=lambda f: -f.criticality)[:args.limit]:
+    for fl in sorted(flows, key=lambda f: -f.criticality)[: args.limit]:
         print(f"  {fl.name}  (criticality={fl.criticality:.2f})")
     if len(flows) > args.limit:
         print(f"  ... and {len(flows) - args.limit} more")
@@ -328,6 +436,7 @@ def cmd_export(cm: CodeMap, args: argparse.Namespace) -> int:
     export_script = Path(__file__).with_name("export_code_map.py")
     if export_script.exists():
         import subprocess
+
         cmd = [sys.executable, str(export_script), "-o", args.output]
         if args.llm:
             cmd.append("--llm")
@@ -363,10 +472,16 @@ def cmd_wiki(cm: CodeMap, args: argparse.Namespace) -> int:
         if comm.purpose:
             lines.append(f"- **Purpose:** {comm.purpose}")
         if comm.key_symbols:
-            lines.append(f"- **Key Symbols:** {', '.join(str(s) for s in comm.key_symbols)}")
+            lines.append(
+                f"- **Key Symbols:** {', '.join(str(s) for s in comm.key_symbols)}"
+            )
         lines.append("")
 
-        members = [n for n in cm.nodes if n.community_id == comm.id and n.kind in ("Function", "Class", "Test")]
+        members = [
+            n
+            for n in cm.nodes
+            if n.community_id == comm.id and n.kind in ("Function", "Class", "Test")
+        ]
         lines.append(f"## Members ({len(members)})")
         lines.append("")
         for n in sorted(members, key=lambda x: (x.file_path, x.line_start)):
@@ -394,7 +509,9 @@ def cmd_wiki(cm: CodeMap, args: argparse.Namespace) -> int:
             lines.append("")
 
         page_path.write_text("\n".join(lines), encoding="utf-8")
-        index_lines.append(f"- [{comm.name}]({page_name}) — {comm.dominant_language}, {comm.size} symbols")
+        index_lines.append(
+            f"- [{comm.name}]({page_name}) — {comm.dominant_language}, {comm.size} symbols"
+        )
 
     (out_dir / "index.md").write_text("\n".join(index_lines), encoding="utf-8")
     print(f"Wiki generated in {out_dir}/")
@@ -422,22 +539,47 @@ def _build_parser() -> argparse.ArgumentParser:
     query_parser.add_argument("--callees", action="store_true", help="Show callees")
     query_parser.add_argument("--tests", action="store_true", help="Show tests")
     query_parser.add_argument("--imports", action="store_true", help="Show imports")
-    query_parser.add_argument("--limit", type=int, default=20, help="Max results per category")
+    query_parser.add_argument(
+        "--limit", type=int, default=20, help="Max results per category"
+    )
 
     # search
     search_parser = sub.add_parser("search", help="Search nodes by name or path")
     search_parser.add_argument("pattern", help="Search pattern")
     search_parser.add_argument("--limit", type=int, default=20)
     search_parser.add_argument("-v", "--verbose", action="store_true")
+    search_parser.add_argument(
+        "--fuzzy", action="store_true", help="Enable fuzzy matching"
+    )
+    search_parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.6,
+        help="Fuzzy match threshold (0.0-1.0, default: 0.6)",
+    )
+    search_parser.add_argument(
+        "-c",
+        "--context",
+        type=int,
+        default=0,
+        help="Show N lines of code context around each match",
+    )
+    search_parser.add_argument(
+        "-r", "--regex", action="store_true", help="Use regex pattern matching"
+    )
 
     # flows
     flows_parser = sub.add_parser("flows", help="List execution flows")
     flows_parser.add_argument("--top", type=int, default=20, dest="limit")
-    flows_parser.add_argument("--name", dest="flow_name", default=None, help="Filter by flow name")
+    flows_parser.add_argument(
+        "--name", dest="flow_name", default=None, help="Filter by flow name"
+    )
 
     # communities
     comm_parser = sub.add_parser("communities", help="List or inspect communities")
-    comm_parser.add_argument("--detail", default=None, help="Show detail for a community name or ID")
+    comm_parser.add_argument(
+        "--detail", default=None, help="Show detail for a community name or ID"
+    )
     comm_parser.add_argument("--limit", type=int, default=30)
     comm_parser.add_argument("-v", "--verbose", action="store_true")
 
@@ -446,7 +588,9 @@ def _build_parser() -> argparse.ArgumentParser:
     risk_parser.add_argument("--top", type=int, default=20, dest="limit")
 
     # impact
-    impact_parser = sub.add_parser("impact", help="Blast-radius analysis for changed files")
+    impact_parser = sub.add_parser(
+        "impact", help="Blast-radius analysis for changed files"
+    )
     impact_parser.add_argument("files", nargs="+", help="Changed file paths")
     impact_parser.add_argument("--limit", type=int, default=20)
 

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">
-纯AI结对编程工具 (Aider二次开发分支)
+纯AI结对编程工具 (Aider二次开发分支) - 测试编辑功能
 </h1>
 
 <p align="center">
