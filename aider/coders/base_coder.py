@@ -112,6 +112,11 @@ def batch_add_line_hashes(contents, max_workers=0):
     
     return results
 
+_HASH_LINE_PATTERN = re.compile(r"^[0-9a-f]{6} \| ")
+_URL_PATTERN = re.compile(r'(https?://[^\s/$.?#].[^\s"]*)')
+_URL_PATTERN_NO_COMMA = re.compile(r'(https?://[^\s/$.?#].[^\s"]*[^\s,.])')
+
+
 def strip_line_hashes(text):
     """Remove hash prefixes (``abcdef | ``) from every line in *text*.
 
@@ -119,11 +124,7 @@ def strip_line_hashes(text):
     SEARCH blocks so that downstream matching works on clean source code.
     """
     lines = text.splitlines(keepends=True)
-    stripped = []
-    for line in lines:
-        cleaned = re.sub(r"^[0-9a-f]{6} \| ", "", line)
-        stripped.append(cleaned)
-    return "".join(stripped)
+    return "".join(_HASH_LINE_PATTERN.sub("", line) for line in lines)
 
 
 class UnknownEditFormat(ValueError):
@@ -731,14 +732,15 @@ class Coder:
                 yield fname, content
 
     def choose_fence(self):
-        all_content = ""
+        content_parts = []
         for _fname, content in self.get_abs_fnames_content():
-            all_content += content + "\n"
+            content_parts.append(content)
         for _fname in self.abs_read_only_fnames:
             content = self.io.read_text(_fname)
             if content is not None:
-                all_content += content + "\n"
+                content_parts.append(content)
 
+        all_content = "\n".join(content_parts) + "\n" if content_parts else ""
         lines = all_content.splitlines()
         good = False
         for fence_open, fence_close in self.fences:
@@ -765,38 +767,29 @@ class Coder:
         if not fnames:
             fnames = self.abs_fnames
 
-        prompt = ""
         # 先收集所有需要处理的文件
         file_entries = []
         for fname, content in self.get_abs_fnames_content():
             if not is_image_file(fname):
                 relative_fname = self.get_rel_fname(fname)
                 file_entries.append((fname, content, relative_fname))
-        
+
+        parts = []
         # 批量并行处理行哈希（hashline格式时）
         if self.edit_format == "hashline" and file_entries:
             contents = [entry[1] for entry in file_entries]
             processed_contents = batch_add_line_hashes(contents, max_workers=self.parallel_hashline)
             # 严格按原顺序拼接结果
             for i, (fname, content, relative_fname) in enumerate(file_entries):
-                prompt += "\n"
-                prompt += relative_fname
-                prompt += f"\n{self.fence[0]}\n"
-                prompt += processed_contents[i]
-                prompt += f"{self.fence[1]}\n"
+                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n")
         else:
             # 非hashline格式走原有串行逻辑
             for fname, content, relative_fname in file_entries:
-                prompt += "\n"
-                prompt += relative_fname
-                prompt += f"\n{self.fence[0]}\n"
-                prompt += content
-                prompt += f"{self.fence[1]}\n"
+                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
 
-        return prompt
+        return "".join(parts)
 
     def get_read_only_files_content(self):
-        prompt = ""
         # 先收集所有需要处理的只读文件
         file_entries = []
         for fname in self.abs_read_only_fnames:
@@ -804,34 +797,26 @@ class Coder:
             if content is not None and not is_image_file(fname):
                 relative_fname = self.get_rel_fname(fname)
                 file_entries.append((content, relative_fname))
-        
+
+        parts = []
         # 批量并行处理行哈希（hashline格式时）
         if self.edit_format == "hashline" and file_entries:
             contents = [entry[0] for entry in file_entries]
             processed_contents = batch_add_line_hashes(contents, max_workers=self.parallel_hashline)
             # 严格按原顺序拼接结果
             for i, (content, relative_fname) in enumerate(file_entries):
-                prompt += "\n"
-                prompt += relative_fname
-                prompt += f"\n{self.fence[0]}\n"
-                prompt += processed_contents[i]
-                prompt += f"{self.fence[1]}\n"
+                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n")
         else:
             # 非hashline格式走原有串行逻辑
             for content, relative_fname in file_entries:
-                prompt += "\n"
-                prompt += relative_fname
-                prompt += f"\n{self.fence[0]}\n"
-                prompt += content
-                prompt += f"{self.fence[1]}\n"
-        
-        return prompt
+                parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
+
+        return "".join(parts)
 
     def get_cur_message_text(self):
-        text = ""
-        for msg in self.cur_messages:
-            text += msg["content"] + "\n"
-        return text
+        if not self.cur_messages:
+            return ""
+        return "\n".join(msg["content"] for msg in self.cur_messages) + "\n"
 
     def get_ident_mentions(self, text):
         # Split the string on any character that is not alphanumeric
@@ -1151,8 +1136,7 @@ class Coder:
             self.io.tool_error(text)
 
         # Exclude double quotes from the matched URL characters
-        url_pattern = re.compile(r'(https?://[^\s/$.?#].[^\s"]*)')
-        urls = list(set(url_pattern.findall(text)))  # Use set to remove duplicates
+        urls = list(set(_URL_PATTERN.findall(text)))  # Use set to remove duplicates
         for url in urls:
             url = url.rstrip(".',\"}")  # Added } to the characters to strip
             self.io.offer_url(url)
@@ -1164,8 +1148,7 @@ class Coder:
             return inp
 
         # Exclude double quotes from the matched URL characters
-        url_pattern = re.compile(r'(https?://[^\s/$.?#].[^\s"]*[^\s,.])')
-        urls = list(set(url_pattern.findall(inp)))  # Use set to remove duplicates
+        urls = list(set(_URL_PATTERN_NO_COMMA.findall(inp)))  # Use set to remove duplicates
         group = ConfirmGroup(urls)
         for url in urls:
             if url not in self.rejected_urls:
@@ -1930,17 +1913,16 @@ class Coder:
         self.io.offer_url(urls.token_limits)
 
     def lint_edited(self, fnames):
-        res = ""
+        parts = []
         for fname in fnames:
             if not fname:
                 continue
             errors = self.linter.lint(self.abs_root_path(fname))
 
             if errors:
-                res += "\n"
-                res += errors
-                res += "\n"
+                parts.append(f"\n{errors}\n")
 
+        res = "".join(parts)
         if res:
             self.io.tool_warning(res)
 
@@ -2360,9 +2342,7 @@ class Coder:
         if input_cost_per_token_cache_hit:
             # must be deepseek
             cost += input_cost_per_token_cache_hit * cache_hit_tokens
-            cost += (
-                prompt_tokens - input_cost_per_token_cache_hit
-            ) * input_cost_per_token
+            cost += (prompt_tokens - cache_hit_tokens) * input_cost_per_token
         else:
             # hard code the anthropic adjustments, no-ops for other models since cache_x_tokens==0
             cost += cache_write_tokens * input_cost_per_token * 1.25
@@ -2649,12 +2629,12 @@ class Coder:
     # commits...
 
     def get_context_from_history(self, history):
-        context = ""
-        if history:
-            for msg in history:
-                context += "\n" + msg["role"].upper() + ": " + msg["content"] + "\n"
-
-        return context
+        if not history:
+            return ""
+        parts = []
+        for msg in history:
+            parts.append(f"\n{msg['role'].upper()}: {msg['content']}\n")
+        return "".join(parts)
 
     def auto_commit(self, edited, context=None):
         if not self.repo or not self.auto_commits or self.dry_run:
@@ -2725,15 +2705,15 @@ class Coder:
 
         done = set()
         group = ConfirmGroup(set(self.shell_commands))
-        accumulated_output = ""
+        output_parts = []
         for command in self.shell_commands:
             if command in done:
                 continue
             done.add(command)
             output = self.handle_shell_commands(command, group)
             if output:
-                accumulated_output += output + "\n\n"
-        return accumulated_output
+                output_parts.append(str(output))
+        return "\n\n".join(output_parts) + "\n\n" if output_parts else ""
 
     def handle_shell_commands(self, commands_str, group):
         commands = commands_str.strip().splitlines()
