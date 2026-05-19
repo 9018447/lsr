@@ -188,11 +188,12 @@ def replace_most_similar_chunk(whole, part, replace):
     except ValueError:
         pass
 
-    return
     # Try fuzzy matching
     res = replace_closest_edit_distance(whole_lines, part, part_lines, replace_lines)
     if res:
         return res
+
+    return
 
 
 def try_dotdotdots(whole, part, replace):
@@ -310,7 +311,7 @@ def match_but_for_leading_whitespace(whole_lines, part_lines):
 
 
 def replace_closest_edit_distance(whole_lines, part, part_lines, replace_lines):
-    similarity_thresh = 0.8
+    similarity_thresh = 0.65  # 更宽松的匹配，适合LaTeX
 
     max_similarity = 0
     most_similar_chunk_start = -1
