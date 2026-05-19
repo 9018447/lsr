@@ -1125,3 +1125,18 @@
 >  
 >  
 > ^C KeyboardInterrupt  
+
+# lsr chat started at 2026-05-19 20:31:55
+
+> /home/smh/.local/bin/lsr --model openai/doubao-seed-2-0-pro-260215 --cache-prompts --no-show-model-warnings  
+> Aider v0.86.3.dev+less  
+> Model: openai/doubao-seed-2-0-pro-260215 with diff edit format  
+> Git repo: . with 752 files  
+> Repo-map: using 1024 tokens, files refresh  
+> Cost estimates may be inaccurate when using streaming and caching.  
+>  
+>  
+> ^C again to exit  
+>  
+>  
+> ^C KeyboardInterrupt  

@@ -1035,6 +1035,100 @@ class Commands:
         self.io.tool_output(errors)
         return errors
 
+    def _run_latex_compile(self, engine, args):
+        """Helper function to run LaTeX compilation."""
+        import subprocess
+
+        # Find .tex file to compile
+        tex_file = None
+        if args:
+            tex_file = args.strip()
+        else:
+            # Auto-detect main .tex file
+            for f in self.coder.abs_fnames:
+                if f.endswith(".tex"):
+                    tex_file = f
+                    break
+            if not tex_file:
+                # Look for .tex files in current directory
+                import glob
+
+                tex_files = glob.glob(os.path.join(self.coder.root or ".", "*.tex"))
+                if tex_files:
+                    tex_file = tex_files[0]
+
+        if not tex_file:
+            self.io.tool_error("No .tex file found. Use: /xelatex <file.tex>")
+            return
+
+        if not os.path.exists(tex_file):
+            self.io.tool_error(f"File not found: {tex_file}")
+            return
+
+        self.io.tool_output(
+            f"\n🔨 Compiling with {engine}: {os.path.basename(tex_file)}"
+        )
+        self.io.tool_output("=" * 50)
+
+        # Run LaTeX compiler
+        try:
+            result = subprocess.run(
+                [
+                    engine,
+                    "-interaction=nonstopmode",
+                    "-halt-on-error",
+                    os.path.basename(tex_file),
+                ],
+                cwd=os.path.dirname(os.path.abspath(tex_file)) or ".",
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            output = result.stdout + result.stderr
+
+            if result.returncode == 0:
+                self.io.tool_output("\n✅ Compilation successful!")
+                # Show warnings if any
+                warnings = [line for line in output.split("\n") if "Warning" in line]
+                if warnings:
+                    self.io.tool_output(f"\n⚠️  Warnings ({len(warnings)}):")
+                    for w in warnings[:5]:
+                        self.io.tool_output(f"  {w}")
+                    if len(warnings) > 5:
+                        self.io.tool_output(f"  ... and {len(warnings) - 5} more")
+            else:
+                self.io.tool_output(
+                    f"\n❌ Compilation failed (exit code {result.returncode})"
+                )
+                # Extract error lines
+                error_lines = []
+                for line in output.split("\n"):
+                    if line.startswith("!") or "Error" in line or "error" in line:
+                        error_lines.append(line)
+                if error_lines:
+                    self.io.tool_output("\nErrors:")
+                    for e in error_lines[:10]:
+                        self.io.tool_output(f"  {e}")
+                return output
+
+        except FileNotFoundError:
+            self.io.tool_error(
+                f"{engine} not found. Please install TeX Live or MiKTeX."
+            )
+        except subprocess.TimeoutExpired:
+            self.io.tool_error("Compilation timed out (120s limit)")
+        except Exception as e:
+            self.io.tool_error(f"Error: {e}")
+
+    def cmd_xelatex(self, args=""):
+        """Compile LaTeX file with xelatex engine"""
+        self._run_latex_compile("xelatex", args)
+
+    def cmd_pdflatex(self, args=""):
+        """Compile LaTeX file with pdflatex engine"""
+        self._run_latex_compile("pdflatex", args)
+
     def cmd_run(self, args, add_on_nonzero_exit=False):
         "Run a shell command and optionally add the output to the chat (alias: !)"
         exit_status, combined_output = run_cmd(
@@ -1690,8 +1784,272 @@ class Commands:
             self.io.set_placeholder(user_input.rstrip())
 
     def cmd_edit(self, args=""):
-        "Alias for /editor: Open an editor to write a prompt"
-        return self.cmd_editor(args)
+        """Edit LaTeX sections with hash-based tracking and auto-replacement."""
+        import hashlib
+        import json
+        import re
+        import tempfile
+
+        if not args:
+            self.io.tool_output("Usage: /edit <file.tex>")
+            self.io.tool_output("")
+            self.io.tool_output("Interactively select LaTeX sections to edit.")
+            self.io.tool_output("After editing, use /edit-done to merge changes back.")
+            return
+
+        filename = args.strip()
+        abs_path = self.coder.abs_root_path(filename)
+
+        if not os.path.exists(abs_path):
+            self.io.tool_error(f"File not found: {filename}")
+            return
+
+        try:
+            with open(abs_path, encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            self.io.tool_error(f"Error reading file: {e}")
+            return
+
+        # Parse LaTeX structure
+        lines = content.split("\n")
+        items = []
+
+        section_pattern = re.compile(r"\\(section|subsection|subsubsection)\{([^}]+)\}")
+
+        section_markers = []
+        for i, line in enumerate(lines):
+            m = section_pattern.search(line)
+            if m:
+                section_markers.append((i, m.group(1), m.group(2)))
+
+        for idx, (start_line, sec_type, title) in enumerate(section_markers):
+            if idx + 1 < len(section_markers):
+                end_line = section_markers[idx + 1][0] - 1
+            else:
+                end_line = len(lines) - 1
+
+            while end_line > start_line and not lines[end_line].strip():
+                end_line -= 1
+
+            section_content = "\n".join(lines[start_line : end_line + 1])
+            items.append((sec_type, title, start_line, end_line, section_content))
+
+        if not items:
+            self.io.tool_output("No sections found in this file.")
+            return
+
+        # Display structure
+        self.io.tool_output(
+            f"\n\u001b[1m\u250c\u2500 Structure of {filename} \u2500\u2510\u001b[0m"
+        )
+        for idx, (item_type, title, start, end, _) in enumerate(items, 1):
+            indent = (
+                "  "
+                if item_type == "subsection"
+                else ("    " if item_type == "subsubsection" else "")
+            )
+            icons = {
+                "section": "\u001b[36m§\u001b[0m",
+                "subsection": " §",
+                "subsubsection": "  §",
+            }
+            icon = icons.get(item_type, "\u25a1")
+            self.io.tool_output(
+                f"  {idx:2d}. {icon} {indent}{title} [{start + 1}-{end + 1}]"
+            )
+
+        self.io.tool_output("\nSelect sections to edit:")
+        self.io.tool_output("  - Single: 1,3,5")
+        self.io.tool_output("  - Range:  1-5")
+        self.io.tool_output("  - All:    all")
+        self.io.tool_output("  - Cancel: q")
+
+        selection = input("\nSelection: ")
+
+        if not selection or selection.lower() == "q":
+            return
+
+        selected_indices = set()
+        if selection.lower() == "all":
+            selected_indices = set(range(len(items)))
+        else:
+            for part in selection.split(","):
+                part = part.strip()
+                if "-" in part:
+                    try:
+                        s, e = part.split("-")
+                        for i in range(int(s) - 1, int(e)):
+                            if 0 <= i < len(items):
+                                selected_indices.add(i)
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        idx = int(part) - 1
+                        if 0 <= idx < len(items):
+                            selected_indices.add(idx)
+                    except ValueError:
+                        pass
+
+        if not selected_indices:
+            self.io.tool_output("No valid selection.")
+            return
+
+        # Build session data (original content + line numbers)
+        session_data = {
+            "original_file": abs_path,
+            "sections": [],
+        }
+
+        tmp_content = []
+        tmp_content.append("% LSR Edit File")
+        tmp_content.append("% Edit the sections below, then run /edit-done")
+        tmp_content.append("")
+
+        for idx in sorted(selected_indices):
+            item_type, title, start, end, item_content = items[idx]
+            h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
+
+            # Save to session
+            session_data["sections"].append(
+                {
+                    "hash": h,
+                    "type": item_type,
+                    "title": title,
+                    "start_line": start,
+                    "end_line": end,
+                    "original_content": item_content,
+                }
+            )
+
+            # Write to temp file
+            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            tmp_content.append(item_content)
+            tmp_content.append("")
+
+        # Store temp file in ~/.lsr/tmp/
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        os.makedirs(lsr_home, exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            suffix=".tex", prefix="lsr_edit_", dir=lsr_home
+        )
+        tmp_path = os.path.abspath(tmp_path)
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(tmp_content))
+
+        # Save session file
+        session_file = tmp_path + ".session"
+        with open(session_file, "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        # Add temp file to coder's editable list
+        self.coder.abs_fnames.add(tmp_path)
+
+        # Show summary
+        self.io.tool_output("\n\u001b[32m\u2714 Ready to edit!\u001b[0m")
+        self.io.tool_output(f"\u001b[36m\u250c\u2500 Edit file:\u001b[0m {tmp_path}")
+        self.io.tool_output(f"\u001b[36m\u2514\u2500 Original:\u001b[0m   {filename}")
+        self.io.tool_output("\nNext steps:")
+        self.io.tool_output("  1. Ask LLM to edit the sections")
+        self.io.tool_output("  2. Run /edit-done to merge changes back")
+
+    def cmd_edit_done(self, args=""):
+        """Merge edited sections back to original file."""
+        import glob
+        import json
+        import re
+
+        # Find session files
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_edit_*.tex.session"))
+
+        if not session_files:
+            self.io.tool_error("No edit session found. Use /edit first.")
+            return
+
+        # Use the most recent session
+        session_file = max(session_files, key=os.path.getmtime)
+
+        with open(session_file, encoding="utf-8") as f:
+            session = json.load(f)
+
+        original_file = session["original_file"]
+        tmp_file = session_file.replace(".session", "")
+
+        if not os.path.exists(tmp_file):
+            self.io.tool_error(f"Edit file not found: {tmp_file}")
+            return
+
+        # Read edited temp file
+        with open(tmp_file, encoding="utf-8") as f:
+            edited_content = f.read()
+
+        # Parse edited content by hash
+        hash_pattern = re.compile(r"% === (?:.*?):.*?\(hash: (\w+)\) ===")
+        edited_sections = {}
+        current_hash = None
+        current_lines = []
+
+        for line in edited_content.split("\n"):
+            m = hash_pattern.search(line)
+            if m:
+                if current_hash and current_lines:
+                    # Remove trailing empty lines
+                    while current_lines and not current_lines[-1].strip():
+                        current_lines.pop()
+                    edited_sections[current_hash] = "\n".join(current_lines)
+                current_hash = m.group(1)
+                current_lines = []
+            elif current_hash:
+                current_lines.append(line)
+
+        # Handle last section
+        if current_hash and current_lines:
+            while current_lines and not current_lines[-1].strip():
+                current_lines.pop()
+            edited_sections[current_hash] = "\n".join(current_lines)
+
+        # Read original file
+        with open(original_file, encoding="utf-8") as f:
+            original_lines = f.read().split("\n")
+
+        # Replace sections from bottom to top (to preserve line numbers)
+        sections = sorted(
+            session["sections"], key=lambda s: s["start_line"], reverse=True
+        )
+
+        replaced_count = 0
+        for section in sections:
+            h = section["hash"]
+            start = section["start_line"]
+            end = section["end_line"]
+
+            if h in edited_sections:
+                new_content = edited_sections[h]
+                new_lines = new_content.split("\n")
+                original_lines[start : end + 1] = new_lines
+                replaced_count += 1
+
+        # Write back to original file
+        with open(original_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(original_lines))
+
+        # Remove temp file and session
+        try:
+            os.remove(tmp_file)
+            os.remove(session_file)
+        except Exception:
+            pass
+
+        # Remove from coder's editable files
+        if tmp_file in self.coder.abs_fnames:
+            self.coder.abs_fnames.remove(tmp_file)
+
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 Merged {replaced_count} section(s) back to:\u001b[0m"
+        )
+        self.io.tool_output(f"   {original_file}")
 
     def cmd_think_tokens(self, args):
         """Set the thinking token budget, eg: 8096, 8k, 10.5k, 0.5M, or 0 to disable."""
@@ -1796,131 +2154,6 @@ Just show me the edits I need to make.
             self.io.tool_error(
                 f"An unexpected error occurred while copying to clipboard: {str(e)}"
             )
-
-    def cmd_edit_file(self, args=""):
-        """Open file in editor with hashline annotations, then add to chat.
-
-        Usage: /edit-file <filename>
-
-        Opens the specified file in your editor with hashline annotations
-        showing the hash for each line. When you close the editor, the
-        original file is automatically added to the chat.
-        """
-        from lsr.hashline_manager import HashlineManager
-
-        if not args.strip():
-            self.io.tool_error("Usage: /edit-file <filename>")
-            self.io.tool_output("Open a file in editor with hashline annotations.")
-            return
-
-        # Parse filename
-        filenames = parse_quoted_filenames(args)
-        if not filenames:
-            self.io.tool_error("No filename provided.")
-            return
-
-        filename = filenames[0]
-
-        # Resolve file path
-        if Path(filename).is_absolute():
-            file_path = Path(filename)
-        else:
-            if self.coder.use_cwd:
-                file_path = Path.cwd() / filename
-            else:
-                file_path = Path(self.coder.root) / filename
-
-        # Check if file exists
-        if not file_path.exists():
-            if self.io.confirm_ask(f"File {filename} does not exist. Create it?"):
-                try:
-                    file_path.parent.mkdir(parents=True, exist_ok=True)
-                    file_path.touch()
-                except OSError as e:
-                    self.io.tool_error(f"Error creating file: {e}")
-                    return
-            else:
-                return
-
-        # Check if it's a file
-        if not file_path.is_file():
-            self.io.tool_error(f"{filename} is not a file.")
-            return
-
-        # Initialize hashline manager
-        hashline_mgr = HashlineManager(root_dir=self.coder.root)
-
-        # Save hashes for the file
-        hashline_mgr.save_hashes(str(file_path))
-
-        # Format content with hashline annotations for editor
-        annotated_content = hashline_mgr.format_for_editor(str(file_path))
-
-        # Get file suffix for editor
-        suffix = file_path.suffix.lstrip(".") or "txt"
-
-        # Open editor with annotated content
-        self.io.tool_output(
-            f"Opening {filename} in editor with hashline annotations..."
-        )
-        self.io.tool_output(
-            "The hash values will help you reference specific lines when asking for edits."
-        )
-
-        edited_content = pipe_editor(
-            annotated_content, suffix=suffix, editor=self.editor
-        )
-
-        if edited_content is None:
-            self.io.tool_output("Editor closed without changes.")
-            return
-
-        # Note: We don't save the annotated version - user edits the original file
-        # The hashline display is just for reference
-
-        # Add file to chat
-        abs_file_path = str(file_path.resolve())
-
-        if abs_file_path in self.coder.abs_fnames:
-            self.io.tool_output(
-                f"{filename} is already in the chat as an editable file."
-            )
-        elif abs_file_path in self.coder.abs_read_only_fnames:
-            # Promote to editable
-            if self.coder.repo:
-                can_edit = self.coder.repo.path_in_repo(filename)
-            else:
-                can_edit = abs_file_path.startswith(self.coder.root)
-
-            if can_edit:
-                self.coder.abs_read_only_fnames.remove(abs_file_path)
-                self.coder.abs_fnames.add(abs_file_path)
-                self.io.tool_output(
-                    f"Moved {filename} from read-only to editable files."
-                )
-            else:
-                self.io.tool_error(
-                    f"Cannot add {filename} as it's not part of the repository."
-                )
-        else:
-            content = self.io.read_text(abs_file_path)
-            if content is None:
-                self.io.tool_error(f"Unable to read {filename}")
-            else:
-                self.coder.abs_fnames.add(abs_file_path)
-                fname = self.coder.get_rel_fname(abs_file_path)
-                self.io.tool_output(f"Added {fname} to the chat.")
-                self.coder.check_added_files()
-
-        # Show hashline summary
-        hashes = hashline_mgr.get_hashes(str(file_path))
-        if hashes:
-            self.io.tool_output(f"\nHashline info for {filename}:")
-            self.io.tool_output(f"  Total lines: {len(hashes)}")
-            self.io.tool_output(f"  First hash: {hashes[1]['hash']}")
-            self.io.tool_output(f"  Last hash: {hashes[len(hashes)]['hash']}")
-            self.io.tool_output("\nUse these hashes when asking for edits.")
-            self.io.tool_output("Example: 'Replace lines a1b2c3..d4e5f6 with ...'")
 
     def cmd_preview(self, args):
         "Open the compiled PDF for preview"
@@ -2051,8 +2284,12 @@ Just show me the edits I need to make.
         if not args:
             self.io.tool_output("Usage: /add-template <filename.tex> [output.md]")
             self.io.tool_output("")
-            self.io.tool_output("Parse a LaTeX template and generate a prompt template.")
-            self.io.tool_output("The prompt template can be used to guide LLM to fill in content.")
+            self.io.tool_output(
+                "Parse a LaTeX template and generate a prompt template."
+            )
+            self.io.tool_output(
+                "The prompt template can be used to guide LLM to fill in content."
+            )
             return
 
         parts = args.split()
@@ -2070,14 +2307,18 @@ Just show me the edits I need to make.
                 content = f.read()
 
             # ── 提取文档类和包 ──────────────────────────────
-            doc_class_match = re.search(r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", content)
+            doc_class_match = re.search(
+                r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", content
+            )
             doc_class = doc_class_match.group(1) if doc_class_match else "article"
 
             packages = re.findall(r"\\usepackage(?:\[[^\]]*\])?\{([^}]+)\}", content)
 
             # ── 提取文档结构 ────────────────────────────────
             sections = []
-            for match in re.finditer(r"\\(section|subsection|subsubsection)\{([^}]+)\}", content):
+            for match in re.finditer(
+                r"\\(section|subsection|subsubsection)\{([^}]+)\}", content
+            ):
                 level = match.group(1)
                 title = match.group(2)
                 sections.append((level, title))
@@ -2096,7 +2337,11 @@ Just show me the edits I need to make.
                 matches = re.findall(pattern, content, re.DOTALL)
                 for m in matches:
                     # 检查是否有实际内容（不仅仅是框架）
-                    inner = re.sub(r"\\begin\{[^}]+\}|\\end\{[^}]+\}|\\label\{[^}]+\}|\\caption\{[^}]+\}", "", m)
+                    inner = re.sub(
+                        r"\\begin\{[^}]+\}|\\end\{[^}]+\}|\\label\{[^}]+\}|\\caption\{[^}]+\}",
+                        "",
+                        m,
+                    )
                     if inner.strip() and len(inner.strip()) > 20:
                         filled_envs[env_name] = filled_envs.get(env_name, 0) + 1
 
@@ -2112,14 +2357,18 @@ Just show me the edits I need to make.
             prompt_lines.append("## Document Info")
             prompt_lines.append(f"- Document class: `{doc_class}`")
             if packages:
-                prompt_lines.append(f"- Packages: {', '.join(f'`{p}`' for p in packages)}")
+                prompt_lines.append(
+                    f"- Packages: {', '.join(f'`{p}`' for p in packages)}"
+                )
             prompt_lines.append("")
 
             if sections:
                 prompt_lines.append("## Document Structure")
                 prompt_lines.append("")
                 for level, title in sections:
-                    indent = "  " * (["section", "subsection", "subsubsection"].index(level))
+                    indent = "  " * (
+                        ["section", "subsection", "subsubsection"].index(level)
+                    )
                     prompt_lines.append(f"{indent}- {title}")
                 prompt_lines.append("")
 
@@ -2130,11 +2379,13 @@ Just show me the edits I need to make.
                 section_pattern = re.escape(f"\\{level}{{{title}}}")
                 section_match = re.search(section_pattern, content)
                 if section_match:
-                    after_section = content[section_match.end():]
+                    after_section = content[section_match.end() :]
                     # 找到下一个同级或更高级别的章节
-                    next_section = re.search(r"\\(section|subsection|subsubsection)\{", after_section)
+                    next_section = re.search(
+                        r"\\(section|subsection|subsubsection)\{", after_section
+                    )
                     if next_section:
-                        section_content = after_section[:next_section.start()]
+                        section_content = after_section[: next_section.start()]
                     else:
                         section_content = after_section[:500]  # 只检查前500字符
                     # 如果内容太少，认为是空的
@@ -2153,20 +2404,26 @@ Just show me the edits I need to make.
                 prompt_lines.append("")
                 for env, count in env_counts.items():
                     filled = filled_envs.get(env, 0)
-                    prompt_lines.append(f"- `{env}`: {count} total, {filled} filled, {count - filled} empty")
+                    prompt_lines.append(
+                        f"- `{env}`: {count} total, {filled} filled, {count - filled} empty"
+                    )
                 prompt_lines.append("")
 
             if cites:
                 prompt_lines.append("## Citations")
                 prompt_lines.append("")
                 prompt_lines.append(f"- Total citations: {len(cites)}")
-                prompt_lines.append(f"- Keys: {', '.join(cites[:10])}{'...' if len(cites) > 10 else ''}")
+                prompt_lines.append(
+                    f"- Keys: {', '.join(cites[:10])}{'...' if len(cites) > 10 else ''}"
+                )
                 prompt_lines.append("")
 
             # ── 生成写作任务提示 ──────────────────────────
             prompt_lines.append("## Writing Tasks")
             prompt_lines.append("")
-            prompt_lines.append("Based on the template analysis, here are the tasks to complete:")
+            prompt_lines.append(
+                "Based on the template analysis, here are the tasks to complete:"
+            )
             prompt_lines.append("")
 
             task_num = 1
@@ -2178,7 +2435,9 @@ Just show me the edits I need to make.
                 filled = filled_envs.get(env, 0)
                 empty = count - filled
                 if empty > 0:
-                    prompt_lines.append(f"{task_num}. Create {empty} {env} environment(s)")
+                    prompt_lines.append(
+                        f"{task_num}. Create {empty} {env} environment(s)"
+                    )
                     task_num += 1
 
             prompt_template = "\n".join(prompt_lines)
@@ -2195,10 +2454,13 @@ Just show me the edits I need to make.
                     f.write(prompt_template)
                 self.io.tool_output(f"\n✅ Prompt template saved to: {output_file}")
             else:
-                self.io.tool_output(f"\nTip: /add-template {filename} output.md  # Save to file")
+                self.io.tool_output(
+                    f"\nTip: /add-template {filename} output.md  # Save to file"
+                )
 
         except Exception as e:
             self.io.tool_error(f"Error parsing template: {e}")
+
 
 def expand_subdir(file_path):
     if file_path.is_file():

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hashline is a token-efficient edit format that uses line hashes to reference code locations, instead of repeating the original code in SEARCH blocks.
+Hashline is a token-efficient edit format that uses line references (line number + short hash) to reference code locations, instead of repeating the original code in SEARCH blocks.
 
 ## Format Specification
 
@@ -10,27 +10,27 @@ Hashline is a token-efficient edit format that uses line hashes to reference cod
 
 ```
 path/to/file.py
-<<<<<<< HASH start_hash..end_hash
+<<<<<<< HASH start_ref..end_ref
 new code line 1
 new code line 2
 >>>>>>> REPLACE
 ```
 
-- `start_hash` and `end_hash` are 6-character hex hashes shown in the file content
+- `start_ref` and `end_ref` are hash references in format `NNN:HHH` (3-digit line number + 3-char hex hash)
 - Range is inclusive - both start and end lines are replaced
-- For single line: use same hash twice (`hash..hash`)
+- For single line: use same ref twice (`003:abc..003:abc`)
 
 ### INSERT - Insert after a line
 
 ```
 path/to/file.py
-<<<<<<< HASH target_hash
+<<<<<<< HASH target_ref
 new code line 1
 new code line 2
 >>>>>>> INSERT
 ```
 
-- New lines are inserted AFTER the line with `target_hash`
+- New lines are inserted AFTER the line with `target_ref`
 
 ### CREATE - Create new file
 
@@ -48,15 +48,15 @@ new file content
 **Original file (as shown to LLM):**
 
 ```
-a1b2c3 | def hello():
-d4e5f6 |     print("world")
+001:abc | def hello():
+002:def |     print("world")
 ```
 
 **LLM response:**
 
 ```
 file.py
-<<<<<<< HASH d4e5f6..d4e5f6
+<<<<<<< HASH 002:def..002:def
     print("hello world")
 >>>>>>> REPLACE
 ```
@@ -66,18 +66,18 @@ file.py
 **Original file:**
 
 ```
-a1b2c3 | def process(data):
-d4e5f6 |     result = []
-789abc |     for item in data:
-def012 |         result.append(item)
-345678 |     return result
+001:abc | def process(data):
+002:def |     result = []
+003:789 |     for item in data:
+004:de0 |         result.append(item)
+005:345 |     return result
 ```
 
 **LLM response:**
 
 ```
 file.py
-<<<<<<< HASH d4e5f6..345678
+<<<<<<< HASH 002:def..005:345
     result = []
     for item in data:
         if item.valid:
@@ -91,16 +91,16 @@ file.py
 **Original file:**
 
 ```
-a1b2c3 | import os
-d4e5f6 |
-789abc | def main():
+001:a1b | import os
+002:d4e |
+003:789 | def main():
 ```
 
 **LLM response:**
 
 ```
 file.py
-<<<<<<< HASH a1b2c3
+<<<<<<< HASH 001:a1b
 import sys
 import logging
 >>>>>>> INSERT
@@ -111,16 +111,16 @@ import logging
 **Original file:**
 
 ```
-a1b2c3 | def hello():
-d4e5f6 |     # TODO: remove this
-789abc |     print("hello")
+001:a1b | def hello():
+002:d4e |     # TODO: remove this
+003:789 |     print("hello")
 ```
 
 **LLM response:**
 
 ```
 file.py
-<<<<<<< HASH d4e5f6..d4e5f6
+<<<<<<< HASH 002:d4e..002:d4e
 >>>>>>> REPLACE
 ```
 
@@ -145,7 +145,7 @@ class Config:
 2. **Do NOT include original code** - only output new code in the edit block
 3. **Do NOT include hash prefixes** in the new code
 4. **Use FULL file path** as shown by the user
-5. **For single line**: use same hash twice (`hash..hash`)
+5. **For single line**: use same ref twice (`003:abc..003:abc`)
 6. **To delete**: use REPLACE with empty content
 7. **To move code**: use REPLACE to delete + INSERT to insert
 
@@ -166,6 +166,6 @@ If a hash is not found in the file, the edit fails with a clear error message in
 
 ## Implementation Notes
 
-- Hashes are computed from `SHA256(line_number:line_content)[:6]`
+- Hashes are computed from `SHA256(line_number:line_content)[:3]`, displayed as `NNN:HHH`
 - Edits are applied from bottom to top to avoid line number shifts
 - All edits use the original file's hash mapping (not sequential updates)

@@ -10,7 +10,6 @@ import os
 import platform
 import re
 import sys
-import concurrent.futures
 import threading
 import time
 import traceback
@@ -54,81 +53,8 @@ from ..dump import dump  # noqa: F401
 from .chat_chunks import ChatChunks
 
 
-def compute_line_hash(line_num, line_content):
-    """Compute a 6-char hex hash from line content and 1-indexed position."""
-    raw = f"{line_num}:{line_content}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:6]
-
-
-def add_line_hashes(content):
-    """Prefix every line of *content* with a hash and separator.
-
-    Output format per line: ``abcdef | original line``
-    The hash encodes both the line text and its 1-based position so that
-    identical lines at different positions get distinct hashes.
-    """
-    lines = content.splitlines(keepends=True)
-    result = []
-    for i, line in enumerate(lines):
-        line_num = i + 1
-        line_content = line.rstrip("\n").rstrip("\r\n")
-        h = compute_line_hash(line_num, line_content)
-        result.append(f"{h} | {line}")
-    return "".join(result)
-
-
-def batch_add_line_hashes(contents, max_workers=0):
-    """批量并行对多个文件内容添加行哈希，CPU密集型计算使用进程池优化。
-
-    Args:
-        contents: 待处理的文件内容列表，输出顺序和输入完全一致
-        max_workers: 最大并行数，0表示自动适配（Linux/macOS默认min(CPU核心数,8)，Windows默认0回退串行）
-
-    Returns:
-        处理后的内容列表，顺序和输入一致
-    """
-    if not contents:
-        return []
-
-    # 自动配置并行数
-    if max_workers <= 0:
-        if platform.system() == "Windows":
-            # Windows下进程池存在兼容性问题，默认回退串行
-            max_workers = 0
-        else:
-            max_workers = min(os.cpu_count() or 4, 8)
-
-    # 并行数为0直接走原有串行逻辑，100%兼容原有输出
-    if max_workers == 0:
-        return [add_line_hashes(content) for content in contents]
-
-    # 进程池处理CPU密集型计算，异常时自动回退串行
-    results = []
-    try:
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-            results = list(executor.map(add_line_hashes, contents, timeout=30))
-    except (ImportError, OSError, RuntimeError, concurrent.futures.TimeoutError):
-        # 任何异常都回退串行，保证功能可用
-        results = [add_line_hashes(content) for content in contents]
-
-    return results
-
-
-_HASH_LINE_PATTERN = re.compile(r"^[0-9a-f]{6} \| ")
 _URL_PATTERN = re.compile(r'(https?://[^\s/$.?#].[^\s"]*)')
 _URL_PATTERN_NO_COMMA = re.compile(r'(https?://[^\s/$.?#].[^\s"]*[^\s,.])')
-
-
-def strip_line_hashes(text):
-    """Remove hash prefixes (``abcdef | ``) from every line in *text*.
-
-    This is the inverse of :func:`add_line_hashes` and is used when parsing
-    SEARCH blocks so that downstream matching works on clean source code.
-    """
-    lines = text.splitlines(keepends=True)
-    return "".join(_HASH_LINE_PATTERN.sub("", line) for line in lines)
 
 
 class UnknownEditFormat(ValueError):
@@ -199,10 +125,6 @@ class Coder:
     chat_language = None
     commit_language = None
     file_watcher = None
-
-    parallel_hashline = (
-        min(os.cpu_count() or 4, 8) if platform.system() != "Windows" else 0
-    )
 
     @classmethod
     def create(
@@ -432,7 +354,6 @@ class Coder:
         auto_accept_architect=True,
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
         current_plan=None,
-        parallel_hashline=None,
     ):
         # Fill in a dummy Analytics if needed, but it is never .enable()'d
         self.analytics = analytics if analytics is not None else Analytics()
@@ -458,12 +379,6 @@ class Coder:
         if self.file_watcher:
             self.file_watcher.coder = self
 
-        # 并行行哈希配置
-        if parallel_hashline is not None:
-            self.parallel_hashline = parallel_hashline
-        # Windows下强制最大并行数不超过4，避免性能和兼容性问题
-        if platform.system() == "Windows" and self.parallel_hashline > 4:
-            self.parallel_hashline = 4
         self.suggest_shell_commands = suggest_shell_commands
         self.detect_urls = detect_urls
 
@@ -769,23 +684,10 @@ class Coder:
                 file_entries.append((fname, content, relative_fname))
 
         parts = []
-        # 批量并行处理行哈希（hashline格式时）
-        if self.edit_format == "hashline" and file_entries:
-            contents = [entry[1] for entry in file_entries]
-            processed_contents = batch_add_line_hashes(
-                contents, max_workers=self.parallel_hashline
+        for fname, content, relative_fname in file_entries:
+            parts.append(
+                f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
             )
-            # 严格按原顺序拼接结果
-            for i, (fname, content, relative_fname) in enumerate(file_entries):
-                parts.append(
-                    f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n"
-                )
-        else:
-            # 非hashline格式走原有串行逻辑
-            for fname, content, relative_fname in file_entries:
-                parts.append(
-                    f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
-                )
 
         return "".join(parts)
 
@@ -799,23 +701,10 @@ class Coder:
                 file_entries.append((content, relative_fname))
 
         parts = []
-        # 批量并行处理行哈希（hashline格式时）
-        if self.edit_format == "hashline" and file_entries:
-            contents = [entry[0] for entry in file_entries]
-            processed_contents = batch_add_line_hashes(
-                contents, max_workers=self.parallel_hashline
+        for content, relative_fname in file_entries:
+            parts.append(
+                f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
             )
-            # 严格按原顺序拼接结果
-            for i, (content, relative_fname) in enumerate(file_entries):
-                parts.append(
-                    f"\n{relative_fname}\n{self.fence[0]}\n{processed_contents[i]}{self.fence[1]}\n"
-                )
-        else:
-            # 非hashline格式走原有串行逻辑
-            for content, relative_fname in file_entries:
-                parts.append(
-                    f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
-                )
 
         return "".join(parts)
 
@@ -1776,20 +1665,13 @@ class Coder:
             content = ""
 
         if not interrupted:
-            # For hashline format with CREATE blocks, skip file mention check
-            # because CREATE blocks contain filenames that don't exist yet
-            skip_file_mentions = (
-                self.edit_format == "hashline" and "<<<<<<< CREATE" in (content or "")
-            )
-
-            if not skip_file_mentions:
-                add_rel_files_message = self.check_for_file_mentions(content)
-                if add_rel_files_message:
-                    if self.reflected_message:
-                        self.reflected_message += "\n\n" + add_rel_files_message
-                    else:
-                        self.reflected_message = add_rel_files_message
-                    return
+            add_rel_files_message = self.check_for_file_mentions(content)
+            if add_rel_files_message:
+                if self.reflected_message:
+                    self.reflected_message += "\n\n" + add_rel_files_message
+                else:
+                    self.reflected_message = add_rel_files_message
+                return
 
             try:
                 if self.reply_completed():
@@ -2445,6 +2327,9 @@ class Coder:
         # if not fullp.stat().st_size:
         #     return
 
+        # Skip commit for files outside the repo
+        if self.repo and not self.repo.path_in_repo(path):
+            return
         self.io.tool_output(f"Committing {path} before applying edits.")
         self.need_commit_before_edits.add(path)
 
@@ -2644,6 +2529,11 @@ class Coder:
             context = self.get_context_from_history(self.cur_messages)
 
         try:
+            # Filter out files outside the repo
+            if self.repo:
+                edited = [f for f in edited if self.repo.path_in_repo(f)]
+            if not edited:
+                return
             res = self.repo.commit(
                 fnames=edited, context=context, lsr_edits=True, coder=self
             )

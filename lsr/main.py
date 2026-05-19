@@ -698,6 +698,13 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     all_files = args.files + (args.file or [])
     fnames = [str(Path(fn).resolve()) for fn in all_files]
     read_only_fnames = []
+
+    # Auto-load .lsr-template.md as read-only context
+    lsr_template = Path(".lsr-template.md").resolve()
+    if lsr_template.exists():
+        read_only_fnames.append(str(lsr_template))
+        io.tool_output(f"Loaded template context: {lsr_template.name}")
+
     for fn in args.read or []:
         path = Path(fn).expanduser().resolve()
         if path.is_dir():

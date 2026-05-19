@@ -259,9 +259,7 @@ class GitRepo:
             model_name = "unknown-model"
             if coder and hasattr(coder, "main_model") and coder.main_model.name:
                 model_name = coder.main_model.name
-            commit_message_trailer = (
-                f"\n\nCo-authored-by: lsr ({model_name}) <lsr@your-username.github.io/lsr>"
-            )
+            commit_message_trailer = f"\n\nCo-authored-by: lsr ({model_name}) <lsr@your-username.github.io/lsr>"
 
         # Determine if author/committer names should be modified
         # Author modification applies only to lsr edits.

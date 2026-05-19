@@ -91,6 +91,9 @@ class Linter:
         res = ""
         for lang, lint_fn in self.languages.items():
             if not cmd or cmd == lang:
+                # Skip Python linting for .tex files
+                if lang == "python" and fname.endswith(".tex"):
+                    continue
                 lintres = lint_fn(fname, rel_fname, code)
                 if lintres:
                     res += "```"

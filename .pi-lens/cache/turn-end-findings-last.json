@@ -1,4 +1,4 @@
 {
-  "signature": "lsr/coders/hashline_coder.py::Unresolved from this turn — lsr/coders/hashline_coder.py:\n🔴 STOP — 2 issue(s) must be fixed:\n  \"find_similar_hash\" is not defined\n  L226: Undefined name `find_similar_hash`",
-  "sessionId": "lens-mpcj0rxk-832378c0"
+  "signature": "lsr/commands.py::Unresolved from this turn — lsr/commands.py:\n🔴 STOP — 8 issue(s) must be fixed:\n  L1157: Unnecessary `dict()` call (rewrite as a literal)\n  L1158: Unnecessary `dict()` call (rewrite as a literal)\n  L1664: Unnecessary mode argument\n  L2149: Import block is un-sorted or un-formatted\n  L2253: Unnecessary mode argument\n  L2295: Unnecessary mode argument\n  L2338: Local variable `labels` is assigned to but never used\n  L2339: Local variable `refs` is assigned to but never used",
+  "sessionId": "lens-mpcb1s6c-9d2b9481"
 }

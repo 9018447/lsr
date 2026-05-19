@@ -450,7 +450,7 @@ class Model(ModelSettings):
 
     def apply_generic_model_settings(self, model):
         if "/o3-mini" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.use_temperature = False
             self.system_prompt_prefix = "Formatting re-enabled. "
@@ -460,14 +460,14 @@ class Model(ModelSettings):
             return  # <--
 
         if "gpt-4.1-mini" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = False
             return  # <--
 
         if "gpt-4.1" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = False
@@ -476,7 +476,7 @@ class Model(ModelSettings):
         last_segment = model.split("/")[-1]
         if last_segment in ("gpt-5", "gpt-5-2025-08-07"):
             self.use_temperature = False
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             if "reasoning_effort" not in self.accepts_settings:
                 self.accepts_settings.append("reasoning_effort")
             return  # <--
@@ -488,14 +488,14 @@ class Model(ModelSettings):
             return  # <--
 
         if "/o1-preview" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.use_temperature = False
             self.use_system_prompt = False
             return  # <--
 
         if "/o1" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.use_temperature = False
             self.streaming = False
@@ -505,14 +505,14 @@ class Model(ModelSettings):
             return  # <--
 
         if "deepseek" in model and "v3" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = True
             return  # <--
 
         if "deepseek" in model and ("r1" in model or "reasoning" in model):
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.use_temperature = False
@@ -520,7 +520,7 @@ class Model(ModelSettings):
             return  # <--
 
         if ("llama3" in model or "llama-3" in model) and "70b" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.send_undo_reply = True
             self.examples_as_sys_msg = True
@@ -533,7 +533,7 @@ class Model(ModelSettings):
             return  # <--
 
         if "gpt-4" in model or "claude-3-opus" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.send_undo_reply = True
             return  # <--
@@ -543,7 +543,7 @@ class Model(ModelSettings):
             return  # <--
 
         if "sonnet-4-" in model or "opus-4-" in model or "haiku-4-" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.examples_as_sys_msg = False
             if "opus-4-" in model:
@@ -557,7 +557,7 @@ class Model(ModelSettings):
             return  # <--
 
         if "3-7-sonnet" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.reminder = "user"
@@ -566,7 +566,7 @@ class Model(ModelSettings):
             return  # <--
 
         if "3.5-sonnet" in model or "3-5-sonnet" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.reminder = "user"
@@ -583,13 +583,13 @@ class Model(ModelSettings):
             and ("2.5" in model or "2-5" in model)
             and "32b" in model
         ):
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.editor_edit_format = "editor-diff"
             self.use_repo_map = True
             return  # <--
 
         if "qwq" in model and "32b" in model and "preview" not in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.editor_edit_format = "editor-diff"
             self.use_repo_map = True
             self.reasoning_tag = "think"
@@ -599,7 +599,7 @@ class Model(ModelSettings):
             return  # <--
 
         if "qwen3" in model and "235b" in model:
-            self.edit_format = "hashline"
+            self.edit_format = "diff"
             self.use_repo_map = True
             self.system_prompt_prefix = "/no_think"
             self.use_temperature = 0.7
