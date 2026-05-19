@@ -21,3 +21,29 @@ tmp.benchmarks/
 # Added by code-review-graph
 .code-review-graph/
 .lsr*
+
+# Pi-lens cache
+.pi-lens/cache/
+.pi-lens/turn-state.json
+
+# LaTeX logs
+*.log
+*.aux
+*.bbl
+*.blg
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Git worktree files
+index
+index.lock
+logs/
+ORIG_HEAD
+COMMIT_EDITMSG
+commondir
+gitdir
