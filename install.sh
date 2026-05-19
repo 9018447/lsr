@@ -20,7 +20,6 @@ echo "uv 版本: $(uv --version)"
 # 卸载已安装的旧版本
 echo "==> 卸载已安装的旧版本..."
 uv tool uninstall lsr 2>/dev/null || true
-uv tool uninstall aider-chat 2>/dev/null || true
 
 # 从本地目录安装
 echo "==> 从本地目录安装 LSR (editable 模式)..."

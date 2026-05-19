@@ -1035,6 +1035,151 @@ class Commands:
         self.io.tool_output(errors)
         return errors
 
+    def _parse_latex_log(self, log_file):
+        """Parse LaTeX log file and extract key information."""
+        if not os.path.exists(log_file):
+            return None
+
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        lines = content.split("\n")
+        errors = []
+        warnings = []
+        undefined_refs = []
+        missing_files = []
+        latex_errors = []
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # LaTeX errors (start with !)
+            if line.startswith("!"):
+                error_context = []
+                for j in range(max(0, i - 2), min(len(lines), i + 3)):
+                    error_context.append(lines[j])
+                latex_errors.append(
+                    {
+                        "line_num": i + 1,
+                        "content": line,
+                        "context": "\n".join(error_context),
+                    }
+                )
+
+            # Errors
+            if "Error" in line or "error" in line:
+                errors.append({"line_num": i + 1, "content": line})
+
+            # Warnings
+            if "Warning" in line and "Reference" not in line:
+                warnings.append({"line_num": i + 1, "content": line})
+
+            # Undefined references
+            if "undefined" in line.lower() or "multiply defined" in line.lower():
+                undefined_refs.append({"line_num": i + 1, "content": line})
+
+            # Missing files
+            if "File" in line and "not found" in line:
+                missing_files.append({"line_num": i + 1, "content": line})
+
+            i += 1
+
+        # Build summary
+        summary_parts = []
+
+        if latex_errors:
+            summary_parts.append("## LaTeX 错误")
+            for err in latex_errors[:5]:
+                summary_parts.append(f"- 行 {err['line_num']}: {err['content']}")
+                summary_parts.append(f"  上下文:\n```\n{err['context']}\n```")
+
+        if errors:
+            summary_parts.append("\n## 编译错误")
+            for err in errors[:10]:
+                summary_parts.append(f"- 行 {err['line_num']}: {err['content']}")
+
+        if undefined_refs:
+            summary_parts.append("\n## 未定义引用")
+            for ref in undefined_refs[:10]:
+                summary_parts.append(f"- 行 {ref['line_num']}: {ref['content']}")
+
+        if missing_files:
+            summary_parts.append("\n## 缺失文件")
+            for f in missing_files[:5]:
+                summary_parts.append(f"- 行 {f['line_num']}: {f['content']}")
+
+        if warnings:
+            summary_parts.append("\n## 警告")
+            for w in warnings[:10]:
+                summary_parts.append(f"- 行 {w['line_num']}: {w['content']}")
+            if len(warnings) > 10:
+                summary_parts.append(f"- ... 还有 {len(warnings) - 10} 个警告")
+
+        if not summary_parts:
+            return None
+
+        return {
+            "summary": "\n".join(summary_parts),
+            "stats": {
+                "errors": len(errors) + len(latex_errors),
+                "warnings": len(warnings),
+                "undefined_refs": len(undefined_refs),
+                "missing_files": len(missing_files),
+            },
+            "has_errors": len(latex_errors) > 0 or len(errors) > 0,
+        }
+
+    def _ask_add_log_to_context(self, tex_file, log_info):
+        """Ask user if they want to add log analysis to LLM context."""
+        if not log_info:
+            return
+
+        stats = log_info["stats"]
+        self.io.tool_output("\n" + "=" * 50)
+        self.io.tool_output("📊 日志分析摘要:")
+        self.io.tool_output(f"  - 错误: {stats['errors']}")
+        self.io.tool_output(f"  - 警告: {stats['warnings']}")
+        self.io.tool_output(f"  - 未定义引用: {stats['undefined_refs']}")
+        self.io.tool_output(f"  - 缺失文件: {stats['missing_files']}")
+
+        if stats["errors"] == 0 and stats["warnings"] == 0:
+            self.io.tool_output("\n✅ 没有发现错误或警告，无需添加到上下文。")
+            return
+
+        # Ask user confirmation
+        self.io.tool_output("\n是否将日志分析结果添加到 LLM 上下文？")
+        self.io.tool_output("  [y] 是 - 添加到上下文")
+        self.io.tool_output("  [n] 否 - 跳过 (默认)")
+
+        try:
+            user_input = self.io.confirm_ask(
+                "添加日志分析到上下文？",
+                default="n",
+            )
+        except (EOFError, KeyboardInterrupt):
+            user_input = False
+
+        if user_input:
+            # Add to LLM context
+            basename = os.path.basename(tex_file)
+            log_content = f"## LaTeX 编译日志分析 ({basename})\n\n{log_info['summary']}"
+
+            self.coder.cur_messages += [
+                dict(
+                    role="user",
+                    content=f"请帮我分析并修复以下 LaTeX 编译问题:\n\n{log_content}",
+                ),
+                dict(
+                    role="assistant", content="我来帮你分析并修复这些 LaTeX 编译问题。"
+                ),
+            ]
+
+            self.io.tool_output("\n✅ 已将日志分析结果添加到 LLM 上下文。")
+            self.io.tool_output("你可以在下一条消息中询问 LLM 如何修复这些问题。")
+        else:
+            self.io.tool_output("\n⏭️  已跳过，未添加到上下文。")
+
     def _run_latex_compile(self, engine, args):
         """Helper function to run LaTeX compilation."""
         import subprocess
@@ -1110,6 +1255,13 @@ class Commands:
                     self.io.tool_output("\nErrors:")
                     for e in error_lines[:10]:
                         self.io.tool_output(f"  {e}")
+
+            # Parse log file and ask user if they want to add to context
+            log_file = os.path.splitext(tex_file)[0] + ".log"
+            log_info = self._parse_latex_log(log_file)
+            self._ask_add_log_to_context(tex_file, log_info)
+
+            if result.returncode != 0:
                 return output
 
         except FileNotFoundError:
@@ -1128,6 +1280,139 @@ class Commands:
     def cmd_pdflatex(self, args=""):
         """Compile LaTeX file with pdflatex engine"""
         self._run_latex_compile("pdflatex", args)
+
+    def _run_latex_compile_with_bib(self, engine, args):
+        """Helper function to run LaTeX compilation with bibliography."""
+        import subprocess
+        import os
+        import glob
+
+        # Find .tex file to compile
+        tex_file = None
+        if args:
+            tex_file = args.strip()
+        else:
+            # Auto-detect main .tex file
+            for f in self.coder.abs_fnames:
+                if f.endswith(".tex"):
+                    tex_file = f
+                    break
+            if not tex_file:
+                # Look for .tex files in current directory
+                tex_files = glob.glob(os.path.join(self.coder.root or ".", "*.tex"))
+                if tex_files:
+                    tex_file = tex_files[0]
+
+        if not tex_file:
+            self.io.tool_error(f"No .tex file found. Use: /bib-{engine} <file.tex>")
+            return
+
+        if not os.path.exists(tex_file):
+            self.io.tool_error(f"File not found: {tex_file}")
+            return
+
+        basename = os.path.basename(tex_file)
+        basename_no_ext = os.path.splitext(basename)[0]
+        cwd = os.path.dirname(os.path.abspath(tex_file)) or "."
+
+        self.io.tool_output(f"\n🔨 Compiling with {engine} + bibtex: {basename}")
+        self.io.tool_output("=" * 50)
+
+        steps = [
+            (engine, f"Step 1/4: {engine}"),
+            ("bibtex", "Step 2/4: bibtex"),
+            (engine, f"Step 3/4: {engine}"),
+            (engine, f"Step 4/4: {engine}"),
+        ]
+
+        final_output = None
+        for i, (cmd, step_name) in enumerate(steps):
+            self.io.tool_output(f"\n⏳ {step_name}...")
+            try:
+                if cmd == "bibtex":
+                    result = subprocess.run(
+                        [cmd, basename_no_ext],
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                else:
+                    result = subprocess.run(
+                        [
+                            cmd,
+                            "-interaction=nonstopmode",
+                            "-halt-on-error",
+                            basename,
+                        ],
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+
+                output = result.stdout + result.stderr
+                final_output = output
+
+                if result.returncode != 0:
+                    self.io.tool_output(
+                        f"\n❌ {step_name} failed (exit code {result.returncode})"
+                    )
+                    # Extract error lines
+                    error_lines = []
+                    for line in output.split("\n"):
+                        if line.startswith("!") or "Error" in line or "error" in line:
+                            error_lines.append(line)
+                    if error_lines:
+                        self.io.tool_output("\nErrors:")
+                        for e in error_lines[:10]:
+                            self.io.tool_output(f"  {e}")
+
+                    # Parse log file and ask user if they want to add to context
+                    log_file = os.path.splitext(tex_file)[0] + ".log"
+                    log_info = self._parse_latex_log(log_file)
+                    self._ask_add_log_to_context(tex_file, log_info)
+                    return output
+                else:
+                    self.io.tool_output(f"  ✅ {step_name} completed")
+
+            except FileNotFoundError:
+                self.io.tool_error(
+                    f"{cmd} not found. Please install TeX Live or MiKTeX."
+                )
+                return
+            except subprocess.TimeoutExpired:
+                self.io.tool_error(f"{step_name} timed out (120s limit)")
+                return
+            except Exception as e:
+                self.io.tool_error(f"Error in {step_name}: {e}")
+                return
+
+        self.io.tool_output("\n" + "=" * 50)
+        self.io.tool_output("✅ Full compilation with bibliography successful!")
+
+        # Show warnings from final compilation
+        if final_output:
+            warnings = [line for line in final_output.split("\n") if "Warning" in line]
+            if warnings:
+                self.io.tool_output(f"\n⚠️  Warnings ({len(warnings)}):")
+                for w in warnings[:5]:
+                    self.io.tool_output(f"  {w}")
+                if len(warnings) > 5:
+                    self.io.tool_output(f"  ... and {len(warnings) - 5} more")
+
+        # Parse log file and ask user if they want to add to context
+        log_file = os.path.splitext(tex_file)[0] + ".log"
+        log_info = self._parse_latex_log(log_file)
+        self._ask_add_log_to_context(tex_file, log_info)
+
+    def cmd_bib_pdflatex(self, args=""):
+        """Compile LaTeX file with pdflatex engine and bibliography (pdflatex -> bibtex -> pdflatex -> pdflatex)"""
+        self._run_latex_compile_with_bib("pdflatex", args)
+
+    def cmd_bib_xelatex(self, args=""):
+        """Compile LaTeX file with xelatex engine and bibliography (xelatex -> bibtex -> xelatex -> xelatex)"""
+        self._run_latex_compile_with_bib("xelatex", args)
 
     def cmd_run(self, args, add_on_nonzero_exit=False):
         "Run a shell command and optionally add the output to the chat (alias: !)"
