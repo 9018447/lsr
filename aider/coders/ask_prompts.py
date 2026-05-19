@@ -8,7 +8,6 @@ class AskPrompts(CoderPrompts):
 Answer questions about the supplied code with depth and precision.
 Always reply to the user in {language}.
 
-When analyzing code relationships, architecture, or change impact, proactively use the CRG toolkit to provide evidence-based answers.
 
 If you need to describe code changes, do so *briefly*.
 """
@@ -30,7 +29,9 @@ Other messages in the chat may contain outdated versions of the files' contents.
         "Ok, I will use that as the true, current contents of the files."
     )
 
-    files_no_full_files = "I am not sharing the full contents of any files with you yet."
+    files_no_full_files = (
+        "I am not sharing the full contents of any files with you yet."
+    )
 
     files_no_full_files_with_repo_map = ""
     files_no_full_files_with_repo_map_reply = ""

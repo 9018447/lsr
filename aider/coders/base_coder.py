@@ -654,21 +654,6 @@ class Coder:
                 self.io.tool_output("JSON Schema:")
                 self.io.tool_output(json.dumps(self.functions, indent=4))
 
-        # Code-review-graph toolkit integration
-        try:
-            from aider.crg_tool_adapter import ensure_graph_db, refresh_graph_db
-
-            # Auto-refresh stale database
-            refresh_graph_db(self.root)
-            self.crg_tool_enabled = ensure_graph_db(self.root)
-            if not self.crg_tool_enabled:
-                self.io.tool_warning(
-                    "Code-review-graph database not found and auto-build failed. "
-                    "/crg and auto-crg tools are disabled."
-                )
-        except Exception:
-            self.crg_tool_enabled = False
-
     def setup_lint_cmds(self, lint_cmds):
         if not lint_cmds:
             return
@@ -1110,15 +1095,6 @@ class Coder:
             self.reflected_message = None
             list(self.send_message(message))
 
-            if not self.reflected_message and getattr(self, "crg_tool_enabled", False):
-                from aider.crg_tool_adapter import execute_crg_tools
-
-                tool_result = execute_crg_tools(
-                    self.partial_response_content, root=self.root
-                )
-                if tool_result:
-                    self.reflected_message = tool_result
-
             # Extract and persist plan when in plan mode
             if (
                 getattr(self, "edit_format", None) == "plan"
@@ -1440,12 +1416,6 @@ class Coder:
     def format_chat_chunks(self):
         self.choose_fence()
         main_sys = self.fmt_system_prompt(self.gpt_prompts.main_system)
-        if getattr(self, "crg_tool_enabled", False):
-            from aider.crg_tool_adapter import get_crg_prompt_for_mode
-
-            crg_prompt = get_crg_prompt_for_mode(getattr(self, "edit_format", "code"))
-            main_sys += "\n\n" + crg_prompt
-
         # Inject current plan context when not in plan mode
         if (
             getattr(self, "current_plan", None)

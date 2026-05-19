@@ -1,7 +1,7 @@
 """
 PlanCoder for /plan mode.
 
-In plan mode the LLM explores the codebase with CRG tools and produces
+In plan mode the LLM explores the codebase and produces
 a structured plan. It NEVER edits files.
 """
 

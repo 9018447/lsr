@@ -62,6 +62,69 @@
       "file": "aider/coders/wholefile_func_prompts.py",
       "line": 27,
       "column": 6
+    },
+    {
+      "type": "TODO",
+      "message": "check for impact on image messages",
+      "file": "aider for latex/aider/coders/base_coder.py",
+      "line": 1252,
+      "column": 10
+    },
+    {
+      "type": "TODO",
+      "message": "review impact of token count on image messages",
+      "file": "aider for latex/aider/coders/base_coder.py",
+      "line": 1531,
+      "column": 10
+    },
+    {
+      "type": "TODO",
+      "message": "push this into subclasses",
+      "file": "aider for latex/aider/coders/base_coder.py",
+      "line": 2108,
+      "column": 18
+    },
+    {
+      "type": "TODO",
+      "message": "should this be present for using this with gpt-4?",
+      "file": "aider for latex/aider/coders/single_wholefile_func_prompts.py",
+      "line": 24,
+      "column": 6
+    },
+    {
+      "type": "TODO",
+      "message": "fix the chat history, except we can't keep the whole file",
+      "file": "aider for latex/aider/coders/single_wholefile_func_prompts.py",
+      "line": 27,
+      "column": 6
+    },
+    {
+      "type": "TODO",
+      "message": "handle inserting into new file",
+      "file": "aider for latex/aider/coders/udiff_coder.py",
+      "line": 134,
+      "column": 6
+    },
+    {
+      "type": "TODO",
+      "message": "sense which file it is by diff size",
+      "file": "aider for latex/aider/coders/wholefile_coder.py",
+      "line": 81,
+      "column": 26
+    },
+    {
+      "type": "TODO",
+      "message": "should this be present for using this with gpt-4?",
+      "file": "aider for latex/aider/coders/wholefile_func_prompts.py",
+      "line": 24,
+      "column": 6
+    },
+    {
+      "type": "TODO",
+      "message": "fix the chat history, except we can't keep the whole file",
+      "file": "aider for latex/aider/coders/wholefile_func_prompts.py",
+      "line": 27,
+      "column": 6
     }
   ]
 }

@@ -1,297 +1,166 @@
-# 修改 Aider 文件添加功能 - 始终从当前工作目录出发
+# Plan: 彻底删除 aider 中的 CRG (code-review-graph) 工具
 
-## 背景
+## Context
 
-当前 Aider 的文件添加功能基于 Git 根目录来处理文件路径。当项目目录不在 Git 根目录下时，这种处理方式变得复杂且不符合某些用户的工作习惯。用户希望始终从当前工作目录（CWD）出发来处理文件路径。
+用户在 aider 中自行开发了 CRG (code-review-graph) 工具集，包括：
 
-## 问题分析
+- 3 个核心 Python 模块（`crg_common.py`, `crg_tool_adapter.py`, `crg_toolkit.py`）
+- 在 `commands.py` 中注册的 `/crg` 和 `/crg_setup` 命令
+- 在 `base_coder.py` 中的 LLM 自动调用集成
+- 在多个 prompt 模板中注入的 CRG 使用指令
+- 配套的测试、wiki、plan 文件和 Gemini hooks
 
-当前实现的问题：
+现在需要彻底移除所有 CRG 相关代码，恢复 aider 到未集成 CRG 的状态，**不影响其他功能**。
 
-1. **Git 根目录依赖**：`GitRepo` 类的 `get_tracked_files()` 方法返回的是相对于 Git 根目录的文件路径
-2. **路径规范化**：`normalize_path()` 函数将路径转换为相对于 Git 根目录的路径
-3. **文件添加逻辑**：`get_addable_relative_files()` 使用 Git 根目录作为参考点
-4. **用户工作流限制**：当用户在子目录中工作时，需要处理复杂的相对路径
-5. **命令处理**：`/add` 命令也基于 Git 根目录处理文件路径
+---
 
-## 修改方案
+## 一、删除整个文件（11 个文件 + 1 个目录）
 
-### 核心思路
+### 核心模块（3 个）
 
-保持 Git 功能（提交、差异比较等），但改变文件添加和路径处理的逻辑，使其始终从当前工作目录出发。
+| 文件                        | 说明                             |
+| --------------------------- | -------------------------------- |
+| `aider/crg_common.py`       | 数据类 + SQLite loader（395 行） |
+| `aider/crg_tool_adapter.py` | LLM 工作流适配器（355 行）       |
+| `aider/crg_toolkit.py`      | CLI 工具包（652 行）             |
 
-### 具体修改点
+### 测试（1 个）
 
-#### 1. 修改 `GitRepo` 类的路径处理
+| 文件                              | 说明                           |
+| --------------------------------- | ------------------------------ |
+| `tests/basic/test_crg_toolkit.py` | CRG 搜索/模糊匹配/自动刷新测试 |
 
-**文件**: `./aider/repo.py`
+### Wiki 文档（3 个）
 
-**修改点**:
+| 文件                           | 说明                     |
+| ------------------------------ | ------------------------ |
+| `wiki/community_aider-crg.md`  | CRG 适配器社区文档       |
+| `wiki/community_aider-node.md` | CRG 节点社区文档         |
+| `wiki/community_aider-cmd.md`  | CRG toolkit 命令社区文档 |
 
-- `normalize_path()` 方法：改为返回相对于当前工作目录的路径
-- `abs_root_path()` 方法：改为基于当前工作目录
-- `get_tracked_files()` 方法：返回相对于当前工作目录的路径
+### 计划文档（1 个）
 
-#### 2. 修改 `Coder` 类的文件处理逻辑
+| 文件                                | 说明                           |
+| ----------------------------------- | ------------------------------ |
+| `plans/replace-repomap-with-crg.md` | 用 CRG 替换 RepoMap 的计划文档 |
 
-**文件**: `./aider/coders/base_coder.py`
+### Gemini 配置（2 个文件 + 1 个目录）
 
-**修改点**:
+| 文件                                 | 说明                               |
+| ------------------------------------ | ---------------------------------- |
+| `.gemini/hooks/crg-session-start.sh` | Gemini CLI session start hook      |
+| `.gemini/hooks/crg-update.sh`        | Gemini CLI 文件变更后自动更新 hook |
+| `.code-review-graph/`                | graph.db 数据库目录（整个目录）    |
 
-- `abs_root_path()` 方法：改为基于当前工作目录
-- `get_all_relative_files()` 方法：返回相对于当前工作目录的路径
-- `get_addable_relative_files()` 方法：使用当前工作目录作为参考点
-- `get_rel_fname()` 方法：改为相对于当前工作目录
-- `/add` 命令处理：修改为基于当前工作目录
+### Gemini settings.json 需清空 hooks 配置
 
-#### 3. 添加配置选项
+| 文件                    | 说明                                     |
+| ----------------------- | ---------------------------------------- |
+| `.gemini/settings.json` | 移除 CRG 相关的 mcpServers 和 hooks 配置 |
 
-**文件**: `./aider/args.py`
+---
 
-**修改点**:
+## 二、修改文件（6 个文件）
 
-- 添加 `--cwd-relative` 命令行选项
-- 默认启用，保持向后兼容
+### 1. `aider/commands.py`
 
-#### 4. 修改 `/add` 命令
+- **删除 `cmd_crg()` 方法**（第 1067-1092 行）：`/crg` 命令实现
+- **删除 `cmd_crg_setup()` 方法**（第 1094-1112 行）：`/crg_setup` 命令实现
+- **修改 `cmd_plan()` 描述**（第 1296 行）：将 `"Explore the codebase with CRG tools and create a structured plan."` 改为 `"Create a structured plan before coding."`
+- **修改模式说明**（第 163 行）：将 `"Explore the codebase with CRG tools and create a structured plan before coding."` 改为 `"Create a structured plan before coding."`
 
-**文件**: `./aider/commands.py`
+### 2. `aider/coders/base_coder.py`
 
-**修改点**:
+- **删除 CRG 初始化代码**（第 657-670 行）：移除 `ensure_graph_db`、`refresh_graph_db`、`crg_tool_enabled` 初始化
+- **删除自动执行 CRG 工具的代码**（第 1113-1120 行）：移除 `execute_crg_tools` 调用和 `reflected_message` 设置
+- **删除 CRG prompt 注入代码**（第 1443-1447 行）：移除 `get_crg_prompt_for_mode` 调用
 
-- 修改 `/add` 命令实现，使其基于当前工作目录
-- 修改 `glob_filtered_to_repo` 函数，使其基于当前工作目录
+### 3. `aider/coders/plan_prompts.py`
 
-### 实现细节
+- **重写整个 prompt**：移除所有 CRG 相关内容
+  - 删除模块文档中的 CRG 引用
+  - 删除 Step 2 "Explore with CRG Tools" 及 `<crg_tool>` 标签示例
+  - 删除 Step 3 中 CRG 分析的引用
+  - 删除所有 `<crg_tool subcommand=...>` 标签说明
+  - 保留 plan 模式的核心工作流结构
 
-#### 修改 `GitRepo` 类
+### 4. `aider/coders/plan_coder.py`
 
-```python
-# 在 GitRepo.__init__ 中添加
-self.use_cwd = True  # 默认使用当前工作目录
+- **修改文档字符串**（第 4 行）：将 `"In plan mode the LLM explores the codebase with CRG tools and produces"` 改为 `"In plan mode the LLM explores the codebase and produces"`
 
-# 修改 normalize_path 方法
-def normalize_path(self, path):
-    orig_path = path
-    res = self.normalized_path.get(orig_path)
-    if res:
-        return res
+### 5. `aider/coders/ask_prompts.py`
 
-    if self.use_cwd:
-        # 使用当前工作目录作为参考点
-        cwd = Path.cwd()
-        try:
-            path = str(Path(path).relative_to(cwd))
-        except ValueError:
-            # 如果路径不在当前工作目录下，保持原样
-            path = str(path)
-    else:
-        # 保持原有逻辑，使用 Git 根目录
-        path = str(Path(PurePosixPath((Path(self.root) / path).relative_to(self.root))))
+- **删除 CRG 引用**（第 11 行）：删除 `"When analyzing code relationships, architecture, or change impact, proactively use the CRG toolkit to provide evidence-based answers."` 这一行
 
-    self.normalized_path[orig_path] = path
-    return path
+### 6. `aider/coders/editblock_prompts.py`
 
-# 修改 abs_root_path 方法
-def abs_root_path(self, path):
-    if self.use_cwd:
-        # 使用当前工作目录作为根目录
-        res = Path.cwd() / path
-    else:
-        # 保持原有逻辑，使用 Git 根目录
-        res = Path(self.root) / path
-    return utils.safe_abs_path(res)
+- **删除 CRG 引用**（第 24 行）：将 `"If a plan has been previously discussed, follow it closely. Use CRG tools if you need to verify call chains or impact during implementation."` 改为 `"If a plan has been previously discussed, follow it closely."`
+
+---
+
+## 三、不动的文件（安全不动）
+
+| 文件/目录                  | 原因                                       |
+| -------------------------- | ------------------------------------------ |
+| `aider for latex/`         | 这是独立的副本，不属于主项目               |
+| `.pi-lens/cache/`          | 自动缓存，不影响功能                       |
+| `wiki/index.md`            | 仅索引引用，删掉被索引的文件后索引自然失效 |
+| `pyproject.toml`           | 不含 CRG 引用                              |
+| `aider/__init__.py`        | 不含 CRG 引用                              |
+| `aider/coders/__init__.py` | 仅引入 PlanCoder，不涉及 CRG               |
+
+---
+
+## 四、执行顺序
+
+**Step 1** — 删除核心模块文件
+
+```
+rm aider/crg_common.py aider/crg_tool_adapter.py aider/crg_toolkit.py
 ```
 
-#### 修改 `Coder` 类
+**Step 2** — 删除测试、文档、计划文件
 
-```python
-# 在 Coder.__init__ 中添加
-self.use_cwd = True  # 默认使用当前工作目录
-
-# 修改 abs_root_path 方法
-def abs_root_path(self, path):
-    key = path
-    if key in self.abs_root_path_cache:
-        return self.abs_root_path_cache[key]
-
-    if self.use_cwd:
-        # 使用当前工作目录作为根目录
-        res = Path.cwd() / path
-    else:
-        # 保持原有逻辑，使用 Git 根目录
-        res = Path(self.root) / path
-
-    res = utils.safe_abs_path(res)
-    self.abs_root_path_cache[key] = res
-    return res
-
-# 修改 get_rel_fname 方法
-def get_rel_fname(self, fname):
-    try:
-        if self.use_cwd:
-            # 返回相对于当前工作目录的路径
-            return os.path.relpath(fname, Path.cwd())
-        else:
-            # 保持原有逻辑，返回相对于 Git 根目录的路径
-            return os.path.relpath(fname, self.root)
-    except ValueError:
-        return fname
+```
+rm tests/basic/test_crg_toolkit.py
+rm wiki/community_aider-crg.md wiki/community_aider-node.md wiki/community_aider-cmd.md
+rm plans/replace-repomap-with-crg.md
 ```
 
-#### 添加配置选项
+**Step 3** — 删除 Gemini 配置和数据目录
 
-```python
-# 在 args.py 中添加
-parser.add_argument(
-    "--cwd-relative",
-    action="store_true",
-    default=True,
-    help="Use current working directory as root for file paths instead of git root"
-)
-
-parser.add_argument(
-    "--no-cwd-relative",
-    action="store_false",
-    dest="cwd_relative",
-    help="Use git root directory as root for file paths (legacy behavior)"
-)
+```
+rm .gemini/hooks/crg-session-start.sh .gemini/hooks/crg-update.sh
+rm -rf .code-review-graph/
 ```
 
-### 文件修改清单
+编辑 `.gemini/settings.json`，移除 CRG 相关的 hooks 配置（保留文件但清空 hooks 部分）
 
-1. **`./aider/repo.py`**
-   - 修改 `GitRepo.__init__`：添加 `use_cwd` 参数
-   - 修改 `normalize_path()`：支持 CWD 相对路径
-   - 修改 `abs_root_path()`：支持 CWD 相对路径
-   - 修改 `get_tracked_files()`：返回 CWD 相对路径
+**Step 4** — 修改 `aider/commands.py`
 
-2. **`./aider/coders/base_coder.py`**
-   - 修改 `Coder.__init__`：添加 `use_cwd` 参数
-   - 修改 `abs_root_path()`：支持 CWD 相对路径
-   - 修改 `get_rel_fname()`：支持 CWD 相对路径
-   - 修改 `get_all_relative_files()`：返回 CWD 相对路径
+- 删除 `cmd_crg` 和 `cmd_crg_setup` 两个方法
+- 修改 plan 模式的描述文本
 
-3. **`./aider/args.py`**
-   - 添加 `--cwd-relative` 和 `--no-cwd-relative` 选项
+**Step 5** — 修改 `aider/coders/base_coder.py`
 
-4. **`./aider/commands.py`**
-   - 修改 `/add` 命令实现，基于当前工作目录
+- 删除 3 处 CRG 相关代码块
 
-### 测试计划
+**Step 6** — 修改 prompt 模板文件
 
-1. **基本功能测试**
-   - 在 Git 根目录下测试文件添加
-   - 在子目录下测试文件添加
-   - 测试路径解析的正确性
+- `aider/coders/plan_prompts.py` — 重写，移除所有 CRG 内容
+- `aider/coders/ask_prompts.py` — 删除 CRG 引用行
+- `aider/coders/editblock_prompts.py` — 删除 CRG 引用
+- `aider/coders/plan_coder.py` — 修改文档字符串
 
-2. **兼容性测试**
-   - 测试与现有 Git 功能的兼容性
-   - 测试提交、差异比较等功能
-   - 测试 `.gitignore` 和 `.aiderignore` 规则
+**Step 7** — 清理 Gemini settings
 
-3. **用户工作流测试**
-   - 测试从不同目录启动 Aider
-   - 测试文件路径显示的正确性
-   - 测试文件编辑和保存功能
+- 编辑 `.gemini/settings.json`，移除 `code-review-graph` MCP server 和 CRG hooks
 
-### 验证方法
+---
 
-1. **功能验证**
+## 五、验证
 
-   ```bash
-   # 在 Git 根目录下测试
-   cd /path/to/git/repo
-   python -m aider
-
-   # 在子目录下测试
-   cd /path/to/git/repo/subdir
-   python -m aider
-   ```
-
-2. **路径验证**
-   - 检查添加的文件路径是否正确
-   - 验证文件编辑是否应用到正确位置
-   - 确认提交信息中的文件路径正确
-
-3. **兼容性验证**
-   - 测试与现有 Aider 功能的兼容性
-   - 确认 Git 操作正常工作
-   - 验证配置选项的正确性
-
-## 预期效果
-
-1. **简化工作流**：用户无需关心 Git 根目录位置
-2. **直观的路径处理**：所有路径都相对于当前工作目录
-3. **保持兼容性**：现有 Git 功能不受影响
-4. **灵活配置**：用户可以选择使用 CWD 或 Git 根目录
-
-## 风险与缓解
-
-1. **路径解析错误**
-   - 风险：某些路径可能无法正确解析
-   - 缓解：添加详细的错误处理和用户提示
-
-2. **Git 功能影响**
-   - 风险：修改路径处理可能影响 Git 操作
-   - 缓解：保持 Git 核心功能不变，只改变路径显示
-
-3. **性能影响**
-   - 风险：频繁的路径计算可能影响性能
-   - 缓解：使用缓存机制，优化路径计算
-
-## 实施步骤
-
-### 已完成的修改
-
-1. **修改 `GitRepo` 类** (`./aider/repo.py`)
-   - 添加 `use_cwd` 参数到 `__init__` 方法
-   - 修改 `normalize_path()` 方法，支持 CWD 相对路径
-   - 修改 `abs_root_path()` 方法，支持 CWD 相对路径
-
-2. **修改 `Coder` 类** (`./aider/coders/base_coder.py`)
-   - 添加 `use_cwd` 参数到 `__init__` 方法
-   - 修改 `abs_root_path()` 方法，支持 CWD 相对路径
-   - 修改 `get_rel_fname()` 方法，支持 CWD 相对路径
-
-3. **修改 `Commands` 类** (`./aider/commands.py`)
-   - 修改 `cmd_add()` 方法，支持 CWD 相对路径
-   - 修改 `glob_filtered_to_repo()` 方法，支持 CWD 相对路径
-
-4. **修改 `args.py`** (`./aider/args.py`)
-   - 添加 `--cwd-relative` 和 `--no-cwd-relative` 选项
-
-5. **修改 `main.py`** (`./aider/main.py`)
-   - 将 `args.cwd_relative` 参数传递给 `GitRepo` 和 `Coder`
-
-### 测试验证
-
-1. **基本功能测试**
-   - 在 Git 根目录下测试文件添加 ✓
-   - 在子目录下测试文件添加 ✓
-   - 测试路径解析的正确性 ✓
-
-2. **兼容性测试**
-   - 测试与现有 Git 功能的兼容性 ✓
-   - 测试 `/add` 命令 ✓
-   - 测试 `--no-cwd-relative` 选项 ✓
-
-3. **用户工作流测试**
-   - 测试从不同目录启动 Aider ✓
-   - 测试文件路径显示的正确性 ✓
-   - 测试文件编辑和保存功能 ✓
-
-### 待完成的工作
-
-1. **文档更新**
-   - 更新用户文档，说明新功能
-   - 添加使用示例
-
-2. **进一步测试**
-   - 测试复杂的文件路径场景
-   - 测试与现有配置文件的兼容性
-   - 测试性能影响
-
-3. **用户反馈收集**
-   - 收集用户使用反馈
-   - 根据反馈进行优化
+1. **语法检查**：`python -m py_compile aider/commands.py aider/coders/base_coder.py aider/coders/plan_prompts.py aider/coders/ask_prompts.py aider/coders/editblock_prompts.py aider/coders/plan_coder.py`
+2. **运行测试**：`python -m pytest tests/ -x --timeout=30` 确保没有因 CRG 移除导致的测试失败
+3. **搜索验证**：`grep -r "crg\|CRG\|code-review-graph\|graph\.db" aider/ --include="*.py"` 确保 aider Python 源码中不再有任何 CRG 引用
+4. **导入验证**：`python -c "from aider.coder import Coder"` 确保导入链正常
