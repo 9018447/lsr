@@ -1,99 +1,234 @@
-<p align="center">
-    <a href="https://aider.chat/"><img src="https://aider.chat/assets/logo.svg" alt="Aider Logo" width="300"></a>
-</p>
-
-<h1 align="center">
-纯AI结对编程工具 (Aider二次开发分支) - 测试编辑功能
-</h1>
+# AI-Powered LaTeX Research Assistant
 
 <p align="center">
-区别于自动生成代码的vibe coding类工具，本工具以开发者为核心，AI全程作为结对伙伴提供辅助能力，所有变更均由开发者主导和确认，绝不脱离用户意图自动修改代码。
+    <strong>LaTeX 科研写作智能协作助手</strong>
 </p>
 
 <p align="center">
-  <img
-    src="https://aider.chat/assets/screencast.svg"
-    alt="aider screencast"
-  >
+区别于通用编程助手，本工具专注于 LaTeX 科研写作场景，AI 全程作为写作伙伴提供辅助能力，所有变更均由研究者主导和确认。
 </p>
+
+---
 
 ## ✨ 核心特性
 
-### 🆕 Hashline 代码行级哈希校验
-基于每一行代码的内容和位置生成唯一哈希标识，实现：
-- 代码变更的精准定位，避免AI误修改无关代码
-- 跨版本代码行匹配，上下文引用永不失效
-- 增量变更的完整性校验，确保AI输出的变更完全符合预期
+### 📝 LaTeX 专属优化
 
-### 🆕 Code-Review-Graph 代码关系全链路分析
-内置代码关系图谱能力，可快速查询：
-- 函数/类的调用关系、依赖链路、影响范围
-- 代码变更的风险评估，自动识别高风险修改点
-- 项目结构可视化，快速理解陌生代码库的架构逻辑
+- 原生支持 .tex, .bib, .sty, .cls 文件编辑
+- LaTeX 语法检查（环境闭合、引用检查）
+- 智能识别文档结构（章节、公式、图表、参考文献）
 
-### 🆕 多角色专业Agent体系（规划中，暂未实现）
-后续版本将内置四类专业编程辅助Agent，覆盖全开发流程：
-- 代码评审Agent：基于行业规范和项目最佳实践给出评审意见
-- 重构辅助Agent：提供安全重构方案，自动识别重构影响范围
-- 调试排障Agent：结合报错信息和代码链路定位根因，给出修复方案
-- 架构设计Agent：基于项目现状给出合理的架构演进建议
+### 🤖 智能写作助手
+
+- 基于搜索/替换块的精准编辑
+- 支持所有主流 LLM（OpenAI, Anthropic, DeepSeek 等）
+- 科研写作场景优化的提示词
+
+### 🔧 LaTeX 工具集成
+
+- 内置 LaTeX 编译支持（pdflatex, xelatex, lualatex）
+- BibTeX 参考文献管理
+- 论文模板系统
+
+### 📊 文档分析
+
+- 字数统计
+- 结构分析（章节、图表、公式计数）
+- 参考文献引用检查
+
 ---
-
-### 原生Aider优秀特性保留
-- 支持所有主流云LLM和本地大模型
-- 代码库自动映射，大项目上下文理解能力
-- 支持100+种编程语言
-- 原生Git集成，自动生成规范提交
-- 支持IDE内使用、图片/网页上下文、语音输入等能力
-- 自动lint和测试，发现问题自动修复
 
 ## 🚀 快速开始
 
 ### 安装
+
 ```bash
-# 安装本二次开发版本
-pip install git+https://github.com/your-repo/aider.git@prompt-engineering
+# 使用 uv 安装（推荐）
+uv pip install git+https://github.com/your-username/lsr.git
 
-# 进入你的项目目录
-cd /path/to/your/project
-
-# 启动工具（以DeepSeek为例，其他模型参数和原版Aider一致）
-aider --model deepseek --api-key deepseek=<your-key>
+# 或使用 pip
+pip install git+https://github.com/your-username/lsr.git
 ```
 
-### 基础使用示例
-1. **代码关系查询**
+### 启动
+
+```bash
+# 进入你的 LaTeX 项目目录
+cd /path/to/your/paper
+
+# 启动助手（以 DeepSeek 为例）
+lsr --model deepseek --api-key deepseek=<your-key>
+
+# 或使用 OpenAI
+lsr --model gpt-4 --api-key openai=<your-key>
 ```
-> /query callers get_user_info
-# 自动查询所有调用get_user_info函数的位置和链路
+
+### 基础使用
+
+1. **编辑 LaTeX 文档**
+
+```
+> 添加一个关于研究方法的章节
 ```
 
+2. **添加数学公式**
 
-3. **Hashline精准修改**
 ```
-> 修改a1b2c3行的参数校验逻辑，增加手机号格式校验
-# 基于哈希行标识精准修改指定位置代码，不会误改其他内容
+> 在方法部分添加回归模型的数学公式
 ```
 
-## 🆚 与原版Aider的差异
-| 功能 | 原版Aider | 本二次开发版本 |
-|------|-----------|----------------|
-| 定位 | 支持自动编码的AI辅助工具 | 纯结对编程工具，所有变更由开发者主导 |
-| 代码变更校验 | 无行级校验，可能出现误改 | 基于Hashline的行级校验，变更100%精准 |
-| 代码分析能力 | 仅基础RepoMap | 内置全链路Code-Review-Graph，支持调用关系/影响范围/风险评估 |
-| Agent体系 | 通用单一Agent | 多角色专业Agent，覆盖评审/重构/调试/架构全场景 |
-| 变更管控 | 仅支持提交前确认 | 支持变更粒度校验、影响范围预评估 |
+3. **管理参考文献**
 
-## 📚 文档
-- [Agent体系使用指南](./docs/agents.md)（规划中，暂未实现）
-- [Hashline功能详解](./docs/hashline.md)
-- [Code-Review-Graph查询语法](./docs/crg.md)
-- [原版Aider官方文档](https://aider.chat/docs/)
+```
+> 在引言中添加对 Smith 2023 的引用
+```
 
-## 🤝 社区
-- 问题反馈：提交Issue到本仓库
-- 功能讨论：加入开发者交流群
-- 贡献代码：欢迎提交PR完善功能
+4. **检查语法**
 
-## 致谢
-本项目基于[Aider](https://github.com/Aider-AI/aider)二次开发，感谢原项目的优秀基础。
+```
+> /check
+```
+
+5. **编译文档**
+
+```
+> /compile
+```
+
+6. **预览 PDF**
+
+```
+> /preview
+```
+
+---
+
+## 📋 命令列表
+
+| 命令            | 说明                |
+| --------------- | ------------------- |
+| `/compile`      | 编译 LaTeX 文档     |
+| `/check`        | 检查 LaTeX 语法     |
+| `/preview`      | 打开 PDF 预览       |
+| `/bib`          | 管理参考文献        |
+| `/template`     | 选择/创建论文模板   |
+| `/wordcount`    | 统计字数            |
+| `/add-template` | 解析 LaTeX 模板结构 |
+| `/add <file>`   | 添加文件到会话      |
+| `/drop <file>`  | 从会话中移除文件    |
+| `/undo`         | 撤销上一次修改      |
+| `/diff`         | 显示当前修改        |
+| `/run <cmd>`    | 运行 shell 命令     |
+| `/ask`          | 切换到问答模式      |
+| `/plan`         | 切换到写作规划模式  |
+| `/code`         | 切换到编辑模式      |
+
+---
+
+## 📁 支持的文件类型
+
+| 扩展名 | 说明             |
+| ------ | ---------------- |
+| `.tex` | LaTeX 文档       |
+| `.bib` | BibTeX 参考文献  |
+| `.sty` | LaTeX 样式文件   |
+| `.cls` | LaTeX 文档类     |
+| `.dtx` | LaTeX 文档化源码 |
+| `.ins` | LaTeX 安装文件   |
+
+---
+
+## 🔧 配置
+
+### 环境变量
+
+```bash
+# OpenAI API Key
+export OPENAI_API_KEY=sk-...
+
+# Anthropic API Key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# DeepSeek API Key
+export DEEPSEEK_API_KEY=sk-...
+```
+
+### 配置文件
+
+在项目根目录创建 `.aider.conf.yml`：
+
+```yaml
+# 默认模型
+model: deepseek
+
+# 编辑格式
+edit-format: diff
+
+# LaTeX 编译引擎
+latex-engine: pdflatex
+
+# 自动编译
+auto-compile: true
+```
+
+---
+
+## 📚 使用场景
+
+### 学术论文写作
+
+```bash
+lsr --model gpt-4
+> 帮我完善方法部分，添加实验设计的详细描述
+```
+
+### 学位论文
+
+```bash
+lsr --model deepseek
+> 帮我检查所有章节的引用是否正确
+```
+
+### 会议论文
+
+```bash
+lsr --model claude-3-opus
+> 根据会议模板调整论文格式
+```
+
+### 文献综述
+
+```bash
+latex-assist --model gpt-4
+> 帮我整理参考文献，按主题分类
+```
+
+---
+
+## 🆚 与原版 Aider 的差异
+
+| 功能     | 原版 Aider        | LaTeX Research Assistant |
+| -------- | ----------------- | ------------------------ |
+| 定位     | 通用编程助手      | LaTeX 科研写作助手       |
+| 文件类型 | 100+ 编程语言     | .tex, .bib, .sty, .cls   |
+| 编辑格式 | 13+ 种代码格式    | diff（搜索/替换块）      |
+| 工具链   | lint, test, build | LaTeX 编译, BibTeX       |
+| 提示词   | 代码开发优化      | 学术写作优化             |
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+---
+
+## 📄 许可证
+
+Apache License 2.0
+
+---
+
+## 🙏 致谢
+
+本项目基于 [Aider](https://github.com/Aider-AI/aider) 二次开发，感谢原项目的优秀基础。

@@ -1,0 +1,565 @@
+Metadata-Version: 2.4
+Name: lsr
+Version: 0.1.dev13155+g21e3f2987.d20260519
+Summary: AI-powered LaTeX research writing assistant
+Project-URL: Homepage, https://github.com/your-username/lsr
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Text Processing :: Markup :: LaTeX
+Requires-Python: <3.15,>=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: aiohappyeyeballs==2.6.1
+Requires-Dist: aiohttp==3.13.3
+Requires-Dist: aiosignal==1.4.0
+Requires-Dist: annotated-doc==0.0.4
+Requires-Dist: annotated-types==0.7.0
+Requires-Dist: anyio==4.12.1
+Requires-Dist: asgiref==3.11.1
+Requires-Dist: attrs==25.4.0
+Requires-Dist: backoff==2.2.1
+Requires-Dist: beautifulsoup4==4.14.3
+Requires-Dist: certifi==2026.2.25
+Requires-Dist: cffi==2.0.0
+Requires-Dist: charset-normalizer==3.4.6
+Requires-Dist: click==8.3.1
+Requires-Dist: configargparse==1.7.5
+Requires-Dist: diff-match-patch==20241021
+Requires-Dist: diskcache==5.6.3
+Requires-Dist: distro==1.9.0
+Requires-Dist: fastapi==0.135.1
+Requires-Dist: fastuuid==0.14.0
+Requires-Dist: filelock==3.25.2
+Requires-Dist: flake8==7.3.0
+Requires-Dist: frozenlist==1.8.0
+Requires-Dist: fsspec==2026.2.0
+Requires-Dist: gitdb==4.0.12
+Requires-Dist: gitpython==3.1.46
+Requires-Dist: grep-ast==0.9.0
+Requires-Dist: h11==0.16.0
+Requires-Dist: hf-xet==1.4.2
+Requires-Dist: httpcore==1.0.9
+Requires-Dist: httpx==0.28.1
+Requires-Dist: huggingface-hub==1.7.1
+Requires-Dist: idna==3.11
+Requires-Dist: importlib-metadata==7.2.1
+Requires-Dist: importlib-resources==6.5.2
+Requires-Dist: jinja2==3.1.6
+Requires-Dist: jiter==0.13.0
+Requires-Dist: json5==0.13.0
+Requires-Dist: jsonschema==4.26.0
+Requires-Dist: jsonschema-specifications==2025.9.1
+Requires-Dist: litellm==1.82.3
+Requires-Dist: markdown-it-py==4.0.0
+Requires-Dist: markupsafe==3.0.3
+Requires-Dist: mccabe==0.7.0
+Requires-Dist: mdurl==0.1.2
+Requires-Dist: mixpanel==5.0.0
+Requires-Dist: mslex==1.3.0
+Requires-Dist: multidict==6.7.1
+Requires-Dist: networkx==3.4.2
+Requires-Dist: openai==2.28.0
+Requires-Dist: orjson==3.11.7
+Requires-Dist: oslex==0.1.3
+Requires-Dist: packaging==26.0
+Requires-Dist: pathspec==1.0.4
+Requires-Dist: pexpect==4.9.0
+Requires-Dist: pillow==12.1.1
+Requires-Dist: posthog==7.9.12
+Requires-Dist: prompt-toolkit==3.0.52
+Requires-Dist: propcache==0.4.1
+Requires-Dist: psutil==7.2.2
+Requires-Dist: ptyprocess==0.7.0
+Requires-Dist: pycodestyle==2.14.0
+Requires-Dist: pycparser==3.0
+Requires-Dist: pydantic==2.12.5
+Requires-Dist: pydantic-core==2.41.5
+Requires-Dist: pydub==0.25.1
+Requires-Dist: pyflakes==3.4.0
+Requires-Dist: pygments==2.19.2
+Requires-Dist: pypandoc==1.17
+Requires-Dist: pyperclip==1.11.0
+Requires-Dist: python-dateutil==2.9.0.post0
+Requires-Dist: python-dotenv==1.2.2
+Requires-Dist: pyyaml==6.0.3
+Requires-Dist: referencing==0.37.0
+Requires-Dist: regex==2026.2.28
+Requires-Dist: requests==2.32.5
+Requires-Dist: rich==14.3.3
+Requires-Dist: rpds-py==0.30.0
+Requires-Dist: shellingham==1.5.4
+Requires-Dist: shtab==1.8.0
+Requires-Dist: six==1.17.0
+Requires-Dist: smmap==5.0.3
+Requires-Dist: sniffio==1.3.1
+Requires-Dist: socksio==1.0.0
+Requires-Dist: sounddevice==0.5.5
+Requires-Dist: soundfile==0.13.1
+Requires-Dist: soupsieve==2.8.3
+Requires-Dist: starlette==0.52.1
+Requires-Dist: tiktoken==0.12.0
+Requires-Dist: tokenizers==0.22.2
+Requires-Dist: tqdm==4.67.3
+Requires-Dist: tree-sitter-c-sharp==0.23.1
+Requires-Dist: tree-sitter-embedded-template==0.25.0
+Requires-Dist: tree-sitter-language-pack==0.13.0
+Requires-Dist: tree-sitter-yaml==0.7.2
+Requires-Dist: typer==0.24.1
+Requires-Dist: typing-extensions==4.15.0
+Requires-Dist: typing-inspection==0.4.2
+Requires-Dist: urllib3==2.6.3
+Requires-Dist: watchfiles==1.1.1
+Requires-Dist: wcwidth==0.6.0
+Requires-Dist: yarl==1.23.0
+Requires-Dist: zipp==3.23.0
+Requires-Dist: tree-sitter==0.23.2; python_version < "3.10"
+Requires-Dist: tree-sitter==0.25.2; python_version >= "3.10"
+Requires-Dist: numpy<2; python_version < "3.11"
+Requires-Dist: numpy<2.5,>=2.3; python_version >= "3.11"
+Requires-Dist: scipy<1.16; python_version < "3.11"
+Requires-Dist: scipy<1.18,>=1.16.1; python_version >= "3.11"
+Requires-Dist: audioop-lts>=0.2.2; python_version >= "3.13"
+Provides-Extra: dev
+Requires-Dist: annotated-doc==0.0.4; extra == "dev"
+Requires-Dist: build==1.4.0; extra == "dev"
+Requires-Dist: certifi==2026.2.25; extra == "dev"
+Requires-Dist: cffi==2.0.0; extra == "dev"
+Requires-Dist: cfgv==3.5.0; extra == "dev"
+Requires-Dist: charset-normalizer==3.4.6; extra == "dev"
+Requires-Dist: click==8.3.1; extra == "dev"
+Requires-Dist: codespell==2.4.2; extra == "dev"
+Requires-Dist: cogapp==3.6.0; extra == "dev"
+Requires-Dist: contourpy==1.3.3; extra == "dev"
+Requires-Dist: coverage[toml]==7.13.4; extra == "dev"
+Requires-Dist: cryptography==46.0.5; extra == "dev"
+Requires-Dist: cycler==0.12.1; extra == "dev"
+Requires-Dist: distlib==0.4.0; extra == "dev"
+Requires-Dist: filelock==3.25.2; extra == "dev"
+Requires-Dist: fonttools==4.62.1; extra == "dev"
+Requires-Dist: google-api-core[grpc]==2.30.0; extra == "dev"
+Requires-Dist: google-auth==2.49.1; extra == "dev"
+Requires-Dist: google-cloud-bigquery==3.40.1; extra == "dev"
+Requires-Dist: google-cloud-core==2.5.0; extra == "dev"
+Requires-Dist: google-crc32c==1.8.0; extra == "dev"
+Requires-Dist: google-resumable-media==2.8.0; extra == "dev"
+Requires-Dist: googleapis-common-protos==1.73.0; extra == "dev"
+Requires-Dist: grpcio==1.78.0; extra == "dev"
+Requires-Dist: grpcio-status==1.78.0; extra == "dev"
+Requires-Dist: identify==2.6.18; extra == "dev"
+Requires-Dist: idna==3.11; extra == "dev"
+Requires-Dist: imgcat==0.6.0; extra == "dev"
+Requires-Dist: iniconfig==2.3.0; extra == "dev"
+Requires-Dist: kiwisolver==1.5.0; extra == "dev"
+Requires-Dist: lox==1.0.0; extra == "dev"
+Requires-Dist: markdown-it-py==4.0.0; extra == "dev"
+Requires-Dist: matplotlib==3.10.8; extra == "dev"
+Requires-Dist: mdurl==0.1.2; extra == "dev"
+Requires-Dist: nodeenv==1.10.0; extra == "dev"
+Requires-Dist: numpy==2.4.3; extra == "dev"
+Requires-Dist: packaging==26.0; extra == "dev"
+Requires-Dist: pandas==2.3.3; extra == "dev"
+Requires-Dist: pillow==12.1.1; extra == "dev"
+Requires-Dist: pip==26.0.1; extra == "dev"
+Requires-Dist: pip-tools==7.5.3; extra == "dev"
+Requires-Dist: platformdirs==4.9.4; extra == "dev"
+Requires-Dist: pluggy==1.6.0; extra == "dev"
+Requires-Dist: pre-commit==4.5.1; extra == "dev"
+Requires-Dist: proto-plus==1.27.1; extra == "dev"
+Requires-Dist: protobuf==6.33.5; extra == "dev"
+Requires-Dist: pyasn1==0.6.2; extra == "dev"
+Requires-Dist: pyasn1-modules==0.4.2; extra == "dev"
+Requires-Dist: pycparser==3.0; extra == "dev"
+Requires-Dist: pygments==2.19.2; extra == "dev"
+Requires-Dist: pyparsing==3.3.2; extra == "dev"
+Requires-Dist: pyproject-hooks==1.2.0; extra == "dev"
+Requires-Dist: pytest==9.0.2; extra == "dev"
+Requires-Dist: pytest-cov==7.0.0; extra == "dev"
+Requires-Dist: pytest-env==1.6.0; extra == "dev"
+Requires-Dist: python-dateutil==2.9.0.post0; extra == "dev"
+Requires-Dist: python-discovery==1.1.3; extra == "dev"
+Requires-Dist: python-dotenv==1.2.2; extra == "dev"
+Requires-Dist: pytz==2026.1.post1; extra == "dev"
+Requires-Dist: pyyaml==6.0.3; extra == "dev"
+Requires-Dist: requests==2.32.5; extra == "dev"
+Requires-Dist: rich==14.3.3; extra == "dev"
+Requires-Dist: semver==3.0.4; extra == "dev"
+Requires-Dist: setuptools==82.0.1; extra == "dev"
+Requires-Dist: shellingham==1.5.4; extra == "dev"
+Requires-Dist: six==1.17.0; extra == "dev"
+Requires-Dist: typer==0.24.1; extra == "dev"
+Requires-Dist: typing-extensions==4.15.0; extra == "dev"
+Requires-Dist: tzdata==2025.3; extra == "dev"
+Requires-Dist: urllib3==2.6.3; extra == "dev"
+Requires-Dist: uv==0.10.11; extra == "dev"
+Requires-Dist: virtualenv==21.2.0; extra == "dev"
+Requires-Dist: wheel==0.46.3; extra == "dev"
+Provides-Extra: help
+Requires-Dist: aiohappyeyeballs==2.6.1; extra == "help"
+Requires-Dist: aiohttp==3.13.3; extra == "help"
+Requires-Dist: aiosignal==1.4.0; extra == "help"
+Requires-Dist: aiosqlite==0.22.1; extra == "help"
+Requires-Dist: annotated-doc==0.0.4; extra == "help"
+Requires-Dist: annotated-types==0.7.0; extra == "help"
+Requires-Dist: anyio==4.12.1; extra == "help"
+Requires-Dist: attrs==25.4.0; extra == "help"
+Requires-Dist: banks==2.4.1; extra == "help"
+Requires-Dist: certifi==2026.2.25; extra == "help"
+Requires-Dist: charset-normalizer==3.4.6; extra == "help"
+Requires-Dist: click==8.3.1; extra == "help"
+Requires-Dist: colorama==0.4.6; extra == "help"
+Requires-Dist: dataclasses-json==0.6.7; extra == "help"
+Requires-Dist: deprecated==1.3.1; extra == "help"
+Requires-Dist: dirtyjson==1.0.8; extra == "help"
+Requires-Dist: filelock==3.25.2; extra == "help"
+Requires-Dist: filetype==1.2.0; extra == "help"
+Requires-Dist: frozenlist==1.8.0; extra == "help"
+Requires-Dist: fsspec==2026.2.0; extra == "help"
+Requires-Dist: greenlet==3.3.2; extra == "help"
+Requires-Dist: griffe==2.0.0; extra == "help"
+Requires-Dist: griffecli==2.0.0; extra == "help"
+Requires-Dist: griffelib==2.0.0; extra == "help"
+Requires-Dist: h11==0.16.0; extra == "help"
+Requires-Dist: hf-xet==1.4.2; extra == "help"
+Requires-Dist: httpcore==1.0.9; extra == "help"
+Requires-Dist: httpx==0.28.1; extra == "help"
+Requires-Dist: huggingface-hub[inference]==1.7.1; extra == "help"
+Requires-Dist: idna==3.11; extra == "help"
+Requires-Dist: jinja2==3.1.6; extra == "help"
+Requires-Dist: joblib==1.5.3; extra == "help"
+Requires-Dist: llama-index-core==0.14.18; extra == "help"
+Requires-Dist: llama-index-embeddings-huggingface==0.7.0; extra == "help"
+Requires-Dist: llama-index-instrumentation==0.5.0; extra == "help"
+Requires-Dist: llama-index-workflows==2.16.1; extra == "help"
+Requires-Dist: markdown-it-py==4.0.0; extra == "help"
+Requires-Dist: markupsafe==3.0.3; extra == "help"
+Requires-Dist: marshmallow==3.26.2; extra == "help"
+Requires-Dist: mdurl==0.1.2; extra == "help"
+Requires-Dist: mpmath==1.3.0; extra == "help"
+Requires-Dist: multidict==6.7.1; extra == "help"
+Requires-Dist: mypy-extensions==1.1.0; extra == "help"
+Requires-Dist: nest-asyncio==1.6.0; extra == "help"
+Requires-Dist: networkx==3.4.2; extra == "help"
+Requires-Dist: nltk==3.9.3; extra == "help"
+Requires-Dist: numpy==2.4.3; extra == "help"
+Requires-Dist: packaging==26.0; extra == "help"
+Requires-Dist: pillow==12.1.1; extra == "help"
+Requires-Dist: platformdirs==4.9.4; extra == "help"
+Requires-Dist: propcache==0.4.1; extra == "help"
+Requires-Dist: pydantic==2.12.5; extra == "help"
+Requires-Dist: pydantic-core==2.41.5; extra == "help"
+Requires-Dist: pygments==2.19.2; extra == "help"
+Requires-Dist: pyyaml==6.0.3; extra == "help"
+Requires-Dist: regex==2026.2.28; extra == "help"
+Requires-Dist: requests==2.32.5; extra == "help"
+Requires-Dist: rich==14.3.3; extra == "help"
+Requires-Dist: safetensors==0.7.0; extra == "help"
+Requires-Dist: scikit-learn==1.8.0; extra == "help"
+Requires-Dist: scipy==1.17.1; extra == "help"
+Requires-Dist: sentence-transformers==5.3.0; extra == "help"
+Requires-Dist: setuptools==82.0.1; extra == "help"
+Requires-Dist: shellingham==1.5.4; extra == "help"
+Requires-Dist: sqlalchemy[asyncio]==2.0.48; extra == "help"
+Requires-Dist: sympy==1.14.0; extra == "help"
+Requires-Dist: tenacity==9.1.4; extra == "help"
+Requires-Dist: threadpoolctl==3.6.0; extra == "help"
+Requires-Dist: tiktoken==0.12.0; extra == "help"
+Requires-Dist: tinytag==2.2.1; extra == "help"
+Requires-Dist: tokenizers==0.22.2; extra == "help"
+Requires-Dist: torch==2.10.0; extra == "help"
+Requires-Dist: tqdm==4.67.3; extra == "help"
+Requires-Dist: transformers==5.3.0; extra == "help"
+Requires-Dist: typer==0.24.1; extra == "help"
+Requires-Dist: typing-extensions==4.15.0; extra == "help"
+Requires-Dist: typing-inspect==0.9.0; extra == "help"
+Requires-Dist: typing-inspection==0.4.2; extra == "help"
+Requires-Dist: urllib3==2.6.3; extra == "help"
+Requires-Dist: wrapt==2.1.2; extra == "help"
+Requires-Dist: yarl==1.23.0; extra == "help"
+Provides-Extra: browser
+Requires-Dist: altair==6.0.0; extra == "browser"
+Requires-Dist: attrs==25.4.0; extra == "browser"
+Requires-Dist: blinker==1.9.0; extra == "browser"
+Requires-Dist: cachetools==7.0.5; extra == "browser"
+Requires-Dist: certifi==2026.2.25; extra == "browser"
+Requires-Dist: charset-normalizer==3.4.6; extra == "browser"
+Requires-Dist: click==8.3.1; extra == "browser"
+Requires-Dist: gitdb==4.0.12; extra == "browser"
+Requires-Dist: gitpython==3.1.46; extra == "browser"
+Requires-Dist: idna==3.11; extra == "browser"
+Requires-Dist: jinja2==3.1.6; extra == "browser"
+Requires-Dist: jsonschema==4.26.0; extra == "browser"
+Requires-Dist: jsonschema-specifications==2025.9.1; extra == "browser"
+Requires-Dist: markupsafe==3.0.3; extra == "browser"
+Requires-Dist: narwhals==2.18.0; extra == "browser"
+Requires-Dist: numpy==2.4.3; extra == "browser"
+Requires-Dist: packaging==26.0; extra == "browser"
+Requires-Dist: pandas==2.3.3; extra == "browser"
+Requires-Dist: pillow==12.1.1; extra == "browser"
+Requires-Dist: protobuf==6.33.5; extra == "browser"
+Requires-Dist: pyarrow==23.0.1; extra == "browser"
+Requires-Dist: pydeck==0.9.1; extra == "browser"
+Requires-Dist: python-dateutil==2.9.0.post0; extra == "browser"
+Requires-Dist: pytz==2026.1.post1; extra == "browser"
+Requires-Dist: referencing==0.37.0; extra == "browser"
+Requires-Dist: requests==2.32.5; extra == "browser"
+Requires-Dist: rpds-py==0.30.0; extra == "browser"
+Requires-Dist: six==1.17.0; extra == "browser"
+Requires-Dist: smmap==5.0.3; extra == "browser"
+Requires-Dist: streamlit==1.55.0; extra == "browser"
+Requires-Dist: tenacity==9.1.4; extra == "browser"
+Requires-Dist: toml==0.10.2; extra == "browser"
+Requires-Dist: tornado==6.5.5; extra == "browser"
+Requires-Dist: typing-extensions==4.15.0; extra == "browser"
+Requires-Dist: tzdata==2025.3; extra == "browser"
+Requires-Dist: urllib3==2.6.3; extra == "browser"
+Provides-Extra: playwright
+Requires-Dist: greenlet==3.3.2; extra == "playwright"
+Requires-Dist: playwright==1.58.0; extra == "playwright"
+Requires-Dist: pyee==13.0.1; extra == "playwright"
+Requires-Dist: typing-extensions==4.15.0; extra == "playwright"
+Dynamic: license-file
+
+# AI-Powered LaTeX Research Assistant
+
+<p align="center">
+    <strong>LaTeX 科研写作智能协作助手</strong>
+</p>
+
+<p align="center">
+区别于通用编程助手，本工具专注于 LaTeX 科研写作场景，AI 全程作为写作伙伴提供辅助能力，所有变更均由研究者主导和确认。
+</p>
+
+---
+
+## ✨ 核心特性
+
+### 📝 LaTeX 专属优化
+
+- 原生支持 .tex, .bib, .sty, .cls 文件编辑
+- LaTeX 语法检查（环境闭合、引用检查）
+- 智能识别文档结构（章节、公式、图表、参考文献）
+
+### 🤖 智能写作助手
+
+- 基于搜索/替换块的精准编辑
+- 支持所有主流 LLM（OpenAI, Anthropic, DeepSeek 等）
+- 科研写作场景优化的提示词
+
+### 🔧 LaTeX 工具集成
+
+- 内置 LaTeX 编译支持（pdflatex, xelatex, lualatex）
+- BibTeX 参考文献管理
+- 论文模板系统
+
+### 📊 文档分析
+
+- 字数统计
+- 结构分析（章节、图表、公式计数）
+- 参考文献引用检查
+
+---
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+# 使用 uv 安装（推荐）
+uv pip install git+https://github.com/your-username/lsr.git
+
+# 或使用 pip
+pip install git+https://github.com/your-username/lsr.git
+```
+
+### 启动
+
+```bash
+# 进入你的 LaTeX 项目目录
+cd /path/to/your/paper
+
+# 启动助手（以 DeepSeek 为例）
+lsr --model deepseek --api-key deepseek=<your-key>
+
+# 或使用 OpenAI
+lsr --model gpt-4 --api-key openai=<your-key>
+```
+
+### 基础使用
+
+1. **编辑 LaTeX 文档**
+
+```
+> 添加一个关于研究方法的章节
+```
+
+2. **添加数学公式**
+
+```
+> 在方法部分添加回归模型的数学公式
+```
+
+3. **管理参考文献**
+
+```
+> 在引言中添加对 Smith 2023 的引用
+```
+
+4. **检查语法**
+
+```
+> /check
+```
+
+5. **编译文档**
+
+```
+> /compile
+```
+
+6. **预览 PDF**
+
+```
+> /preview
+```
+
+---
+
+## 📋 命令列表
+
+| 命令            | 说明                |
+| --------------- | ------------------- |
+| `/compile`      | 编译 LaTeX 文档     |
+| `/check`        | 检查 LaTeX 语法     |
+| `/preview`      | 打开 PDF 预览       |
+| `/bib`          | 管理参考文献        |
+| `/template`     | 选择/创建论文模板   |
+| `/wordcount`    | 统计字数            |
+| `/add-template` | 解析 LaTeX 模板结构 |
+| `/add <file>`   | 添加文件到会话      |
+| `/drop <file>`  | 从会话中移除文件    |
+| `/undo`         | 撤销上一次修改      |
+| `/diff`         | 显示当前修改        |
+| `/run <cmd>`    | 运行 shell 命令     |
+| `/ask`          | 切换到问答模式      |
+| `/plan`         | 切换到写作规划模式  |
+| `/code`         | 切换到编辑模式      |
+
+---
+
+## 📁 支持的文件类型
+
+| 扩展名 | 说明             |
+| ------ | ---------------- |
+| `.tex` | LaTeX 文档       |
+| `.bib` | BibTeX 参考文献  |
+| `.sty` | LaTeX 样式文件   |
+| `.cls` | LaTeX 文档类     |
+| `.dtx` | LaTeX 文档化源码 |
+| `.ins` | LaTeX 安装文件   |
+
+---
+
+## 🔧 配置
+
+### 环境变量
+
+```bash
+# OpenAI API Key
+export OPENAI_API_KEY=sk-...
+
+# Anthropic API Key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# DeepSeek API Key
+export DEEPSEEK_API_KEY=sk-...
+```
+
+### 配置文件
+
+在项目根目录创建 `.aider.conf.yml`：
+
+```yaml
+# 默认模型
+model: deepseek
+
+# 编辑格式
+edit-format: diff
+
+# LaTeX 编译引擎
+latex-engine: pdflatex
+
+# 自动编译
+auto-compile: true
+```
+
+---
+
+## 📚 使用场景
+
+### 学术论文写作
+
+```bash
+lsr --model gpt-4
+> 帮我完善方法部分，添加实验设计的详细描述
+```
+
+### 学位论文
+
+```bash
+lsr --model deepseek
+> 帮我检查所有章节的引用是否正确
+```
+
+### 会议论文
+
+```bash
+lsr --model claude-3-opus
+> 根据会议模板调整论文格式
+```
+
+### 文献综述
+
+```bash
+latex-assist --model gpt-4
+> 帮我整理参考文献，按主题分类
+```
+
+---
+
+## 🆚 与原版 Aider 的差异
+
+| 功能     | 原版 Aider        | LaTeX Research Assistant |
+| -------- | ----------------- | ------------------------ |
+| 定位     | 通用编程助手      | LaTeX 科研写作助手       |
+| 文件类型 | 100+ 编程语言     | .tex, .bib, .sty, .cls   |
+| 编辑格式 | 13+ 种代码格式    | diff（搜索/替换块）      |
+| 工具链   | lint, test, build | LaTeX 编译, BibTeX       |
+| 提示词   | 代码开发优化      | 学术写作优化             |
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+---
+
+## 📄 许可证
+
+Apache License 2.0
+
+---
+
+## 🙏 致谢
+
+本项目基于 [Aider](https://github.com/Aider-AI/aider) 二次开发，感谢原项目的优秀基础。

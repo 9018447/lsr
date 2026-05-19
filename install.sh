@@ -17,13 +17,14 @@ fi
 
 echo "uv 版本: $(uv --version)"
 
-# 卸载已安装的 aider
-echo "==> 卸载已安装的 aider..."
+# 卸载已安装的旧版本
+echo "==> 卸载已安装的旧版本..."
+uv tool uninstall lsr 2>/dev/null || true
 uv tool uninstall aider-chat 2>/dev/null || true
 
 # 从本地目录安装
-echo "==> 从本地目录安装 aider (editable 模式)..."
+echo "==> 从本地目录安装 LSR (editable 模式)..."
 uv tool install -e --force "${SCRIPT_DIR}"
 
 echo ""
-echo "✅ 安装完成！直接运行 aider --help 即可使用"
+echo "✅ 安装完成！直接运行 lsr --help 即可使用"
