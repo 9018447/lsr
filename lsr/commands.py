@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import re
 import subprocess
@@ -83,6 +84,9 @@ class Commands:
 
         # Store the original read-only filenames provided via args.read
         self.original_read_only_fnames = set(original_read_only_fnames or [])
+
+        # Edit session tracking
+        self._last_edit_file = None
 
     def cmd_model(self, args):
         "Switch the Main Model to a new LLM"
@@ -768,9 +772,13 @@ class Commands:
         all_files = set(self.coder.get_all_relative_files())
         inchat_files = set(self.coder.get_inchat_relative_files())
         tex_files = all_files | inchat_files
-        tex_files = [f for f in tex_files if f.endswith('.tex')]
+        tex_files = [f for f in tex_files if f.endswith(".tex")]
         tex_files = [self.quote_fname(fn) for fn in tex_files]
         return tex_files
+
+    def completions_mark(self):
+        """Provide completions for /mark command: --reset flag and .tex files."""
+        return ["--reset"] + self.completions_edit()
 
     def glob_filtered_to_repo(self, pattern):
         if not pattern.strip():
@@ -2092,7 +2100,9 @@ class Commands:
         if not args:
             self.io.tool_output(f"Usage: /{action_verb} <file.tex>")
             self.io.tool_output("")
-            self.io.tool_output(f"Interactively select LaTeX sections to {action_verb}.")
+            self.io.tool_output(
+                f"Interactively select LaTeX sections to {action_verb}."
+            )
             return None
 
         filename = args.strip()
@@ -2137,7 +2147,13 @@ class Commands:
             self.io.tool_output("No sections found in this file.")
             return None
 
-        # Display structure
+        # Load persisted marks and edit counts for this file
+        marks = self._load_marks()
+        marked_titles = marks.get(abs_path, set())
+        edit_counts_all = self._load_edit_counts()
+        edit_counts = edit_counts_all.get(abs_path, {})
+
+        # Display structure with per-section edit count and marked status
         self.io.tool_output(
             f"\n\u001b[1m\u250c\u2500 Structure of {filename} \u2500\u2510\u001b[0m"
         )
@@ -2153,8 +2169,17 @@ class Commands:
                 "subsubsection": "  \u00a7",
             }
             icon = icons.get(item_type, "\u25a1")
+            # Show ✓ in green for marked sections
+            is_marked = title in marked_titles
+            if is_marked:
+                mark_prefix = "\u001b[32m\u2713\u001b[0m "
+            else:
+                mark_prefix = "  "
+            # Show per-section edit count in yellow if > 0
+            count = edit_counts.get(title, 0)
+            count_str = f" \u001b[33m(×{count})\u001b[0m" if count > 0 else ""
             self.io.tool_output(
-                f"  {idx:2d}. {icon} {indent}{title} [{start + 1}-{end + 1}]"
+                f"  {idx:2d}. {mark_prefix}{icon} {indent}{title} [{start + 1}-{end + 1}]{count_str}"
             )
 
         self.io.tool_output(f"\nSelect sections to {action_verb}:")
@@ -2197,17 +2222,107 @@ class Commands:
         selected_items = [items[i] for i in sorted(selected_indices)]
         return (abs_path, filename, items, selected_items)
 
+    @staticmethod
+    def _sanitize_filename(title):
+        """Format a LaTeX section title into a safe filename fragment.
+
+        - Lowercase
+        - Strip LaTeX commands (e.g. ``\\textbf{foo}`` → ``foo``)
+        - Spaces → underscores
+        - Remove non-alphanumeric/underscore chars
+        - Truncate to 40 chars
+        """
+        # Strip LaTeX commands: \cmd{content} → content
+        title = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", title)
+        # Strip any remaining backslash-commands
+        title = re.sub(r"\\[a-zA-Z]+", "", title)
+        # Lowercase & spaces → underscores
+        title = title.lower().replace(" ", "_")
+        # Keep only alphanumeric + underscore
+        title = re.sub(r"[^a-z0-9_]", "", title)
+        # Collapse multiple underscores
+        title = re.sub(r"_+", "_", title)
+        # Strip leading/trailing underscores
+        title = title.strip("_")
+        # Truncate
+        return title[:40]
+
+    def _marks_file(self):
+        """Return path to the persistent marks JSON file."""
+        return os.path.join(os.path.expanduser("~"), ".lsr", "marks.json")
+
+    def _edit_counts_file(self):
+        """Return path to the persistent edit-counts JSON file."""
+        return os.path.join(os.path.expanduser("~"), ".lsr", "edit_counts.json")
+
+    def _load_marks(self):
+        """Load persisted marks from ~/.lsr/marks.json.
+
+        Returns dict mapping abs_file_path → set of section titles.
+        """
+        path = self._marks_file()
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return {k: set(v) for k, v in data.items()}
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _save_marks(self, marks):
+        """Persist marks dict to ~/.lsr/marks.json."""
+        path = self._marks_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        serializable = {k: sorted(v) for k, v in marks.items() if v}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2, ensure_ascii=False)
+
+    def _load_edit_counts(self):
+        """Load persisted per-section edit counts from ~/.lsr/edit_counts.json.
+
+        Returns dict mapping abs_file_path → {section_title: count}.
+        """
+        path = self._edit_counts_file()
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return {k: dict(v) for k, v in data.items()}
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _save_edit_counts(self, counts):
+        """Persist edit counts dict to ~/.lsr/edit_counts.json."""
+        path = self._edit_counts_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(counts, f, indent=2, ensure_ascii=False)
+
+    def _increment_edit_counts(self, abs_path, selected_items):
+        """Increment edit count for each selected section and persist."""
+        counts = self._load_edit_counts()
+        if abs_path not in counts:
+            counts[abs_path] = {}
+        for _, title, _, _, _ in selected_items:
+            counts[abs_path][title] = counts[abs_path].get(title, 0) + 1
+        self._save_edit_counts(counts)
+        return counts.get(abs_path, {})
+
     def cmd_edit(self, args=""):
         """Edit LaTeX sections with hash-based tracking and auto-replacement."""
         import hashlib
-        import json
-        import tempfile
 
         result = self._parse_and_select_sections(args, action_verb="edit")
         if result is None:
             return
 
         abs_path, filename, items, selected_items = result
+
+        # Increment per-section edit counts and persist
+        file_counts = self._increment_edit_counts(abs_path, selected_items)
+        self._last_edit_file = abs_path
 
         # Build session data (original content + line numbers)
         session_data = {
@@ -2220,8 +2335,12 @@ class Commands:
         tmp_content.append("% Edit the sections below, then run /edit-done")
         tmp_content.append("")
 
+        # Collect titles for filename construction
+        section_titles = []
+
         for item_type, title, start, end, item_content in selected_items:
             h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
+            section_titles.append(title)
 
             # Save to session
             session_data["sections"].append(
@@ -2240,14 +2359,27 @@ class Commands:
             tmp_content.append(item_content)
             tmp_content.append("")
 
+        # Build descriptive filename from first 2 section titles + hash
+        # e.g. lsr_edit_introduction__methodology_a3f2b1c0.tex
+        name_parts = []
+        for t in section_titles[:2]:
+            sanitized = self._sanitize_filename(t)
+            if sanitized:
+                name_parts.append(sanitized)
+        descriptive = "__".join(name_parts) if name_parts else "section"
+        # Hash for deduplication from all section contents
+        all_content = "\n".join(
+            item_content for _, _, _, _, item_content in selected_items
+        )
+        dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
+
         # Store temp file in ~/.lsr/tmp/
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            suffix=".tex", prefix="lsr_edit_", dir=lsr_home
-        )
+        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
+        tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write("\n".join(tmp_content))
 
         # Save session file
@@ -2258,8 +2390,11 @@ class Commands:
         # Add temp file to coder's editable list
         self.coder.abs_fnames.add(tmp_path)
 
-        # Show summary
+        # Show summary with per-section edit counts
         self.io.tool_output("\n\u001b[32m\u2714 Ready to edit!\u001b[0m")
+        for _, title, _, _, _ in selected_items:
+            c = file_counts.get(title, 0)
+            self.io.tool_output(f"  \u001b[33m×{c}\u001b[0m {title}")
         self.io.tool_output(f"\u001b[36m\u250c\u2500 Edit file:\u001b[0m {tmp_path}")
         self.io.tool_output(f"\u001b[36m\u2514\u2500 Original:\u001b[0m   {filename}")
         self.io.tool_output("\nNext steps:")
@@ -2363,6 +2498,85 @@ class Commands:
         )
         self.io.tool_output(f"   {original_file}")
 
+    def cmd_mark(self, args=""):
+        """Mark LaTeX sections as completed (persisted across sessions).
+
+        Usage:
+            /mark <file.tex>          Interactively select sections to mark as done
+            /mark --reset              Clear ALL marks across all files
+            /mark --reset <file.tex>   Clear marks for a specific file
+        """
+        args = args.strip()
+
+        # Handle --reset variants
+        if args.startswith("--reset"):
+            rest = args[7:].strip()  # everything after '--reset'
+            marks = self._load_marks()
+            if rest:
+                # /mark --reset <file.tex>
+                filename = rest
+                abs_path = self.coder.abs_root_path(filename)
+                if abs_path in marks:
+                    del marks[abs_path]
+                self._save_marks(marks)
+                # Also reset edit counts for this file
+                counts = self._load_edit_counts()
+                if abs_path in counts:
+                    del counts[abs_path]
+                    self._save_edit_counts(counts)
+                self.io.tool_output(
+                    f"\n\u001b[32m\u2714 Cleared marks for {filename}\u001b[0m"
+                )
+            else:
+                # /mark --reset (clear all)
+                self._save_marks({})
+                self._save_edit_counts({})
+                self.io.tool_output(
+                    "\n\u001b[32m\u2714 Cleared ALL marks across all files\u001b[0m"
+                )
+            return
+
+        # /mark <file.tex> — interactive selection (same UI as /edit)
+        if not args:
+            self.io.tool_output("Usage:")
+            self.io.tool_output(
+                "  /mark <file.tex>      Interactively mark sections as done"
+            )
+            self.io.tool_output("  /mark --reset         Clear ALL marks")
+            self.io.tool_output("  /mark --reset <file>  Clear marks for a file")
+            return
+
+        result = self._parse_and_select_sections(args, action_verb="mark")
+        if result is None:
+            return
+
+        abs_path, filename, items, selected_items = result
+
+        # Load, update, and save marks
+        marks = self._load_marks()
+        if abs_path not in marks:
+            marks[abs_path] = set()
+        for _, title, _, _, _ in selected_items:
+            marks[abs_path].add(title)
+        self._save_marks(marks)
+
+        # Reset edit counts for marked sections
+        counts = self._load_edit_counts()
+        if abs_path in counts:
+            for _, title, _, _, _ in selected_items:
+                counts[abs_path].pop(title, None)
+            if not counts[abs_path]:
+                del counts[abs_path]
+            self._save_edit_counts(counts)
+
+        # Show what was marked
+        marked_names = [title for _, title, _, _, _ in selected_items]
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 Marked {len(marked_names)} section(s) as done in {filename}:\u001b[0m"
+        )
+        for t in marked_names:
+            self.io.tool_output(f"  \u001b[32m\u2713\u001b[0m {t}")
+        self.io.tool_output("Edit counts reset for marked sections.")
 
     def _run_section_command(self, args, action_verb, prompt_template):
         """Shared implementation for /expand, /condense, /translate commands.
@@ -2400,9 +2614,7 @@ class Commands:
         )
 
         # Send to the LLM via _generic_chat_command
-        return self._generic_chat_command(
-            user_msg, self.coder.main_model.edit_format
-        )
+        return self._generic_chat_command(user_msg, self.coder.main_model.edit_format)
 
     def cmd_expand(self, args=""):
         "Expand LaTeX sections with richer scientific detail"
@@ -2455,7 +2667,7 @@ class Commands:
             self.io.tool_output("\nSelect file to open (or q to cancel):")
 
             selection = input("Selection: ").strip()
-            if not selection or selection.lower() == 'q':
+            if not selection or selection.lower() == "q":
                 return
 
             try:
@@ -2470,7 +2682,9 @@ class Commands:
                 return
 
         # Find editor: prefer code (VS Code), then nvim/vim
-        editor_cmd = shutil.which("code") or shutil.which("nvim") or shutil.which("vim") or "vi"
+        editor_cmd = (
+            shutil.which("code") or shutil.which("nvim") or shutil.which("vim") or "vi"
+        )
 
         try:
             subprocess.Popen(
@@ -2479,7 +2693,9 @@ class Commands:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self.io.tool_output(f"Opened {os.path.basename(abs_path)} in {os.path.basename(editor_cmd)}")
+            self.io.tool_output(
+                f"Opened {os.path.basename(abs_path)} in {os.path.basename(editor_cmd)}"
+            )
         except Exception as e:
             self.io.tool_error(f"Failed to open file: {e}")
 
