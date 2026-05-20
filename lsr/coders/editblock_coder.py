@@ -155,6 +155,25 @@ def normalize_whitespace(text):
     return " ".join(text.split())
 
 
+def normalize_latex_escapes(text):
+    """Normalize LaTeX escape sequences for fuzzy comparison.
+
+    Handles the common case where an LLM sees rendered LaTeX and generates
+    SEARCH blocks using the unescaped characters (e.g. '%' instead of '\\%').
+    This strips the backslash from LaTeX special-character escapes so that
+    '\\%' matches '%', '\\$' matches '$', etc.
+    """
+    # LaTeX special chars that need escaping: % $ & # _ { }
+    text = re.sub(r'\\([%$&#_{}])', r'\1', text)
+    return text
+
+
+def normalize_for_matching(text):
+    """Normalize both whitespace and LaTeX escapes for fuzzy matching."""
+    text = normalize_latex_escapes(text)
+    return normalize_whitespace(text)
+
+
 def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
     """Try to match by ignoring line breaks in the SEARCH block.
 
@@ -163,8 +182,9 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
     Also handles partial line matching when SEARCH block only covers part of a long line.
     """
     # Normalize the SEARCH block (join all lines, collapse whitespace)
+    # Use normalize_for_matching which handles both whitespace and LaTeX escapes
     part_text = " ".join(line.rstrip() for line in part_lines)
-    part_normalized = normalize_whitespace(part_text)
+    part_normalized = normalize_for_matching(part_text)
 
     if not part_normalized:
         return None
@@ -172,17 +192,22 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
     # Try to find matching region in the whole file
     for i in range(len(whole_lines)):
         whole_line = whole_lines[i].rstrip()
-        whole_normalized = normalize_whitespace(whole_line)
+        whole_normalized = normalize_for_matching(whole_line)
 
-        # Check if the SEARCH block matches the beginning of this line
-        if whole_normalized.startswith(part_normalized):
-            # Found a match! Replace the matched portion
-            # Keep the rest of the original line
-            remaining = whole_line[len(part_text) :]
+        # Check if the SEARCH block is a substring of this line
+        # (handles both prefix match and middle-of-line match)
+        if part_normalized in whole_normalized:
+            # Found a match! Find the position and replace
+            match_pos = whole_normalized.find(part_normalized)
+            # Get the original content before and after the matched region
+            # Use normalized position to map back to original content
+            # We do a best-effort reconstruction preserving the original line's
+            # unmodified prefix and suffix
+            before_match = whole_line[:match_pos] if match_pos > 0 else ""
+            after_match = whole_line[match_pos + len(part_text):]
             if replace_lines:
-                # Use the last line of replace + remaining content
                 last_replace = replace_lines[-1].rstrip()
-                new_line = last_replace + remaining + "\n"
+                new_line = before_match + last_replace + after_match + "\n"
                 result = (
                     whole_lines[:i]
                     + replace_lines[:-1]
@@ -197,7 +222,7 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
         chunk_text = " ".join(
             line.rstrip() for line in whole_lines[i : i + len(part_lines)]
         )
-        chunk_normalized = normalize_whitespace(chunk_text)
+        chunk_normalized = normalize_for_matching(chunk_text)
 
         if chunk_normalized == part_normalized:
             # Exact match found
@@ -206,23 +231,13 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
             )
             return "".join(result)
 
-    return None
-    """Try to match by ignoring line breaks in the SEARCH block.
-
-    This handles the case where LLM splits long lines into multiple lines,
-    but the actual file has them as a single line.
-    """
-    # Normalize the SEARCH block (join all lines, collapse whitespace)
-    part_text = " ".join(line.rstrip() for line in part_lines)
-    part_normalized = normalize_whitespace(part_text)
-
-    # Try to find matching region in the whole file
+    # Also try with broader chunk length scanning
+    # (handles cases where line counts differ between SEARCH and file)
     for i in range(len(whole_lines)):
-        # Try different lengths of chunks
         for length in range(1, min(20, len(whole_lines) - i + 1)):
             chunk_lines = whole_lines[i : i + length]
             chunk_text = " ".join(line.rstrip() for line in chunk_lines)
-            chunk_normalized = normalize_whitespace(chunk_text)
+            chunk_normalized = normalize_for_matching(chunk_text)
 
             if chunk_normalized == part_normalized:
                 # Found a match! Replace with the REPLACE lines

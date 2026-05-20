@@ -1140,3 +1140,53 @@
 >  
 >  
 > ^C KeyboardInterrupt  
+
+# lsr chat started at 2026-05-20 18:29:57
+
+> /home/smh/.local/bin/lsr --model openai/openai/gpt-oss-120b --cache-prompts --no-show-model-warnings --read AGENTS.md  
+> Aider v0.86.3.dev+less  
+> Model: openai/openai/gpt-oss-120b with diff edit format  
+> Git repo: .git with 746 files  
+> Repo-map: using 1024 tokens, files refresh  
+> Added AGENTS.md to the chat (read-only).  
+> Cost estimates may be inaccurate when using streaming and caching.  
+
+#### /open  
+> [1mFiles in chat:[0m  
+> 1. AGENTS.md  
+> Select file to open (or q to cancel):  
+> Opened AGENTS.md in /home/smh/nvim-linux-x86_64/bin/nvim  
+>  
+>  
+> ^C again to exit  
+>  
+>  
+> ^C KeyboardInterrupt  
+
+# lsr chat started at 2026-05-20 18:55:02
+
+> /home/smh/.local/bin/lsr --model openai/openai/gpt-oss-120b --cache-prompts --no-show-model-warnings --read AGENTS.md  
+> Aider v0.86.3.dev+less  
+> Model: openai/openai/gpt-oss-120b with diff edit format  
+> Git repo: .git with 746 files  
+> Repo-map: using 1024 tokens, files refresh  
+> Added AGENTS.md to the chat (read-only).  
+> Cost estimates may be inaccurate when using streaming and caching.  
+
+#### /open  
+> [1mFiles in chat:[0m  
+> 1. AGENTS.md  
+> Select file to open (or q to cancel):  
+> Opened AGENTS.md in code  
+
+#### /open  
+> [1mFiles in chat:[0m  
+> 1. AGENTS.md  
+> Select file to open (or q to cancel):  
+> Opened AGENTS.md in code  
+>  
+>  
+> ^C again to exit  
+>  
+>  
+> ^C KeyboardInterrupt  
