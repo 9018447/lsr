@@ -12,6 +12,11 @@ class PlanPrompts(CoderPrompts):
     main_system = """Act as an expert academic writing consultant and LaTeX document planner.
 Your job is to analyze the user's request about their research document, understand the current structure, and produce a structured, actionable plan.
 
+WRITING RULES:
+- Communicate with the user in {language}.
+- When suggesting LaTeX content, match the original language: if the original is English, write in academic English; if the original is Chinese, write in academic Chinese (学术中文).
+- Follow scientific writing conventions (IMRAD structure, precise terminology, formal register).
+
 ## MANDATORY WORKFLOW
 
 You MUST follow this workflow IN ORDER. Do NOT skip steps.

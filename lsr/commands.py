@@ -763,6 +763,15 @@ class Commands:
         files = [self.quote_fname(fn) for fn in files]
         return files
 
+    def completions_edit(self):
+        """Provide .tex file completions for /edit command."""
+        all_files = set(self.coder.get_all_relative_files())
+        inchat_files = set(self.coder.get_inchat_relative_files())
+        tex_files = all_files | inchat_files
+        tex_files = [f for f in tex_files if f.endswith('.tex')]
+        tex_files = [self.quote_fname(fn) for fn in tex_files]
+        return tex_files
+
     def glob_filtered_to_repo(self, pattern):
         if not pattern.strip():
             return []
@@ -2406,6 +2415,83 @@ class Commands:
     def cmd_translate(self, args=""):
         "Translate LaTeX sections from Chinese to English (academic style)"
         return self._run_section_command(args, "translate", prompts.translate_prompt)
+
+    def cmd_open(self, args=""):
+        "Open a file in neovim in a new terminal window"
+        import shutil
+
+        # Get all added files
+        editable_files = list(self.coder.get_inchat_relative_files())
+        read_only_files = [
+            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
+        ]
+        all_files = editable_files + read_only_files
+
+        if not all_files:
+            self.io.tool_error("No files in the chat. Use /add first.")
+            return
+
+        if args.strip():
+            # Direct file name provided
+            filename = args.strip()
+            abs_path = self.coder.abs_root_path(filename)
+            if not os.path.exists(abs_path):
+                # Try substring match
+                matches = [f for f in all_files if filename in f]
+                if len(matches) == 1:
+                    abs_path = self.coder.abs_root_path(matches[0])
+                elif len(matches) > 1:
+                    self.io.tool_error(f"Multiple matches: {matches}")
+                    return
+                else:
+                    self.io.tool_error(f"File not found: {filename}")
+                    return
+        else:
+            # Interactive selection
+            self.io.tool_output("\n\u001b[1mFiles in chat:\u001b[0m")
+            for idx, f in enumerate(all_files, 1):
+                self.io.tool_output(f"  {idx}. {f}")
+
+            self.io.tool_output("\nSelect file to open (or q to cancel):")
+
+            selection = input("Selection: ").strip()
+            if not selection or selection.lower() == 'q':
+                return
+
+            try:
+                idx = int(selection) - 1
+                if 0 <= idx < len(all_files):
+                    abs_path = self.coder.abs_root_path(all_files[idx])
+                else:
+                    self.io.tool_error("Invalid selection.")
+                    return
+            except ValueError:
+                self.io.tool_error("Invalid input. Enter a number.")
+                return
+
+        # Find editor: prefer code (VS Code), then nvim/vim
+        editor_cmd = shutil.which("code") or shutil.which("nvim") or shutil.which("vim") or "vi"
+
+        try:
+            subprocess.Popen(
+                [editor_cmd, abs_path],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.io.tool_output(f"Opened {os.path.basename(abs_path)} in {os.path.basename(editor_cmd)}")
+        except Exception as e:
+            self.io.tool_error(f"Failed to open file: {e}")
+
+    def completions_open(self):
+        """Provide completions for /open command - files in chat."""
+        files = self.coder.get_inchat_relative_files()
+        read_only_files = [
+            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
+        ]
+        all_files = files + read_only_files
+        all_files = [self.quote_fname(fn) for fn in all_files]
+        return all_files
 
     def cmd_think_tokens(self, args):
         """Set the thinking token budget, eg: 8096, 8k, 10.5k, 0.5M, or 0 to disable."""

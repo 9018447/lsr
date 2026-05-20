@@ -1255,7 +1255,17 @@ class Coder:
 
         user_lang = self.get_user_language()
         if user_lang:
-            final_reminders.append(f"Reply in {user_lang}.\n")
+            # For Chinese users: communicate in Simplified Chinese, write LaTeX in academic English
+            if user_lang.lower() in ("chinese", "simplified chinese", "chinese (simplified)",
+                                      "中文", "简体中文", "zh", "zh-cn", "zh_hans"):
+                final_reminders.append(
+                    "Always reply to the user in Simplified Chinese (简体中文).\n"
+                    "When writing or editing LaTeX content, match the original language: "
+                    "if the original is English, use academic English; "
+                    "if the original is Chinese, use academic Chinese (学术中文).\n"
+                )
+            else:
+                final_reminders.append(f"Reply in {user_lang}.\n")
 
         platform_text = self.get_platform_info()
 
