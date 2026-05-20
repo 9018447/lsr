@@ -2068,33 +2068,37 @@ class Commands:
         if user_input.strip():
             self.io.set_placeholder(user_input.rstrip())
 
-    def cmd_edit(self, args=""):
-        """Edit LaTeX sections with hash-based tracking and auto-replacement."""
-        import hashlib
-        import json
+    def _parse_and_select_sections(self, args, action_verb="edit"):
+        """Parse a .tex file's LaTeX structure and let the user interactively select sections.
+
+        Returns (abs_path, filename, items, selected_items) where:
+          - abs_path: absolute path of the file
+          - filename: the original filename string
+          - items: full list of (sec_type, title, start_line, end_line, content)
+          - selected_items: list of (sec_type, title, start_line, end_line, content) for user's selection
+        Returns None if the user cancels or the file is invalid.
+        """
         import re
-        import tempfile
 
         if not args:
-            self.io.tool_output("Usage: /edit <file.tex>")
+            self.io.tool_output(f"Usage: /{action_verb} <file.tex>")
             self.io.tool_output("")
-            self.io.tool_output("Interactively select LaTeX sections to edit.")
-            self.io.tool_output("After editing, use /edit-done to merge changes back.")
-            return
+            self.io.tool_output(f"Interactively select LaTeX sections to {action_verb}.")
+            return None
 
         filename = args.strip()
         abs_path = self.coder.abs_root_path(filename)
 
         if not os.path.exists(abs_path):
             self.io.tool_error(f"File not found: {filename}")
-            return
+            return None
 
         try:
             with open(abs_path, encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
             self.io.tool_error(f"Error reading file: {e}")
-            return
+            return None
 
         # Parse LaTeX structure
         lines = content.split("\n")
@@ -2122,7 +2126,7 @@ class Commands:
 
         if not items:
             self.io.tool_output("No sections found in this file.")
-            return
+            return None
 
         # Display structure
         self.io.tool_output(
@@ -2135,16 +2139,16 @@ class Commands:
                 else ("    " if item_type == "subsubsection" else "")
             )
             icons = {
-                "section": "\u001b[36m§\u001b[0m",
-                "subsection": " §",
-                "subsubsection": "  §",
+                "section": "\u001b[36m\u00a7\u001b[0m",
+                "subsection": " \u00a7",
+                "subsubsection": "  \u00a7",
             }
             icon = icons.get(item_type, "\u25a1")
             self.io.tool_output(
                 f"  {idx:2d}. {icon} {indent}{title} [{start + 1}-{end + 1}]"
             )
 
-        self.io.tool_output("\nSelect sections to edit:")
+        self.io.tool_output(f"\nSelect sections to {action_verb}:")
         self.io.tool_output("  - Single: 1,3,5")
         self.io.tool_output("  - Range:  1-5")
         self.io.tool_output("  - All:    all")
@@ -2153,7 +2157,7 @@ class Commands:
         selection = input("\nSelection: ")
 
         if not selection or selection.lower() == "q":
-            return
+            return None
 
         selected_indices = set()
         if selection.lower() == "all":
@@ -2179,7 +2183,22 @@ class Commands:
 
         if not selected_indices:
             self.io.tool_output("No valid selection.")
+            return None
+
+        selected_items = [items[i] for i in sorted(selected_indices)]
+        return (abs_path, filename, items, selected_items)
+
+    def cmd_edit(self, args=""):
+        """Edit LaTeX sections with hash-based tracking and auto-replacement."""
+        import hashlib
+        import json
+        import tempfile
+
+        result = self._parse_and_select_sections(args, action_verb="edit")
+        if result is None:
             return
+
+        abs_path, filename, items, selected_items = result
 
         # Build session data (original content + line numbers)
         session_data = {
@@ -2192,8 +2211,7 @@ class Commands:
         tmp_content.append("% Edit the sections below, then run /edit-done")
         tmp_content.append("")
 
-        for idx in sorted(selected_indices):
-            item_type, title, start, end, item_content = items[idx]
+        for item_type, title, start, end, item_content in selected_items:
             h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
 
             # Save to session
@@ -2335,6 +2353,59 @@ class Commands:
             f"\n\u001b[32m\u2714 Merged {replaced_count} section(s) back to:\u001b[0m"
         )
         self.io.tool_output(f"   {original_file}")
+
+
+    def _run_section_command(self, args, action_verb, prompt_template):
+        """Shared implementation for /expand, /condense, /translate commands.
+
+        Selects sections, formats the prompt, and sends it to the LLM via the
+        editblock coder so that SEARCH/REPLACE blocks are applied automatically.
+        """
+        result = self._parse_and_select_sections(args, action_verb=action_verb)
+        if result is None:
+            return
+
+        abs_path, filename, items, selected_items = result
+
+        # Ensure the file is in the coder's editable set
+        if abs_path not in self.coder.abs_fnames:
+            self.coder.abs_fnames.add(abs_path)
+
+        # Build combined content from selected sections
+        combined_sections = []
+        for item_type, title, start, end, item_content in selected_items:
+            combined_sections.append(
+                f"% --- {item_type}: {title} (lines {start + 1}-{end + 1}) ---\n"
+                f"{item_content}"
+            )
+        combined_content = "\n\n".join(combined_sections)
+
+        # Format the prompt with the selected content
+        user_msg = prompt_template.format(content=combined_content)
+
+        # Inform the user
+        section_count = len(selected_items)
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 {action_verb.capitalize()}ing {section_count} "
+            f"section(s) from {filename}...\u001b[0m"
+        )
+
+        # Send to the LLM via _generic_chat_command
+        return self._generic_chat_command(
+            user_msg, self.coder.main_model.edit_format
+        )
+
+    def cmd_expand(self, args=""):
+        "Expand LaTeX sections with richer scientific detail"
+        return self._run_section_command(args, "expand", prompts.expand_prompt)
+
+    def cmd_condense(self, args=""):
+        "Condense LaTeX sections while preserving essential scientific content"
+        return self._run_section_command(args, "condense", prompts.condense_prompt)
+
+    def cmd_translate(self, args=""):
+        "Translate LaTeX sections from Chinese to English (academic style)"
+        return self._run_section_command(args, "translate", prompts.translate_prompt)
 
     def cmd_think_tokens(self, args):
         """Set the thinking token budget, eg: 8096, 8k, 10.5k, 0.5M, or 0 to disable."""
