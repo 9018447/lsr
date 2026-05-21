@@ -47,3 +47,24 @@ ORIG_HEAD
 COMMIT_EDITMSG
 commondir
 gitdir
+
+# AI IDE/Agent configs
+.agents/
+.claude/
+.cursor/
+.gemini/
+.kiro/
+.qoder/
+.opencode.json
+skills-lock.json
+
+# Privacy & unrelated files
+.your-username.github.io/
+HEAD
+CNAME
+
+# Build artifacts
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
