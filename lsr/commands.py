@@ -2941,22 +2941,29 @@ Just show me the edits I need to make.
         return templates
 
     def cmd_init(self, args):
-        """Initialize a LaTeX file with minimal compilable environment.
+        """Initialize a new LaTeX project with template files.
         
-        Usage: /init <filename.tex> [template_name]
+        Usage: /init <project_name> [template_name]
         
-        If the file exists, clears its content and replaces with a minimal compilable template.
-        If the file does not exist, creates a new file with the template.
-        Preserves one example of each environment type (equation, table, figure).
+        Creates a new folder with the project name and initializes it with:
+        - Template style files (.cls, .sty, .bst, etc.)
+        - A main .tex file with minimal compilable content
+        - Fonts directory if available
+        
+        Does NOT delete or modify any existing files.
         """
+        import shutil
         from pathlib import Path
         
         if not args:
-            self.io.tool_output("Usage: /init <filename.tex> [template_name]")
+            self.io.tool_output("Usage: /init <project_name> [template_name]")
             self.io.tool_output("")
-            self.io.tool_output("Initialize a LaTeX file with minimal compilable environment.")
-            self.io.tool_output("Creates new file or clears existing file with minimal template.")
-            self.io.tool_output("Preserves one example of each environment type (equation, table, figure).")
+            self.io.tool_output("Initialize a new LaTeX project with template files.")
+            self.io.tool_output("Creates a new folder with template style files and main .tex file.")
+            self.io.tool_output("")
+            self.io.tool_output("Examples:")
+            self.io.tool_output("  /init my_paper          # Create project with default template")
+            self.io.tool_output("  /init my_paper wiley    # Create project with wiley template")
             
             # Show available templates from template/ directory
             discovered = self._discover_templates()
@@ -2968,64 +2975,99 @@ Just show me the edits I need to make.
             return
         
         parts = args.split()
-        filename = parts[0]
+        project_name = parts[0]
         template_name = parts[1] if len(parts) > 1 else None
         
-        # Resolve file path
-        if Path(filename).is_absolute():
-            abs_path = Path(filename)
+        # Resolve project directory path
+        if Path(project_name).is_absolute():
+            project_dir = Path(project_name)
         else:
             if self.coder.use_cwd:
-                abs_path = Path.cwd() / filename
+                project_dir = Path.cwd() / project_name
             else:
-                abs_path = Path(self.coder.root) / filename
+                project_dir = Path(self.coder.root) / project_name
         
-        # Check if it's a .tex file
-        if not str(abs_path).endswith('.tex'):
-            self.io.tool_error(f"Not a .tex file: {abs_path}")
+        # Check if directory already exists
+        if project_dir.exists():
+            self.io.tool_error(f"Directory already exists: {project_dir}")
+            self.io.tool_output("Please choose a different name or remove the existing directory.")
             return
         
-        # Create parent directories if they don't exist
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        # Discover templates
+        discovered = self._discover_templates()
         
         # Determine template to use
-        template_content = None
-        
+        template_dir = None
         if template_name:
-            # Use specified template from template/ directory
-            discovered = self._discover_templates()
             if template_name in discovered:
-                template_path = Path(discovered[template_name])
-                try:
-                    with open(template_path, 'r', encoding='utf-8') as f:
-                        template_content = f.read()
-                    self.io.tool_output(f"Using template: {template_name}")
-                except Exception as e:
-                    self.io.tool_error(f"Error reading template: {e}")
-                    return
+                template_dir = Path(discovered[template_name]).parent
             else:
                 self.io.tool_error(f"Template '{template_name}' not found in template/ directory.")
+                self.io.tool_output(f"Available templates: {', '.join(sorted(discovered.keys()))}")
+                return
+        else:
+            # Use first available template if any
+            if discovered:
+                first_name = sorted(discovered.keys())[0]
+                template_dir = Path(discovered[first_name]).parent
+                self.io.tool_output(f"Using default template: {first_name}")
+        
+        # Create project directory
+        try:
+            project_dir.mkdir(parents=True, exist_ok=False)
+            self.io.tool_output(f"Created project directory: {project_dir}")
+        except Exception as e:
+            self.io.tool_error(f"Error creating directory: {e}")
+            return
+        
+        # Copy template files if template directory exists
+        if template_dir and template_dir.exists():
+            try:
+                # Copy all files from template directory
+                for item in template_dir.iterdir():
+                    if item.is_dir():
+                        # Copy subdirectories (like Fonts)
+                        dest_dir = project_dir / item.name
+                        shutil.copytree(item, dest_dir)
+                        self.io.tool_output(f"Copied directory: {item.name}/")
+                    else:
+                        # Copy individual files
+                        dest_file = project_dir / item.name
+                        shutil.copy2(item, dest_file)
+                        self.io.tool_output(f"Copied: {item.name}")
+                
+                # Copy .tex file as main.tex
+                tex_files = list(template_dir.glob("*.tex"))
+                if tex_files:
+                    main_tex = project_dir / "main.tex"
+                    # Read the template tex content
+                    with open(tex_files[0], 'r', encoding='utf-8') as f:
+                        tex_content = f.read()
+                    # Write as main.tex
+                    with open(main_tex, 'w', encoding='utf-8') as f:
+                        f.write(tex_content)
+                    self.io.tool_output("Created: main.tex")
+            except Exception as e:
+                self.io.tool_error(f"Error copying template files: {e}")
+                return
+        else:
+            # No template, create minimal .tex file
+            try:
+                main_tex = project_dir / "main.tex"
+                with open(main_tex, 'w', encoding='utf-8') as f:
+                    f.write(self._generate_minimal_template())
+                self.io.tool_output("Created: main.tex (minimal template)")
+            except Exception as e:
+                self.io.tool_error(f"Error creating main.tex: {e}")
                 return
         
-        if template_content is None:
-            # Use default minimal template
-            template_content = self._generate_minimal_template()
-        else:
-            # Extract preamble from template and combine with minimal content
-            template_content = self._extract_and_minimize_template(template_content)
-        
-        # Write template to file
-        try:
-            with open(abs_path, 'w', encoding='utf-8') as f:
-                f.write(template_content)
-            self.io.tool_output(f"Initialized {abs_path} with minimal compilable environment.")
-            self.io.tool_output("\nContent includes:")
-            self.io.tool_output("  - Document class and essential packages")
-            self.io.tool_output("  - One equation example")
-            self.io.tool_output("  - One table example")
-            self.io.tool_output("  - One figure example (with placeholder)")
-        except Exception as e:
-            self.io.tool_error(f"Error writing file: {e}")
+        self.io.tool_output("")
+        self.io.tool_output(f"Project initialized successfully: {project_dir}")
+        self.io.tool_output("")
+        self.io.tool_output("Next steps:")
+        self.io.tool_output(f"  cd {project_name}")
+        self.io.tool_output("  # Edit main.tex with your content")
+        self.io.tool_output("  # Compile with: latexmk -pdf main.tex")
 
     def _generate_minimal_template(self):
         """Generate minimal LaTeX template with one example of each environment."""
