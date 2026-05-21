@@ -2907,6 +2907,259 @@ Just show me the edits I need to make.
         except Exception as e:
             self.io.tool_error(f"Error creating template: {e}")
 
+
+    def _discover_templates(self):
+        """Discover templates from template/ directory."""
+        from pathlib import Path
+        
+        templates = {}
+        
+        # Try multiple locations for template directory
+        possible_paths = [
+            Path("template"),  # Relative to cwd
+            Path(self.coder.root) / "template" if hasattr(self, 'coder') and self.coder else None,
+            Path(__file__).parent.parent / "template",  # Relative to commands.py
+        ]
+        
+        template_dir = None
+        for path in possible_paths:
+            if path and path.exists():
+                template_dir = path
+                break
+        
+        if not template_dir:
+            return templates
+        
+        for item in template_dir.iterdir():
+            if item.is_dir():
+                # Look for .tex files in subdirectory
+                tex_files = list(item.glob("*.tex"))
+                if tex_files:
+                    # Use the first .tex file found
+                    templates[item.name] = str(tex_files[0])
+        
+        return templates
+
+    def cmd_init(self, args):
+        """Initialize a LaTeX file with minimal compilable environment.
+        
+        Usage: /init <filename.tex> [template_name]
+        
+        If the file exists, clears its content and replaces with a minimal compilable template.
+        If the file does not exist, creates a new file with the template.
+        Preserves one example of each environment type (equation, table, figure).
+        """
+        from pathlib import Path
+        
+        if not args:
+            self.io.tool_output("Usage: /init <filename.tex> [template_name]")
+            self.io.tool_output("")
+            self.io.tool_output("Initialize a LaTeX file with minimal compilable environment.")
+            self.io.tool_output("Creates new file or clears existing file with minimal template.")
+            self.io.tool_output("Preserves one example of each environment type (equation, table, figure).")
+            
+            # Show available templates from template/ directory
+            discovered = self._discover_templates()
+            if discovered:
+                self.io.tool_output("")
+                self.io.tool_output("Available templates from template/ directory:")
+                for name in sorted(discovered.keys()):
+                    self.io.tool_output(f"  {name}")
+            return
+        
+        parts = args.split()
+        filename = parts[0]
+        template_name = parts[1] if len(parts) > 1 else None
+        
+        # Resolve file path
+        if Path(filename).is_absolute():
+            abs_path = Path(filename)
+        else:
+            if self.coder.use_cwd:
+                abs_path = Path.cwd() / filename
+            else:
+                abs_path = Path(self.coder.root) / filename
+        
+        # Check if it's a .tex file
+        if not str(abs_path).endswith('.tex'):
+            self.io.tool_error(f"Not a .tex file: {abs_path}")
+            return
+        
+        # Create parent directories if they don't exist
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Determine template to use
+        template_content = None
+        
+        if template_name:
+            # Use specified template from template/ directory
+            discovered = self._discover_templates()
+            if template_name in discovered:
+                template_path = Path(discovered[template_name])
+                try:
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        template_content = f.read()
+                    self.io.tool_output(f"Using template: {template_name}")
+                except Exception as e:
+                    self.io.tool_error(f"Error reading template: {e}")
+                    return
+            else:
+                self.io.tool_error(f"Template '{template_name}' not found in template/ directory.")
+                return
+        
+        if template_content is None:
+            # Use default minimal template
+            template_content = self._generate_minimal_template()
+        else:
+            # Extract preamble from template and combine with minimal content
+            template_content = self._extract_and_minimize_template(template_content)
+        
+        # Write template to file
+        try:
+            with open(abs_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            self.io.tool_output(f"Initialized {abs_path} with minimal compilable environment.")
+            self.io.tool_output("\nContent includes:")
+            self.io.tool_output("  - Document class and essential packages")
+            self.io.tool_output("  - One equation example")
+            self.io.tool_output("  - One table example")
+            self.io.tool_output("  - One figure example (with placeholder)")
+        except Exception as e:
+            self.io.tool_error(f"Error writing file: {e}")
+
+    def _generate_minimal_template(self):
+        """Generate minimal LaTeX template with one example of each environment."""
+        return r"""\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{Title}
+\author{Author}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Section Title}
+
+Text content here.
+
+\subsection{Equation Example}
+
+\begin{equation}
+    E = mc^2
+\label{eq:example}
+\end{equation}
+
+\subsection{Table Example}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Table caption}
+    \label{tab:example}
+    \begin{tabular}{ccc}
+        \toprule
+        Column 1 & Column 2 & Column 3 \\
+        \midrule
+        Data 1 & Data 2 & Data 3 \\
+        Data 4 & Data 5 & Data 6 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Figure Example}
+
+\begin{figure}[htbp]
+    \centering
+    % Replace placeholder.png with your image file
+    \includegraphics[width=0.5\textwidth]{placeholder.png}
+    \caption{Figure caption}
+    \label{fig:example}
+\end{figure}
+
+\end{document}
+"""
+
+    def _extract_and_minimize_template(self, template_content):
+        """Extract preamble from template and combine with minimal content."""
+        import re
+        
+        # Extract everything before \begin{document}
+        preamble_match = re.search(r'(.*?\\begin\{document\})', template_content, re.DOTALL)
+        if not preamble_match:
+            # If no \begin{document} found, use default template
+            return self._generate_minimal_template()
+        
+        preamble = preamble_match.group(1)
+        
+        # Check if there's content after \begin{document} that we should preserve
+        # Look for \title, \author, \maketitle
+        title_match = re.search(r'(\\title(?:\[[^\]]*\])?\{[^}]+\})', template_content)
+        author_match = re.search(r'(\\author(?:\[[^\]]*\])?\{[^}]+\})', template_content)
+        
+        # Build minimal content
+        minimal_content = preamble + "\n"
+        
+        # Add title and author if found
+        if title_match:
+            minimal_content += "\n" + title_match.group(1)
+        else:
+            minimal_content += "\n\\title{Title}"
+        
+        if author_match:
+            minimal_content += "\n" + author_match.group(1)
+        else:
+            minimal_content += "\n\\author{Author}"
+        
+        minimal_content += "\n\\date{\\today}"
+        minimal_content += "\n"
+        minimal_content += "\n\\maketitle"
+        minimal_content += "\n"
+        minimal_content += "\n\\section{Section Title}"
+        minimal_content += "\n"
+        minimal_content += "\nText content here."
+        minimal_content += "\n"
+        minimal_content += "\n\\subsection{Equation Example}"
+        minimal_content += "\n"
+        minimal_content += "\n\\begin{equation}"
+        minimal_content += "\n    E = mc^2"
+        minimal_content += "\n\\label{eq:example}"
+        minimal_content += "\n\\end{equation}"
+        minimal_content += "\n"
+        minimal_content += "\n\\subsection{Table Example}"
+        minimal_content += "\n"
+        minimal_content += "\n\\begin{table}[htbp]"
+        minimal_content += "\n    \\centering"
+        minimal_content += "\n    \\caption{Table caption}"
+        minimal_content += "\n    \\label{tab:example}"
+        minimal_content += "\n    \\begin{tabular}{ccc}"
+        minimal_content += "\n        \\toprule"
+        minimal_content += "\n        Column 1 & Column 2 & Column 3 \\\\"
+        minimal_content += "\n        \\midrule"
+        minimal_content += "\n        Data 1 & Data 2 & Data 3 \\\\"
+        minimal_content += "\n        Data 4 & Data 5 & Data 6 \\\\"
+        minimal_content += "\n        \\bottomrule"
+        minimal_content += "\n    \\end{tabular}"
+        minimal_content += "\n\\end{table}"
+        minimal_content += "\n"
+        minimal_content += "\n\\subsection{Figure Example}"
+        minimal_content += "\n"
+        minimal_content += "\n\\begin{figure}[htbp]"
+        minimal_content += "\n    \\centering"
+        minimal_content += "\n    % Replace placeholder.png with your image file"
+        minimal_content += "\n    \\includegraphics[width=0.5\\textwidth]{placeholder.png}"
+        minimal_content += "\n    \\caption{Figure caption}"
+        minimal_content += "\n    \\label{fig:example}"
+        minimal_content += "\n\\end{figure}"
+        minimal_content += "\n"
+        minimal_content += "\n\\end{document}"
+        minimal_content += "\n"
+        
+        return minimal_content
+
     def cmd_wordcount(self, args):
         "Count words in LaTeX files"
         import re

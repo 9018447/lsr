@@ -1,115 +1,128 @@
-# Plan: Improve `/edit` Command — Naming, Counter, and `/mark` Command
+# /init 斜杠命令开发计划
 
 ## Context
 
-The current `/edit` command in `lsr/commands.py` creates temporary files for selected LaTeX sections, but:
-
-1. Temp files use random hash names (`lsr_edit_<random>.tex`) — impossible to tell which sections are inside
-2. There's no visual counter showing how many temp files have been created in the session
-3. There's no way to "mark" sections as completed to visually track editing progress
+用户需要一个 `/init` 斜杠命令，用于初始化 LaTeX 文件为最小可编译环境。该命令将：
+1. 创建新文件或清除现有文件内容
+2. 保留最小可编译环境（包含文档类、必要包、文档结构）
+3. 每种环境（公式、表格、图）保留一个实例
+4. 用占位符代替实际文件（如图片路径）
 
 ## Approach
 
-### 1. Rename Temp Files: `section_name_abc12345.tex`
+在 `lsr/commands.py` 中添加 `cmd_init` 方法，实现以下功能：
 
-Change `cmd_edit` to name temp files using sanitized section/subsection titles + short hash for deduplication.
+1. **文件处理**：检查文件是否为 `.tex` 文件，如果不存在则创建
+2. **内容解析**：提取现有文件的导言区（preamble）信息
+3. **生成最小环境**：创建包含以下内容的模板：
+   - 文档类声明（\documentclass）
+   - 常用包（amsmath, graphicx, booktabs 等）
+   - 文档结构（\begin{document}...\end{document}）
+   - 一个公式示例（equation 环境）
+   - 一个表格示例（table/tabular 环境）
+   - 一个图表示例（figure 环境，使用占位符路径）
+4. **文件写入**：将生成的内容写入文件
 
-**Naming formula:** `lsr_edit_<sanitized_title>_<hash8>.tex`
+## Files to modify
 
-Where `<sanitized_title>`:
-
-- Lowercase
-- Spaces → underscores
-- Strip LaTeX commands (e.g. `\textbf{foo}` → `foo`)
-- Strip non-alphanumeric/underscore chars
-- Truncate to 40 chars max
-- If multiple sections selected, join **first 2 titles** with `__`
-
-**Example:** `/edit paper.tex` selecting "Introduction" and "Methodology"
-→ `lsr_edit_introduction__methodology_a3f2b1c0.tex`
-
-### 2. Edit Counter Display
-
-Add a class-level counter `self.edit_session_count` on `Commands`. Each call to `cmd_edit` increments it and shows the count in the CLI output.
-
-**Display:** In the section listing header and summary:
-
-```
-╭─ Structure of paper.tex — Edit #3 ─╮
-```
-
-```
-✔ Ready to edit! (session #3)
-```
-
-**Reset behavior:** Counter resets on `/mark` and `/clear`.
-
-### 3. New `/mark` Command — Persistent Section Completion Tracking
-
-`/mark` requires user to specify which sections to mark. Marks are **persisted** to `~/.lsr/marks.json` so new sessions can reuse them.
-
-**Usage:**
-
-- `/mark <file.tex> 1,3` → marks sections 1 and 3 as done
-- `/mark <file.tex> all` → marks all sections in the file
-- `/mark --reset` → clears ALL marks across all files
-- `/mark --reset <file.tex>` → clears marks for a specific file
-
-**Display in section listing (marked = green ✓, still selectable):**
-
-```
-╭─ Structure of paper.tex ─╮
-   1. ✓ § Introduction [1-45]          ← marked (green)
-   2.   § Methodology [46-120]          ← unmarked
-   3.   § Results [121-200]             ← unmarked
-```
-
-**Side effects:** `/mark` also resets `edit_session_count` to 0.
-
-**Persistence format** (`~/.lsr/marks.json`):
-
-```json
-{
-  "/path/to/paper.tex": ["Introduction", "Results"],
-  "/path/to/chapter2.tex": ["Background"]
-}
-```
-
-## Files to Modify
-
-| File                | Change                                                                                                                                                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lsr/commands.py`   | `__init__` (counter + mark state), `cmd_edit` (naming + counter), `cmd_edit_done` (verify glob), `_parse_and_select_sections` (show ✓), new `cmd_mark`, `_load_marks`, `_save_marks`, `cmd_clear` (reset counter) |
-| `~/.lsr/marks.json` | Auto-created persistence file for marked sections                                                                                                                                                                 |
+- `lsr/commands.py`：添加 `cmd_init` 方法及相关辅助方法
 
 ## Reuse
 
-- Existing `_parse_and_select_sections()` (line 2080) — extend with marked-status display
-- Existing `cmd_edit()` hash computation (line 2218) — reuse for filename dedup
-- Existing `cmd_edit_done()` glob `lsr_edit_*.tex.session` (line 2279) — already handles arbitrary filenames
-- Existing `lsr_home = ~/.lsr/` directory pattern (line 2241) — store `marks.json` here alongside `tmp/`
+- 使用现有的 `parse_quoted_filenames` 函数解析文件参数
+- 参考 `cmd_template` 方法的实现模式
 
 ## Steps
 
-- [ ] Add `edit_session_count = 0` and `_last_edit_file = None` to `Commands.__init__()`
-- [ ] Create `_sanitize_filename(title)` helper — lowercase, strip LaTeX, spaces→underscores, truncate
-- [ ] Create `_load_marks()` / `_save_marks()` helpers using `~/.lsr/marks.json`
-- [ ] Modify `cmd_edit()` to build filename from first 2 section titles + hash instead of `tempfile.mkstemp`
-- [ ] Add edit counter increment and display in `cmd_edit()` output
-- [ ] Modify `_parse_and_select_sections()` to accept `marked_titles` param, show `✓` in green for marked sections
-- [ ] Implement `cmd_mark()` — parse `<file> <indices>`, persist marks, reset counter
-- [ ] Implement `/mark --reset` and `/mark --reset <file>` to clear persisted marks
-- [ ] Reset `edit_session_count` in `cmd_clear()`
-- [ ] Verify `cmd_edit_done()` still finds sessions (glob `lsr_edit_*.tex.session` unchanged)
-- [ ] Test persistence: marks survive across new lsr sessions
+- [x] Step 1: 在 `Commands` 类中添加 `cmd_init` 方法
+- [x] Step 2: 实现文件验证逻辑
+- [x] Step 3: 创建最小 LaTeX 模板生成函数
+- [x] Step 4: 实现内容清除和模板写入逻辑
+- [x] Step 5: 添加错误处理和用户反馈
+- [x] Step 6: 测试命令功能
+- [x] Step 7: 支持创建不存在的文件
 
 ## Verification
 
-1. `/edit paper.tex`, select sections → temp file named `lsr_edit_introduction__methodology_a3f2b1c0.tex`
-2. `/edit` again → counter shows `Edit #2`
-3. `/mark paper.tex 1,2` → sections 1,2 get `✓` in future listings, counter resets
-4. Restart lsr → marks still visible (persisted in `~/.lsr/marks.json`)
-5. `/mark --reset` → all marks cleared across all files
-6. `/edit-done` → changes merge back correctly with new filename format
-7. `/clear` → counter resets to 0
-8. Sections with special chars, spaces, LaTeX commands in titles produce clean filenames
+1. 创建一个测试 LaTeX 文件，包含复杂内容
+2. 运行 `/init test.tex`
+3. 验证生成的文件：
+   - 包含完整的导言区
+   - 包含一个公式、一个表格、一个图示例
+   - 使用占位符代替实际文件
+   - 可以成功编译（使用 xelatex）
+4. 测试创建不存在的文件
+5. 测试使用模板目录中的模板
+
+## Implementation Details
+
+### 模板内容结构
+
+```latex
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\title{Title}
+\author{Author}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Section Title}
+
+Text content here.
+
+\subsection{Equation Example}
+
+\begin{equation}
+    E = mc^2
+\label{eq:example}
+\end{equation}
+
+\subsection{Table Example}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Table caption}
+    \label{tab:example}
+    \begin{tabular}{ccc}
+        \toprule
+        Column 1 & Column 2 & Column 3 \\
+        \midrule
+        Data 1 & Data 2 & Data 3 \\
+        Data 4 & Data 5 & Data 6 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Figure Example}
+
+\begin{figure}[htbp]
+    \centering
+    % Replace placeholder.png with your image file
+    \includegraphics[width=0.5\textwidth]{placeholder.png}
+    \caption{Figure caption}
+    \label{fig:example}
+\end{figure}
+
+\end{document}
+```
+
+### 命令用法
+
+```
+/init filename.tex                    # 使用默认模板
+/init filename.tex wiley              # 使用 wiley 模板
+/init filename.tex template_name      # 使用指定模板
+```
+
+### 错误处理
+
+- 文件不是 .tex 文件：提示错误
+- 模板不存在：提示错误
+- 文件写入失败：提示错误
