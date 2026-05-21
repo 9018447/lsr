@@ -2503,8 +2503,8 @@ class Commands:
 
         Usage:
             /mark <file.tex>          Interactively select sections to mark as done
+            /mark --reset <file.tex>   Interactively select sections to unmark
             /mark --reset              Clear ALL marks across all files
-            /mark --reset <file.tex>   Clear marks for a specific file
         """
         args = args.strip()
 
@@ -2512,38 +2512,93 @@ class Commands:
         if args.startswith("--reset"):
             rest = args[7:].strip()  # everything after '--reset'
             marks = self._load_marks()
+            
             if rest:
-                # /mark --reset <file.tex>
+                # /mark --reset <file.tex> — interactive unmark
                 filename = rest
                 abs_path = self.coder.abs_root_path(filename)
+                
+                # Check if file has any marks
+                if abs_path not in marks or not marks[abs_path]:
+                    self.io.tool_output(f"No marks found for {filename}")
+                    return
+                
+                # Use interactive selection for unmarking
+                result = self._parse_and_select_sections(rest, action_verb="unmark")
+                if result is None:
+                    return
+                
+                abs_path, filename, items, selected_items = result
+                
+                # Remove selected sections from marks
                 if abs_path in marks:
-                    del marks[abs_path]
-                self._save_marks(marks)
-                # Also reset edit counts for this file
-                counts = self._load_edit_counts()
-                if abs_path in counts:
-                    del counts[abs_path]
-                    self._save_edit_counts(counts)
-                self.io.tool_output(
-                    f"\n\u001b[32m\u2714 Cleared marks for {filename}\u001b[0m"
-                )
+                    unmarked_names = []
+                    for _, title, _, _, _ in selected_items:
+                        if title in marks[abs_path]:
+                            marks[abs_path].discard(title)
+                            unmarked_names.append(title)
+                    
+                    # Clean up empty entries
+                    if not marks[abs_path]:
+                        del marks[abs_path]
+                    self._save_marks(marks)
+                    
+                    # Also reset edit counts for unmarked sections
+                    counts = self._load_edit_counts()
+                    if abs_path in counts:
+                        for title in unmarked_names:
+                            counts[abs_path].pop(title, None)
+                        if not counts[abs_path]:
+                            del counts[abs_path]
+                        self._save_edit_counts(counts)
+                    
+                    # Show what was unmarked
+                    self.io.tool_output(
+                        f"\n\u001b[32m\u2714 Unmarked {len(unmarked_names)} section(s) in {filename}:\u001b[0m"
+                    )
+                    for t in unmarked_names:
+                        self.io.tool_output(f"  \u001b[31m\u2717\u001b[0m {t}")
+                else:
+                    self.io.tool_output(f"No marks found for {filename}")
             else:
-                # /mark --reset (clear all)
-                self._save_marks({})
-                self._save_edit_counts({})
-                self.io.tool_output(
-                    "\n\u001b[32m\u2714 Cleared ALL marks across all files\u001b[0m"
-                )
+                # /mark --reset (clear all) — ask for confirmation
+                total_marks = sum(len(v) for v in marks.values())
+                if total_marks == 0:
+                    self.io.tool_output("No marks to clear.")
+                    return
+                
+                file_count = len(marks)
+                self.io.tool_output(f"\nThis will clear {total_marks} mark(s) across {file_count} file(s).")
+                confirm = input("Are you sure? (y/N): ")
+                
+                if confirm.lower() == 'y':
+                    self._save_marks({})
+                    self._save_edit_counts({})
+                    self.io.tool_output(
+                        "\n\u001b[32m\u2714 Cleared ALL marks across all files\u001b[0m"
+                    )
+                else:
+                    self.io.tool_output("Cancelled.")
             return
 
         # /mark <file.tex> — interactive selection (same UI as /edit)
         if not args:
             self.io.tool_output("Usage:")
             self.io.tool_output(
-                "  /mark <file.tex>      Interactively mark sections as done"
+                "  /mark <file.tex>          Interactively mark sections as done"
             )
-            self.io.tool_output("  /mark --reset         Clear ALL marks")
-            self.io.tool_output("  /mark --reset <file>  Clear marks for a file")
+            self.io.tool_output(
+                "  /mark --reset <file.tex>  Interactively unmark sections"
+            )
+            self.io.tool_output("  /mark --reset            Clear ALL marks (with confirmation)")
+            
+            # Show current marks summary
+            marks = self._load_marks()
+            if marks:
+                self.io.tool_output("\nCurrent marks:")
+                for fpath, titles in sorted(marks.items()):
+                    fname = os.path.basename(fpath)
+                    self.io.tool_output(f"  {fname}: {len(titles)} section(s)")
             return
 
         result = self._parse_and_select_sections(args, action_verb="mark")
