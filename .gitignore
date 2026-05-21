@@ -68,3 +68,7 @@ CNAME
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# Plan and implementation docs
+PLAN.md
+IMPLEMENTATION_SUMMARY.md
