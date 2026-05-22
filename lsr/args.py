@@ -356,34 +356,34 @@ def get_parser(default_config_files, git_root):
     group.add_argument(
         "--completion-menu-color",
         metavar="COLOR",
-        default=None,
-        help="Set the color for the completion menu (default: terminal's default text color)",
+        default="#e0e0e0",
+        help="Set the color for the completion menu (default: #e0e0e0)",
     )
     group.add_argument(
         "--completion-menu-bg-color",
         metavar="COLOR",
-        default=None,
+        default="#3a3a3a",
         help=(
-            "Set the background color for the completion menu (default: terminal's default"
-            " background color)"
+            "Set the background color for the completion menu (default: #3a3a3a"
+            " — dark gray background)"
         ),
     )
     group.add_argument(
         "--completion-menu-current-color",
         metavar="COLOR",
-        default=None,
+        default="#00e5ff",
         help=(
-            "Set the color for the current item in the completion menu (default: terminal's default"
-            " background color)"
+            "Set the color for the current item in the completion menu (default:"
+            " #00e5ff — bright cyan)"
         ),
     )
     group.add_argument(
         "--completion-menu-current-bg-color",
         metavar="COLOR",
-        default=None,
+        default="#2a2a2a",
         help=(
             "Set the background color for the current item in the completion menu (default:"
-            " terminal's default text color)"
+            " #2a2a2a — darker gray)"
         ),
     )
     group.add_argument(
@@ -804,7 +804,6 @@ def get_parser(default_config_files, git_root):
             f" {', '.join(supported_shells_list)}. Example: lsr --shell-completions bash"
         ),
     )
-
 
     return parser
 

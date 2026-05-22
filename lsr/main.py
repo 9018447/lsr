@@ -484,6 +484,10 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         args.tool_warning_color = "#FFFF00"
         args.assistant_output_color = "#00FFFF"
         args.code_theme = "monokai"
+        args.completion_menu_color = "#e0e0e0"
+        args.completion_menu_bg_color = "#3a3a3a"
+        args.completion_menu_current_color = "#00e5ff"
+        args.completion_menu_current_bg_color = "#2a2a2a"
 
     if args.light_mode:
         args.user_input_color = "green"
@@ -491,6 +495,10 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         args.tool_warning_color = "#FFA500"
         args.assistant_output_color = "blue"
         args.code_theme = "default"
+        args.completion_menu_color = "#1a1a1a"
+        args.completion_menu_bg_color = "#c8c8c8"
+        args.completion_menu_current_color = "#005577"
+        args.completion_menu_current_bg_color = "#a0a0a0"
 
     if return_coder and args.yes_always is None:
         args.yes_always = True
@@ -581,7 +589,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             "--openai-organization-id is deprecated, use --set-env OPENAI_ORGANIZATION=<value>"
         )
         os.environ["OPENAI_ORGANIZATION"] = args.openai_organization_id
-
 
     if args.verbose:
         for fname in loaded_dotenvs:
