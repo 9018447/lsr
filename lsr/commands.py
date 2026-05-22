@@ -16,13 +16,13 @@ from prompt_toolkit.document import Document
 
 from lsr import models, prompts
 from lsr.editor import pipe_editor
+
 from lsr.format_settings import format_settings
 from lsr.help import Help, install_help_extra
 from lsr.io import CommandCompletionException
 from lsr.llm import litellm
 from lsr.repo import ANY_GIT_ERROR
 from lsr.run_cmd import run_cmd
-from lsr.scrape import Scraper, install_playwright
 from lsr.utils import is_image_file
 
 from .dump import dump  # noqa: F401
@@ -35,7 +35,6 @@ class SwitchCoder(Exception):
 
 
 class Commands:
-    scraper = None
 
     def clone(self):
         return Commands(
@@ -188,41 +187,6 @@ class Commands:
         else:
             self.io.tool_output("Please provide a partial model name to search for.")
 
-    def cmd_web(self, args, return_content=False):
-        "Scrape a webpage, convert to markdown and send in a message"
-
-        url = args.strip()
-        if not url:
-            self.io.tool_error("Please provide a URL to scrape.")
-            return
-
-        self.io.tool_output(f"Scraping {url}...")
-        if not self.scraper:
-            disable_playwright = getattr(self.args, "disable_playwright", False)
-            if disable_playwright:
-                res = False
-            else:
-                res = install_playwright(self.io)
-                if not res:
-                    self.io.tool_warning("Unable to initialize playwright.")
-
-            self.scraper = Scraper(
-                print_error=self.io.tool_error,
-                playwright_available=res,
-                verify_ssl=self.verify_ssl,
-            )
-
-        content = self.scraper.scrape(url) or ""
-        content = f"Here is the content of {url}:\n\n" + content
-        if return_content:
-            return content
-
-        self.io.tool_output("... added to chat.")
-
-        self.coder.cur_messages += [
-            dict(role="user", content=content),
-            dict(role="assistant", content="Ok."),
-        ]
 
     def is_command(self, inp):
         return inp[0] in "/!"
