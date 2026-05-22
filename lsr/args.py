@@ -14,7 +14,6 @@ from lsr.args_formatter import (
     MarkdownHelpFormatter,
     YamlHelpFormatter,
 )
-from lsr.deprecated import add_deprecated_model_args
 
 from .dump import dump  # noqa: F401
 
@@ -806,10 +805,6 @@ def get_parser(default_config_files, git_root):
         ),
     )
 
-    ##########
-    group = parser.add_argument_group("Deprecated model settings")
-    # Add deprecated model shortcut arguments
-    add_deprecated_model_args(parser, group)
 
     return parser
 
