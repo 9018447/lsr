@@ -1673,6 +1673,32 @@ class Commands:
             placeholder=placeholder,
         )
 
+    def _generic_chat_command_for_file(self, target_file, user_msg, edit_format):
+        """Like _generic_chat_command but targets a specific file for LLM edits.
+
+        Creates a coder with ONLY the target file in fnames, so the LLM
+        context is focused on that file. The file content is read automatically
+        by get_files_content() during format_messages().
+        """
+        from lsr.coders.base_coder import Coder
+
+        coder = Coder.create(
+            io=self.io,
+            from_coder=self.coder,
+            fnames=[target_file],
+            edit_format=edit_format,
+            summarize_from_coder=False,
+        )
+
+        coder.run(user_msg)
+
+        raise SwitchCoder(
+            edit_format=self.coder.edit_format,
+            summarize_from_coder=False,
+            from_coder=coder,
+            show_announcements=False,
+        )
+
     def get_help_md(self):
         "Show help about all commands in markdown"
 
@@ -2322,22 +2348,13 @@ class Commands:
         self.io.tool_output("  1. Ask LLM to edit the sections")
         self.io.tool_output("  2. Run /edit-done to merge changes back")
 
-    def cmd_edit_done(self, args=""):
-        """Merge edited sections back to original file."""
-        import glob
+    def _merge_sections_from_session(self, session_file):
+        """Merge sections from a session file back to the original file.
+
+        Shared logic for /edit-done, /expand-done, /translate-done, /condense-done.
+        """
         import json
         import re
-
-        # Find session files
-        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        session_files = glob.glob(os.path.join(lsr_home, "lsr_edit_*.tex.session"))
-
-        if not session_files:
-            self.io.tool_error("No edit session found. Use /edit first.")
-            return
-
-        # Use the most recent session
-        session_file = max(session_files, key=os.path.getmtime)
 
         with open(session_file, encoding="utf-8") as f:
             session = json.load(f)
@@ -2346,7 +2363,7 @@ class Commands:
         tmp_file = session_file.replace(".session", "")
 
         if not os.path.exists(tmp_file):
-            self.io.tool_error(f"Edit file not found: {tmp_file}")
+            self.io.tool_error(f"Preview file not found: {tmp_file}")
             return
 
         # Read edited temp file
@@ -2363,7 +2380,6 @@ class Commands:
             m = hash_pattern.search(line)
             if m:
                 if current_hash and current_lines:
-                    # Remove trailing empty lines
                     while current_lines and not current_lines[-1].strip():
                         current_lines.pop()
                     edited_sections[current_hash] = "\n".join(current_lines)
@@ -2372,7 +2388,6 @@ class Commands:
             elif current_hash:
                 current_lines.append(line)
 
-        # Handle last section
         if current_hash and current_lines:
             while current_lines and not current_lines[-1].strip():
                 current_lines.pop()
@@ -2414,10 +2429,156 @@ class Commands:
         if tmp_file in self.coder.abs_fnames:
             self.coder.abs_fnames.remove(tmp_file)
 
+        action = session.get("action", "edit")
         self.io.tool_output(
             f"\n\u001b[32m\u2714 Merged {replaced_count} section(s) back to:\u001b[0m"
         )
         self.io.tool_output(f"   {original_file}")
+
+    def _done_command(self, action_verb):
+        """Shared merge-back logic for /{action}-done commands."""
+        import glob
+
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        pattern = os.path.join(lsr_home, f"lsr_{action_verb}_*.tex.session")
+        session_files = glob.glob(pattern)
+
+        if not session_files:
+            self.io.tool_error(f"No {action_verb} session found. Use /{action_verb} first.")
+            return
+
+        session_file = max(session_files, key=os.path.getmtime)
+        self._merge_sections_from_session(session_file)
+
+    def cmd_edit_done(self, args=""):
+        """Merge edited sections back to original file."""
+        import glob
+
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_edit_*.tex.session"))
+
+        if not session_files:
+            self.io.tool_error("No edit session found. Use /edit first.")
+            return
+
+        session_file = max(session_files, key=os.path.getmtime)
+        self._merge_sections_from_session(session_file)
+
+    def cmd_expand_done(self, args=""):
+        "Apply expanded sections back to original file"
+        return self._done_command("expand")
+
+    def cmd_translate_done(self, args=""):
+        "Apply translated sections back to original file"
+        return self._done_command("translate")
+
+    def cmd_condense_done(self, args=""):
+        "Apply condensed sections back to original file"
+        return self._done_command("condense")
+
+    def cmd_note_done(self, args=""):
+        "Apply note-reviewed sections back to original file"
+        return self._done_command("note")
+
+    def cmd_renote(self, args=""):
+        "Re-open the note review HTML for an existing temp file"
+        import glob
+        import webbrowser
+
+        from lsr.note_html import generate_note_html
+        from lsr.note_server import NoteServer
+
+        # Find existing note session files
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        pattern = os.path.join(lsr_home, "lsr_note_*.tex.session")
+        session_files = glob.glob(pattern)
+
+        if not session_files:
+            self.io.tool_error("No note session found. Use /note first.")
+            return
+
+        # Use the most recent session
+        session_file = max(session_files, key=os.path.getmtime)
+
+        import json
+        with open(session_file, encoding="utf-8") as f:
+            session = json.load(f)
+
+        tmp_file = session_file.replace(".session", "")
+        if not os.path.exists(tmp_file):
+            self.io.tool_error(f"Preview file not found: {tmp_file}")
+            return
+
+        original_file = session.get("original_file", "unknown.tex")
+        filename = os.path.basename(original_file)
+
+        # Read temp file and extract text for HTML
+        with open(tmp_file, encoding="utf-8") as f:
+            content = f.read()
+
+        # Parse sections from temp file
+        from lsr.latex_tools import extract_text_environments
+        paragraphs = []
+        import re
+        hash_pattern = re.compile(r"% === (.*?): (.*?) \(hash: (\w+)\) ===")
+        current_section = None
+        current_lines = []
+
+        for line in content.split("\n"):
+            m = hash_pattern.search(line)
+            if m:
+                if current_section and current_lines:
+                    section_content = "\n".join(current_lines)
+                    paras = extract_text_environments([(current_section, current_section, 0, 0, section_content)])
+                    paragraphs.extend(paras)
+                current_section = m.group(2)
+                current_lines = []
+            elif current_section and not line.startswith("%"):
+                current_lines.append(line)
+
+        if current_section and current_lines:
+            section_content = "\n".join(current_lines)
+            paras = extract_text_environments([(current_section, current_section, 0, 0, section_content)])
+            paragraphs.extend(paras)
+
+        if not paragraphs:
+            self.io.tool_error("No text content found in temp file.")
+            return
+
+        # Generate HTML and start server
+        html_path = generate_note_html(filename, paragraphs, port=0)
+        server = NoteServer(html_path)
+        server.start()
+
+        # Re-generate with actual port
+        html_path = generate_note_html(filename, paragraphs, port=server.port)
+        server.html_path = html_path
+
+        url = f"http://localhost:{server.port}"
+        self.io.tool_output(f"\nRe-opening note review in browser...")
+        self.io.tool_output(f"URL: {url}")
+        webbrowser.open(url)
+
+        # Wait for response (approve/cancel)
+        comments = server.wait_for_response(timeout=300)
+
+        if comments is None:
+            self.io.tool_output("Note cancelled or timed out.")
+            return
+
+        comment_list = comments.get("comments", [])
+        if not comment_list:
+            self.io.tool_output("No comments to process.")
+            return
+
+        user_msg = self._format_note_prompt(comments)
+        self.io.tool_output(f"\nProcessing {len(comment_list)} comment(s)...")
+        self.io.tool_output(f"\nNext steps:")
+        self.io.tool_output(f"  1. LLM will edit the preview file")
+        self.io.tool_output(f"  2. Run /note-done to merge changes back")
+        return self._generic_chat_command_for_file(
+            tmp_file, user_msg, self.coder.main_model.edit_format
+        )
 
     def cmd_mark(self, args=""):
         """Mark LaTeX sections as completed (persisted across sessions).
@@ -2557,20 +2718,81 @@ class Commands:
     def _run_section_command(self, args, action_verb, prompt_template):
         """Shared implementation for /expand, /condense, /translate commands.
 
-        Selects sections, formats the prompt, and sends it to the LLM via the
-        editblock coder so that SEARCH/REPLACE blocks are applied automatically.
+        Selects sections, writes them to a temp file with hash markers,
+        saves a session file, then sends the LLM to edit the temp file.
+        User reviews with /{action_verb}-done to merge back.
         """
+        import hashlib
+
         result = self._parse_and_select_sections(args, action_verb=action_verb)
         if result is None:
             return
 
         abs_path, filename, items, selected_items = result
 
-        # Ensure the file is in the coder's editable set
-        if abs_path not in self.coder.abs_fnames:
-            self.coder.abs_fnames.add(abs_path)
+        # Build session data and temp file content
+        session_data = {
+            "action": action_verb,
+            "original_file": abs_path,
+            "sections": [],
+        }
 
-        # Build combined content from selected sections
+        tmp_content = [
+            f"% LSR {action_verb.capitalize()} File",
+            f"% The sections below will be {action_verb}d. Run /{action_verb}-done to apply.",
+            "",
+        ]
+
+        section_titles = []
+        for item_type, title, start, end, item_content in selected_items:
+            h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
+            section_titles.append(title)
+
+            session_data["sections"].append(
+                {
+                    "hash": h,
+                    "type": item_type,
+                    "title": title,
+                    "start_line": start,
+                    "end_line": end,
+                    "original_content": item_content,
+                }
+            )
+
+            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            tmp_content.append(item_content)
+            tmp_content.append("")
+
+        # Build descriptive filename
+        name_parts = []
+        for t in section_titles[:2]:
+            sanitized = self._sanitize_filename(t)
+            if sanitized:
+                name_parts.append(sanitized)
+        descriptive = "__".join(name_parts) if name_parts else "section"
+        all_content = "\n".join(
+            item_content for _, _, _, _, item_content in selected_items
+        )
+        dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
+
+        # Write temp file to ~/.lsr/tmp/
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        os.makedirs(lsr_home, exist_ok=True)
+        tmp_filename = f"lsr_{action_verb}_{descriptive}_{dedup_hash}.tex"
+        tmp_path = os.path.join(lsr_home, tmp_filename)
+        tmp_path = os.path.abspath(tmp_path)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(tmp_content))
+
+        # Save session file
+        session_file = tmp_path + ".session"
+        with open(session_file, "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        # Add temp file to coder's editable list
+        self.coder.abs_fnames.add(tmp_path)
+
+        # Build prompt from selected content
         combined_sections = []
         for item_type, title, start, end, item_content in selected_items:
             combined_sections.append(
@@ -2578,8 +2800,6 @@ class Commands:
                 f"{item_content}"
             )
         combined_content = "\n\n".join(combined_sections)
-
-        # Format the prompt with the selected content
         user_msg = prompt_template.format(content=combined_content)
 
         # Inform the user
@@ -2589,8 +2809,11 @@ class Commands:
             f"section(s) from {filename}...\u001b[0m"
         )
 
-        # Send to the LLM via _generic_chat_command
-        return self._generic_chat_command(user_msg, self.coder.main_model.edit_format)
+        # Send LLM to edit the temp file (not the original)
+        return self._generic_chat_command_for_file(
+            tmp_path, user_msg, self.coder.main_model.edit_format
+        )
+
 
     def cmd_expand(self, args=""):
         "Expand LaTeX sections with richer scientific detail"
@@ -2603,6 +2826,163 @@ class Commands:
     def cmd_translate(self, args=""):
         "Translate LaTeX sections from Chinese to English (academic style)"
         return self._run_section_command(args, "translate", prompts.translate_prompt)
+
+    def cmd_note(self, args=""):
+        """Review LaTeX sections in browser with highlight and comments."""
+        import hashlib
+        import webbrowser
+
+        from lsr.latex_tools import extract_text_environments
+        from lsr.note_html import generate_note_html
+        from lsr.note_server import NoteServer
+
+        # 1. Interactive section selection
+        result = self._parse_and_select_sections(args, action_verb="note")
+        if result is None:
+            return
+
+        abs_path, filename, items, selected_items = result
+
+        # 2. Create temp file with selected sections (like /expand does)
+        session_data = {
+            "action": "note",
+            "original_file": abs_path,
+            "sections": [],
+        }
+
+        tmp_content = [
+            "% LSR Note File",
+            "% Review and add comments in the browser, then run /note-done to apply.",
+            "",
+        ]
+
+        section_titles = []
+        for item_type, title, start, end, item_content in selected_items:
+            h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
+            section_titles.append(title)
+
+            session_data["sections"].append({
+                "hash": h,
+                "type": item_type,
+                "title": title,
+                "start_line": start,
+                "end_line": end,
+                "original_content": item_content,
+            })
+
+            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            tmp_content.append(item_content)
+            tmp_content.append("")
+
+        # Build descriptive filename
+        name_parts = []
+        for t in section_titles[:2]:
+            sanitized = self._sanitize_filename(t)
+            if sanitized:
+                name_parts.append(sanitized)
+        descriptive = "__".join(name_parts) if name_parts else "section"
+        all_content = "\n".join(
+            item_content for _, _, _, _, item_content in selected_items
+        )
+        dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
+
+        # Write temp file
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        os.makedirs(lsr_home, exist_ok=True)
+        tmp_filename = f"lsr_note_{descriptive}_{dedup_hash}.tex"
+        tmp_path = os.path.join(lsr_home, tmp_filename)
+        tmp_path = os.path.abspath(tmp_path)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(tmp_content))
+
+        # Save session file
+        session_file = tmp_path + ".session"
+        with open(session_file, "w") as f:
+            json.dump(session_data, f, indent=2)
+
+        # Add temp file to coder's editable list
+        self.coder.abs_fnames.add(tmp_path)
+
+        # 3. Extract text environments for HTML preview
+        paragraphs = extract_text_environments(selected_items)
+        if not paragraphs:
+            self.io.tool_error("No text content found in selected sections.")
+            return
+
+        # 4. Generate HTML (port will be updated after server starts)
+        html_path = generate_note_html(filename, paragraphs, port=0)
+
+        # 5. Start local server
+        server = NoteServer(html_path)
+        server.start()
+
+        # 6. Re-generate HTML with actual port
+        html_path = generate_note_html(filename, paragraphs, port=server.port)
+        server.html_path = html_path
+
+        # 7. Open browser
+        url = f"http://localhost:{server.port}"
+        self.io.tool_output(f"\n\u001b[32m\u2714 Note review ready!\u001b[0m")
+        self.io.tool_output(f"\u001b[36m\u250c\u2500 Preview file:\u001b[0m {tmp_path}")
+        self.io.tool_output(f"\u001b[36m\u2514\u2500 Original:\u001b[0m     {filename}")
+        self.io.tool_output(f"\nOpening browser at {url}")
+        self.io.tool_output("Add comments in the browser, then click Approve.")
+        webbrowser.open(url)
+
+        # 8. Wait for response
+        comments = server.wait_for_response(timeout=300)
+
+        if comments is None:
+            self.io.tool_output("Note cancelled or timed out.")
+            return
+
+        # 9. Format comments as prompt and send LLM to edit temp file
+        comment_list = comments.get("comments", [])
+        if not comment_list:
+            self.io.tool_output("No comments to process.")
+            return
+
+        user_msg = self._format_note_prompt(comments)
+        self.io.tool_output(f"\nProcessing {len(comment_list)} comment(s)...")
+        self.io.tool_output(f"\nNext steps:")
+        self.io.tool_output(f"  1. LLM will edit the preview file")
+        self.io.tool_output(f"  2. Run /note-done to merge changes back to {filename}")
+
+        # Use _generic_chat_command_for_file (same as /expand)
+        # The coder will automatically read the temp file via get_files_content()
+        return self._generic_chat_command_for_file(
+            tmp_path, user_msg, self.coder.main_model.edit_format
+        )
+
+    def _format_note_prompt(self, comments):
+        """Format note comments into an LLM prompt.
+
+        The LLM will see this prompt along with the temp file content.
+        We include the highlighted text so the LLM can locate the right paragraph.
+        """
+        lines = [
+            "Please revise the following LaTeX paragraphs based on review comments.",
+            "The file content is in the chat context. Find each paragraph by matching the quoted text below, then apply the suggested changes.\n"
+        ]
+
+        for i, comment in enumerate(comments.get("comments", []), 1):
+            section = comment.get("section", "Unknown")
+            highlight = comment.get("highlight", "")
+            text = comment.get("text", "")
+
+            lines.append(f"### Comment {i} — Section: {section}")
+            if highlight:
+                # Show first 150 chars of the highlighted text so LLM can locate it
+                lines.append(f"Find this text:")
+                lines.append(f"> {highlight[:150]}{'...' if len(highlight) > 150 else ''}")
+            lines.append(f"Change requested: {text}")
+            lines.append("")
+
+        lines.append(
+            "Please use SEARCH/REPLACE blocks to modify only the paragraphs with comments. "
+            "Maintain academic style, LaTeX formatting, and math formulas."
+        )
+        return "\n".join(lines)
 
     def cmd_open(self, args=""):
         "Open a file in neovim in a new terminal window"
