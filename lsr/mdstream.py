@@ -3,11 +3,9 @@
 import io
 import time
 
-from rich import box
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import CodeBlock, Heading, Markdown
-from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
@@ -50,31 +48,39 @@ The end.
 
 
 class NoInsetCodeBlock(CodeBlock):
-    """A code block with syntax highlighting and no padding."""
+    """A code block with syntax highlighting and no padding.
+    Uses monokai theme with default terminal background."""
 
     def __rich_console__(self, console, options):
         code = str(self.text).rstrip()
-        syntax = Syntax(code, self.lexer_name, theme=self.theme, word_wrap=True, padding=(1, 0))
+        syntax = Syntax(
+            code,
+            self.lexer_name,
+            theme="monokai",
+            word_wrap=True,
+            padding=(1, 0),
+            background_color="default",
+        )
         yield syntax
 
 
 class LeftHeading(Heading):
-    """A heading class that renders left-justified."""
+    """A heading class that renders left-justified with subtle styling."""
 
     def __rich_console__(self, console, options):
         text = self.text
-        text.justify = "left"  # Override justification
+        text.justify = "left"
         if self.tag == "h1":
-            # Draw a border around h1s, but keep text left-aligned
-            yield Panel(
-                text,
-                box=box.HEAVY,
-                style="markdown.h1.border",
-            )
+            # Simple bold text with a subtle underline separator
+            text.stylize("bold")
+            yield text
+            yield Text("\u2500" * min(console.width or 80, 80))
+        elif self.tag == "h2":
+            text.stylize("bold")
+            yield Text("")  # blank line before h2
+            yield text
         else:
-            # Styled text for h2 and beyond
-            if self.tag == "h2":
-                yield Text("")  # Keep the blank line before h2
+            text.stylize("bold")
             yield text
 
 

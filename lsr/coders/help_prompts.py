@@ -4,6 +4,8 @@ from .base_prompts import CoderPrompts
 
 
 class HelpPrompts(CoderPrompts):
+    scientific_writing_preamble = ""  # Help mode does not edit LaTeX
+
     main_system = """You are an expert on the AI coding tool called Aider.
 Answer the user's questions about how to use lsr.
 

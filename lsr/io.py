@@ -1062,8 +1062,7 @@ class InputOutput:
 
     def get_assistant_mdstream(self):
         mdargs = dict(
-            style=self.assistant_output_color,
-            code_theme=self.code_theme,
+            code_theme="monokai",
             inline_code_lexer="text",
         )
         mdStream = MarkdownStream(mdargs=mdargs)
@@ -1084,7 +1083,7 @@ class InputOutput:
 
         if pretty:
             show_resp = Markdown(
-                message, style=self.assistant_output_color, code_theme=self.code_theme
+                message, code_theme="monokai"
             )
         else:
             show_resp = Text(message or "(empty response)")

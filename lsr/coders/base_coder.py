@@ -1249,8 +1249,16 @@ class Coder:
         user_lang = self.get_user_language()
         if user_lang:
             # For Chinese users: communicate in Simplified Chinese, write LaTeX in academic English
-            if user_lang.lower() in ("chinese", "simplified chinese", "chinese (simplified)",
-                                      "中文", "简体中文", "zh", "zh-cn", "zh_hans"):
+            if user_lang.lower() in (
+                "chinese",
+                "simplified chinese",
+                "chinese (simplified)",
+                "中文",
+                "简体中文",
+                "zh",
+                "zh-cn",
+                "zh_hans",
+            ):
                 final_reminders.append(
                     "Always reply to the user in Simplified Chinese (简体中文).\n"
                     "When writing or editing LaTeX content, match the original language: "
@@ -1308,6 +1316,11 @@ class Coder:
     def format_chat_chunks(self):
         self.choose_fence()
         main_sys = self.fmt_system_prompt(self.gpt_prompts.main_system)
+
+        # Inject scientific writing + anti-AI standards as system-level preamble
+        if getattr(self.gpt_prompts, "scientific_writing_preamble", None):
+            main_sys = self.gpt_prompts.scientific_writing_preamble + "\n\n" + main_sys
+
         # Inject current plan context when not in plan mode
         if (
             getattr(self, "current_plan", None)
