@@ -247,7 +247,6 @@ class Commands:
 
     def run(self, inp):
         if inp.startswith("!"):
-            self.coder.event("command_run")
             return self.do_run("run", inp[1:])
 
         res = self.matching_commands(inp)
@@ -256,11 +255,9 @@ class Commands:
         matching_commands, first_word, rest_inp = res
         if len(matching_commands) == 1:
             command = matching_commands[0][1:]
-            self.coder.event(f"command_{command}")
             return self.do_run(command, rest_inp)
         elif first_word in matching_commands:
             command = first_word[1:]
-            self.coder.event(f"command_{command}")
             return self.do_run(command, rest_inp)
         elif len(matching_commands) > 1:
             self.io.tool_error(f"Ambiguous command: {', '.join(matching_commands)}")
@@ -1435,7 +1432,6 @@ class Commands:
 
     def cmd_exit(self, args):
         "Exit the application"
-        self.coder.event("exit", reason="/exit")
         sys.exit()
 
     def cmd_quit(self, args):
@@ -1506,7 +1502,6 @@ class Commands:
             self.basic_help()
             return
 
-        self.coder.event("interactive help")
         from lsr.coders.base_coder import Coder
 
         if not self.help:
