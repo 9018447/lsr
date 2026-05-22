@@ -35,7 +35,6 @@ class SwitchCoder(Exception):
 
 
 class Commands:
-
     def clone(self):
         return Commands(
             self.io,
@@ -186,7 +185,6 @@ class Commands:
             models.print_matching_models(self.io, args)
         else:
             self.io.tool_output("Please provide a partial model name to search for.")
-
 
     def is_command(self, inp):
         return inp[0] in "/!"
@@ -2032,6 +2030,77 @@ class Commands:
         if user_input.strip():
             self.io.set_placeholder(user_input.rstrip())
 
+    def _find_tex_files(self):
+        """Find .tex files from the coder's tracked files or the working directory."""
+        candidates = []
+
+        # 1. From currently tracked files (abs_fnames + abs_read_only_fnames)
+        for fpath in self.coder.abs_fnames | self.coder.abs_read_only_fnames:
+            if fpath.endswith(".tex"):
+                try:
+                    candidates.append(self.coder.get_rel_fname(fpath))
+                except Exception:
+                    candidates.append(os.path.basename(fpath))
+
+        # 2. From git tracked files
+        if not candidates and self.coder.repo:
+            try:
+                for f in self.coder.repo.get_tracked_files():
+                    if f.endswith(".tex"):
+                        candidates.append(f)
+            except Exception:
+                pass
+
+        # 3. From current working directory
+        if not candidates:
+            for f in os.listdir("."):
+                if f.endswith(".tex") and not f.startswith("."):
+                    candidates.append(f)
+
+        return sorted(set(candidates))
+
+    def _select_session_interactive(self, session_files):
+        """Let the user interactively pick a session file (edit or note temp file).
+
+        Returns the selected session file path, or None if cancelled.
+        """
+        import time
+
+        # Sort newest first
+        sorted_files = sorted(session_files, key=os.path.getmtime, reverse=True)
+
+        self.io.tool_output(
+            "\n\u001b[1m\u250c\u2500 Available sessions \u2500\u2510\u001b[0m"
+        )
+        for i, sf in enumerate(sorted_files, 1):
+            mtime = os.path.getmtime(sf)
+            time_str = time.strftime("%H:%M:%S", time.localtime(mtime))
+            # Try to read session metadata for a richer display
+            try:
+                with open(sf, encoding="utf-8") as f:
+                    session = json.load(f)
+                original = os.path.basename(session.get("original_file", "unknown"))
+                action = session.get("action", "edit")
+                sections = len(session.get("sections", []))
+                self.io.tool_output(
+                    f"  {i}. \u001b[33m[{action}]\u001b[0m {original}"
+                    f" ({sections} sections) \u2014 {time_str}"
+                )
+            except Exception:
+                basename = os.path.basename(sf)
+                self.io.tool_output(f"  {i}. {basename} \u2014 {time_str}")
+
+        self.io.tool_output("  q. Cancel")
+        sel = input("\nSelect session: ")
+        if not sel or sel.lower() == "q":
+            return None
+        try:
+            idx = int(sel) - 1
+            return sorted_files[idx]
+        except (ValueError, IndexError):
+            self.io.tool_error("Invalid selection.")
+            return None
+
     def _parse_and_select_sections(self, args, action_verb="edit"):
         """Parse a .tex file's LaTeX structure and let the user interactively select sections.
 
@@ -2045,12 +2114,34 @@ class Commands:
         import re
 
         if not args:
-            self.io.tool_output(f"Usage: /{action_verb} <file.tex>")
-            self.io.tool_output("")
-            self.io.tool_output(
-                f"Interactively select LaTeX sections to {action_verb}."
-            )
-            return None
+            # Auto-sniff .tex files when no argument given
+            candidates = self._find_tex_files()
+            if len(candidates) == 1:
+                args = candidates[0]
+                self.io.tool_output(f"Auto-detected: {args}")
+            elif len(candidates) > 1:
+                self.io.tool_output(
+                    "\n\u001b[1m\u250c\u2500 .tex files \u2500\u2510\u001b[0m"
+                )
+                for i, f in enumerate(candidates, 1):
+                    self.io.tool_output(f"  {i}. {f}")
+                self.io.tool_output("  q. Cancel")
+                sel = input("\nSelect file: ")
+                if not sel or sel.lower() == "q":
+                    return None
+                try:
+                    idx = int(sel) - 1
+                    args = candidates[idx]
+                except (ValueError, IndexError):
+                    self.io.tool_error("Invalid selection.")
+                    return None
+            else:
+                self.io.tool_output(f"Usage: /{action_verb} <file.tex>")
+                self.io.tool_output("")
+                self.io.tool_output(
+                    f"Interactively select LaTeX sections to {action_verb}."
+                )
+                return None
 
         filename = args.strip()
         abs_path = self.coder.abs_root_path(filename)
@@ -2444,7 +2535,9 @@ class Commands:
         session_files = glob.glob(pattern)
 
         if not session_files:
-            self.io.tool_error(f"No {action_verb} session found. Use /{action_verb} first.")
+            self.io.tool_error(
+                f"No {action_verb} session found. Use /{action_verb} first."
+            )
             return
 
         session_file = max(session_files, key=os.path.getmtime)
@@ -2477,108 +2570,20 @@ class Commands:
         return self._done_command("condense")
 
     def cmd_note_done(self, args=""):
-        "Apply note-reviewed sections back to original file"
-        return self._done_command("note")
+        "Deprecated: use /edit-done instead."
+        self.io.tool_output(
+            "\u001b[33m/note-done is deprecated. Use /edit-done instead.\u001b[0m"
+        )
+        return self.cmd_edit_done(args)
 
     def cmd_renote(self, args=""):
-        "Re-open the note review HTML for an existing temp file"
-        import glob
-        import webbrowser
-
-        from lsr.note_html import generate_note_html
-        from lsr.note_server import NoteServer
-
-        # Find existing note session files
-        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        pattern = os.path.join(lsr_home, "lsr_note_*.tex.session")
-        session_files = glob.glob(pattern)
-
-        if not session_files:
-            self.io.tool_error("No note session found. Use /note first.")
-            return
-
-        # Use the most recent session
-        session_file = max(session_files, key=os.path.getmtime)
-
-        import json
-        with open(session_file, encoding="utf-8") as f:
-            session = json.load(f)
-
-        tmp_file = session_file.replace(".session", "")
-        if not os.path.exists(tmp_file):
-            self.io.tool_error(f"Preview file not found: {tmp_file}")
-            return
-
-        original_file = session.get("original_file", "unknown.tex")
-        filename = os.path.basename(original_file)
-
-        # Read temp file and extract text for HTML
-        with open(tmp_file, encoding="utf-8") as f:
-            content = f.read()
-
-        # Parse sections from temp file
-        from lsr.latex_tools import extract_text_environments
-        paragraphs = []
-        import re
-        hash_pattern = re.compile(r"% === (.*?): (.*?) \(hash: (\w+)\) ===")
-        current_section = None
-        current_lines = []
-
-        for line in content.split("\n"):
-            m = hash_pattern.search(line)
-            if m:
-                if current_section and current_lines:
-                    section_content = "\n".join(current_lines)
-                    paras = extract_text_environments([(current_section, current_section, 0, 0, section_content)])
-                    paragraphs.extend(paras)
-                current_section = m.group(2)
-                current_lines = []
-            elif current_section and not line.startswith("%"):
-                current_lines.append(line)
-
-        if current_section and current_lines:
-            section_content = "\n".join(current_lines)
-            paras = extract_text_environments([(current_section, current_section, 0, 0, section_content)])
-            paragraphs.extend(paras)
-
-        if not paragraphs:
-            self.io.tool_error("No text content found in temp file.")
-            return
-
-        # Generate HTML and start server
-        html_path = generate_note_html(filename, paragraphs, port=0)
-        server = NoteServer(html_path)
-        server.start()
-
-        # Re-generate with actual port
-        html_path = generate_note_html(filename, paragraphs, port=server.port)
-        server.html_path = html_path
-
-        url = f"http://localhost:{server.port}"
-        self.io.tool_output(f"\nRe-opening note review in browser...")
-        self.io.tool_output(f"URL: {url}")
-        webbrowser.open(url)
-
-        # Wait for response (approve/cancel)
-        comments = server.wait_for_response(timeout=300)
-
-        if comments is None:
-            self.io.tool_output("Note cancelled or timed out.")
-            return
-
-        comment_list = comments.get("comments", [])
-        if not comment_list:
-            self.io.tool_output("No comments to process.")
-            return
-
-        user_msg = self._format_note_prompt(comments)
-        self.io.tool_output(f"\nProcessing {len(comment_list)} comment(s)...")
-        self.io.tool_output(f"\nNext steps:")
-        self.io.tool_output(f"  1. LLM will edit the preview file")
-        self.io.tool_output(f"  2. Run /note-done to merge changes back")
-        return self._generic_chat_command_for_file(
-            tmp_file, user_msg, self.coder.main_model.edit_format
+        """Deprecated: use /note instead. /note now handles both new and existing sessions."""
+        self.io.tool_output(
+            "\u001b[33m/renote is deprecated. Use /note instead.\u001b[0m"
+            "\n  /note          — list existing sessions and render in browser"
+            "\n  /note <file>   — select sections from a .tex file to review"
         )
+        return self.cmd_note(args)
 
     def cmd_mark(self, args=""):
         """Mark LaTeX sections as completed (persisted across sessions).
@@ -2594,24 +2599,24 @@ class Commands:
         if args.startswith("--reset"):
             rest = args[7:].strip()  # everything after '--reset'
             marks = self._load_marks()
-            
+
             if rest:
                 # /mark --reset <file.tex> — interactive unmark
                 filename = rest
                 abs_path = self.coder.abs_root_path(filename)
-                
+
                 # Check if file has any marks
                 if abs_path not in marks or not marks[abs_path]:
                     self.io.tool_output(f"No marks found for {filename}")
                     return
-                
+
                 # Use interactive selection for unmarking
                 result = self._parse_and_select_sections(rest, action_verb="unmark")
                 if result is None:
                     return
-                
+
                 abs_path, filename, items, selected_items = result
-                
+
                 # Remove selected sections from marks
                 if abs_path in marks:
                     unmarked_names = []
@@ -2619,12 +2624,12 @@ class Commands:
                         if title in marks[abs_path]:
                             marks[abs_path].discard(title)
                             unmarked_names.append(title)
-                    
+
                     # Clean up empty entries
                     if not marks[abs_path]:
                         del marks[abs_path]
                     self._save_marks(marks)
-                    
+
                     # Also reset edit counts for unmarked sections
                     counts = self._load_edit_counts()
                     if abs_path in counts:
@@ -2633,7 +2638,7 @@ class Commands:
                         if not counts[abs_path]:
                             del counts[abs_path]
                         self._save_edit_counts(counts)
-                    
+
                     # Show what was unmarked
                     self.io.tool_output(
                         f"\n\u001b[32m\u2714 Unmarked {len(unmarked_names)} section(s) in {filename}:\u001b[0m"
@@ -2648,12 +2653,14 @@ class Commands:
                 if total_marks == 0:
                     self.io.tool_output("No marks to clear.")
                     return
-                
+
                 file_count = len(marks)
-                self.io.tool_output(f"\nThis will clear {total_marks} mark(s) across {file_count} file(s).")
+                self.io.tool_output(
+                    f"\nThis will clear {total_marks} mark(s) across {file_count} file(s)."
+                )
                 confirm = input("Are you sure? (y/N): ")
-                
-                if confirm.lower() == 'y':
+
+                if confirm.lower() == "y":
                     self._save_marks({})
                     self._save_edit_counts({})
                     self.io.tool_output(
@@ -2672,8 +2679,10 @@ class Commands:
             self.io.tool_output(
                 "  /mark --reset <file.tex>  Interactively unmark sections"
             )
-            self.io.tool_output("  /mark --reset            Clear ALL marks (with confirmation)")
-            
+            self.io.tool_output(
+                "  /mark --reset            Clear ALL marks (with confirmation)"
+            )
+
             # Show current marks summary
             marks = self._load_marks()
             if marks:
@@ -2814,7 +2823,6 @@ class Commands:
             tmp_path, user_msg, self.coder.main_model.edit_format
         )
 
-
     def cmd_expand(self, args=""):
         "Expand LaTeX sections with richer scientific detail"
         return self._run_section_command(args, "expand", prompts.expand_prompt)
@@ -2827,8 +2835,151 @@ class Commands:
         "Translate LaTeX sections from Chinese to English (academic style)"
         return self._run_section_command(args, "translate", prompts.translate_prompt)
 
+    def _extract_paragraphs_from_temp(self, content):
+        """Parse paragraphs from a temp file's content (edit or note session).
+
+        The temp file uses `% === type: title (hash: xxx) ===` markers to
+        delimit sections.  This method extracts text environments from each
+        section for HTML rendering.
+
+        Returns a list of (section_title, env_name, text) tuples suitable
+        for generate_note_html().
+        """
+        from lsr.latex_tools import extract_text_environments
+
+        hash_pattern = re.compile(r"% === (.*?): (.*?) \(hash: (\w+)\) ===")
+        current_section = None
+        current_lines = []
+        paragraphs = []
+
+        for line in content.split("\n"):
+            m = hash_pattern.search(line)
+            if m:
+                if current_section and current_lines:
+                    section_content = "\n".join(current_lines)
+                    paras = extract_text_environments(
+                        [(current_section, current_section, 0, 0, section_content)]
+                    )
+                    paragraphs.extend(paras)
+                current_section = m.group(2)
+                current_lines = []
+            elif current_section and not line.startswith("%"):
+                current_lines.append(line)
+
+        if current_section and current_lines:
+            section_content = "\n".join(current_lines)
+            paras = extract_text_environments(
+                [(current_section, current_section, 0, 0, section_content)]
+            )
+            paragraphs.extend(paras)
+
+        return paragraphs
+
+    def _render_session_as_html(self, session_file):
+        """Render a session's temp file as HTML in the browser and process comments.
+
+        Shared by /note (no-args existing-session path) and /renote.
+        Opens the browser, waits for comments, then sends LLM edits.
+        """
+        import webbrowser
+
+        from lsr.note_html import generate_note_html
+        from lsr.note_server import NoteServer
+
+        with open(session_file, encoding="utf-8") as f:
+            session = json.load(f)
+
+        tmp_file = session_file.replace(".session", "")
+        if not os.path.exists(tmp_file):
+            self.io.tool_error(f"Preview file not found: {tmp_file}")
+            return
+
+        original_file = session.get("original_file", "unknown.tex")
+        filename = os.path.basename(original_file)
+
+        # Read temp file and extract paragraphs for HTML
+        with open(tmp_file, encoding="utf-8") as f:
+            content = f.read()
+
+        paragraphs = self._extract_paragraphs_from_temp(content)
+        if not paragraphs:
+            self.io.tool_error("No text content found in temp file.")
+            return
+
+        # Generate HTML and start server
+        html_path = generate_note_html(filename, paragraphs, port=0)
+        server = NoteServer(html_path)
+        server.start()
+
+        # Re-generate with actual port
+        html_path = generate_note_html(filename, paragraphs, port=server.port)
+        server.html_path = html_path
+
+        url = f"http://localhost:{server.port}"
+        self.io.tool_output("\n\u001b[32m\u2714 Opening note review...\u001b[0m")
+        self.io.tool_output(f"URL: {url}")
+        webbrowser.open(url)
+
+        # Wait for response (approve/cancel)
+        comments = server.wait_for_response(timeout=300)
+
+        if comments is None:
+            self.io.tool_output("Note cancelled or timed out.")
+            return
+
+        comment_list = comments.get("comments", [])
+        if not comment_list:
+            self.io.tool_output("No comments to process.")
+            return
+
+        user_msg = self._format_note_prompt(comments)
+        self.io.tool_output(f"\nProcessing {len(comment_list)} comment(s)...")
+        self.io.tool_output("\nNext steps:")
+        self.io.tool_output("  1. LLM will edit the preview file")
+        self.io.tool_output("  2. Run /note-done to merge changes back")
+        return self._generic_chat_command_for_file(
+            tmp_file, user_msg, self.coder.main_model.edit_format
+        )
+
+    def _get_chat_files(self):
+        """Return (editable_files, read_only_files) currently in the chat session."""
+        editable_files = list(self.coder.get_inchat_relative_files())
+        read_only_files = [
+            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
+        ]
+        return editable_files, read_only_files
+
+    def _select_file_interactive(self, all_files, header="Files in chat"):
+        """List files and let the user pick one. Returns rel_fname or None."""
+        self.io.tool_output(f"\n\u001b[1m\u250c\u2500 {header} \u2500\u2510\u001b[0m")
+        for idx, f in enumerate(all_files, 1):
+            self.io.tool_output(f"  {idx}. {f}")
+
+        self.io.tool_output("  q. Cancel")
+        sel = input("\nSelect file: ").strip()
+        if not sel or sel.lower() == "q":
+            return None
+        try:
+            idx = int(sel) - 1
+            if 0 <= idx < len(all_files):
+                return all_files[idx]
+        except ValueError:
+            pass
+        self.io.tool_error("Invalid selection.")
+        return None
+
     def cmd_note(self, args=""):
-        """Review LaTeX sections in browser with highlight and comments."""
+        """Review LaTeX file in browser with highlight and comments.
+
+        When called without arguments (like /open):
+          Lists files currently in the chat session.
+          - If the selected file is an edit temp file → renders it as HTML.
+          - If the selected file is a regular .tex → section selection → create temp → render.
+          If no files in chat, auto-triggers /edit (tex sniffing + section selection).
+        When called with <file.tex>:
+          Directly selects sections from that file → creates temp file → render HTML.
+        All temp files use /edit-done to merge back.
+        """
         import hashlib
         import webbrowser
 
@@ -2836,14 +2987,42 @@ class Commands:
         from lsr.note_html import generate_note_html
         from lsr.note_server import NoteServer
 
-        # 1. Interactive section selection
+        # --- No args: list files currently in chat (like /open) ---
+        if not args.strip():
+            editable_files, read_only_files = self._get_chat_files()
+            all_files = editable_files + read_only_files
+
+            if all_files:
+                # Interactive selection (like /open)
+                selected = self._select_file_interactive(
+                    all_files, header="Files in chat"
+                )
+                if selected is None:
+                    return
+
+                # Check if selected file is a temp file with .session
+                abs_path = self.coder.abs_root_path(selected)
+                session_file = abs_path + ".session"
+                if os.path.exists(session_file):
+                    return self._render_session_as_html(session_file)
+
+                # Regular .tex → fall through to section selection with this file
+                args = selected
+            else:
+                # No files in chat → auto-trigger /edit flow
+                self.io.tool_output(
+                    "\nNo files in chat. Select sections to create an edit session..."
+                )
+                # _parse_and_select_sections supports tex auto-sniffing when args is empty
+
+        # --- Section selection + temp file creation + HTML rendering ---
         result = self._parse_and_select_sections(args, action_verb="note")
         if result is None:
             return
 
         abs_path, filename, items, selected_items = result
 
-        # 2. Create temp file with selected sections (like /expand does)
+        # Build session data
         session_data = {
             "action": "note",
             "original_file": abs_path,
@@ -2851,8 +3030,8 @@ class Commands:
         }
 
         tmp_content = [
-            "% LSR Note File",
-            "% Review and add comments in the browser, then run /note-done to apply.",
+            "% LSR Edit File (created by /note)",
+            "% Review and add comments in the browser, then run /edit-done to apply.",
             "",
         ]
 
@@ -2861,14 +3040,16 @@ class Commands:
             h = hashlib.sha256(item_content.encode()).hexdigest()[:8]
             section_titles.append(title)
 
-            session_data["sections"].append({
-                "hash": h,
-                "type": item_type,
-                "title": title,
-                "start_line": start,
-                "end_line": end,
-                "original_content": item_content,
-            })
+            session_data["sections"].append(
+                {
+                    "hash": h,
+                    "type": item_type,
+                    "title": title,
+                    "start_line": start,
+                    "end_line": end,
+                    "original_content": item_content,
+                }
+            )
 
             tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
             tmp_content.append(item_content)
@@ -2886,10 +3067,10 @@ class Commands:
         )
         dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
 
-        # Write temp file
+        # Write temp file (use lsr_edit_ prefix so /edit-done can find it)
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_note_{descriptive}_{dedup_hash}.tex"
+        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
         with open(tmp_path, "w", encoding="utf-8") as f:
@@ -2903,40 +3084,33 @@ class Commands:
         # Add temp file to coder's editable list
         self.coder.abs_fnames.add(tmp_path)
 
-        # 3. Extract text environments for HTML preview
+        # Extract text environments for HTML preview
         paragraphs = extract_text_environments(selected_items)
         if not paragraphs:
             self.io.tool_error("No text content found in selected sections.")
             return
 
-        # 4. Generate HTML (port will be updated after server starts)
+        # Generate HTML, start server, open browser
         html_path = generate_note_html(filename, paragraphs, port=0)
-
-        # 5. Start local server
         server = NoteServer(html_path)
         server.start()
-
-        # 6. Re-generate HTML with actual port
         html_path = generate_note_html(filename, paragraphs, port=server.port)
         server.html_path = html_path
 
-        # 7. Open browser
         url = f"http://localhost:{server.port}"
-        self.io.tool_output(f"\n\u001b[32m\u2714 Note review ready!\u001b[0m")
+        self.io.tool_output("\n\u001b[32m\u2714 Note review ready!\u001b[0m")
         self.io.tool_output(f"\u001b[36m\u250c\u2500 Preview file:\u001b[0m {tmp_path}")
         self.io.tool_output(f"\u001b[36m\u2514\u2500 Original:\u001b[0m     {filename}")
         self.io.tool_output(f"\nOpening browser at {url}")
         self.io.tool_output("Add comments in the browser, then click Approve.")
         webbrowser.open(url)
 
-        # 8. Wait for response
+        # Wait for response
         comments = server.wait_for_response(timeout=300)
-
         if comments is None:
             self.io.tool_output("Note cancelled or timed out.")
             return
 
-        # 9. Format comments as prompt and send LLM to edit temp file
         comment_list = comments.get("comments", [])
         if not comment_list:
             self.io.tool_output("No comments to process.")
@@ -2944,15 +3118,21 @@ class Commands:
 
         user_msg = self._format_note_prompt(comments)
         self.io.tool_output(f"\nProcessing {len(comment_list)} comment(s)...")
-        self.io.tool_output(f"\nNext steps:")
-        self.io.tool_output(f"  1. LLM will edit the preview file")
-        self.io.tool_output(f"  2. Run /note-done to merge changes back to {filename}")
+        self.io.tool_output("\nNext steps:")
+        self.io.tool_output("  1. LLM will edit the preview file")
+        self.io.tool_output("  2. Run /edit-done to merge changes back")
 
-        # Use _generic_chat_command_for_file (same as /expand)
-        # The coder will automatically read the temp file via get_files_content()
         return self._generic_chat_command_for_file(
             tmp_path, user_msg, self.coder.main_model.edit_format
         )
+
+    def completions_note(self):
+        """Provide .tex file completions for /note command."""
+        return self.completions_edit()
+
+    def completions_renote(self):
+        """Completions for /renote (deprecated alias for /note)."""
+        return []
 
     def _format_note_prompt(self, comments):
         """Format note comments into an LLM prompt.
@@ -2962,7 +3142,7 @@ class Commands:
         """
         lines = [
             "Please revise the following LaTeX paragraphs based on review comments.",
-            "The file content is in the chat context. Find each paragraph by matching the quoted text below, then apply the suggested changes.\n"
+            "The file content is in the chat context. Find each paragraph by matching the quoted text below, then apply the suggested changes.\n",
         ]
 
         for i, comment in enumerate(comments.get("comments", []), 1):
@@ -2973,8 +3153,10 @@ class Commands:
             lines.append(f"### Comment {i} — Section: {section}")
             if highlight:
                 # Show first 150 chars of the highlighted text so LLM can locate it
-                lines.append(f"Find this text:")
-                lines.append(f"> {highlight[:150]}{'...' if len(highlight) > 150 else ''}")
+                lines.append("Find this text:")
+                lines.append(
+                    f"> {highlight[:150]}{'...' if len(highlight) > 150 else ''}"
+                )
             lines.append(f"Change requested: {text}")
             lines.append("")
 
@@ -2996,8 +3178,10 @@ class Commands:
         all_files = editable_files + read_only_files
 
         if not all_files:
-            self.io.tool_error("No files in the chat. Use /add first.")
-            return
+            self.io.tool_output(
+                "No files in chat. Starting /edit to select sections..."
+            )
+            return self.cmd_edit("")
 
         if args.strip():
             # Direct file name provided
@@ -3263,29 +3447,30 @@ Just show me the edits I need to make.
         except Exception as e:
             self.io.tool_error(f"Error creating template: {e}")
 
-
     def _discover_templates(self):
         """Discover templates from template/ directory."""
         from pathlib import Path
-        
+
         templates = {}
-        
+
         # Try multiple locations for template directory
         possible_paths = [
             Path("template"),  # Relative to cwd
-            Path(self.coder.root) / "template" if hasattr(self, 'coder') and self.coder else None,
+            Path(self.coder.root) / "template"
+            if hasattr(self, "coder") and self.coder
+            else None,
             Path(__file__).parent.parent / "template",  # Relative to commands.py
         ]
-        
+
         template_dir = None
         for path in possible_paths:
             if path and path.exists():
                 template_dir = path
                 break
-        
+
         if not template_dir:
             return templates
-        
+
         for item in template_dir.iterdir():
             if item.is_dir():
                 # Look for .tex files in subdirectory
@@ -3293,34 +3478,40 @@ Just show me the edits I need to make.
                 if tex_files:
                     # Use the first .tex file found
                     templates[item.name] = str(tex_files[0])
-        
+
         return templates
 
     def cmd_init(self, args):
         """Initialize a new LaTeX project with template files.
-        
+
         Usage: /init <project_name> [template_name]
-        
+
         Creates a new folder with the project name and initializes it with:
         - Template style files (.cls, .sty, .bst, etc.)
         - A main .tex file with minimal compilable content
         - Fonts directory if available
-        
+
         Does NOT delete or modify any existing files.
         """
         import shutil
         from pathlib import Path
-        
+
         if not args:
             self.io.tool_output("Usage: /init <project_name> [template_name]")
             self.io.tool_output("")
             self.io.tool_output("Initialize a new LaTeX project with template files.")
-            self.io.tool_output("Creates a new folder with template style files and main .tex file.")
+            self.io.tool_output(
+                "Creates a new folder with template style files and main .tex file."
+            )
             self.io.tool_output("")
             self.io.tool_output("Examples:")
-            self.io.tool_output("  /init my_paper          # Create project with default template")
-            self.io.tool_output("  /init my_paper wiley    # Create project with wiley template")
-            
+            self.io.tool_output(
+                "  /init my_paper          # Create project with default template"
+            )
+            self.io.tool_output(
+                "  /init my_paper wiley    # Create project with wiley template"
+            )
+
             # Show available templates from template/ directory
             discovered = self._discover_templates()
             if discovered:
@@ -3329,11 +3520,11 @@ Just show me the edits I need to make.
                 for name in sorted(discovered.keys()):
                     self.io.tool_output(f"  {name}")
             return
-        
+
         parts = args.split()
         project_name = parts[0]
         template_name = parts[1] if len(parts) > 1 else None
-        
+
         # Resolve project directory path
         if Path(project_name).is_absolute():
             project_dir = Path(project_name)
@@ -3342,24 +3533,30 @@ Just show me the edits I need to make.
                 project_dir = Path.cwd() / project_name
             else:
                 project_dir = Path(self.coder.root) / project_name
-        
+
         # Check if directory already exists
         if project_dir.exists():
             self.io.tool_error(f"Directory already exists: {project_dir}")
-            self.io.tool_output("Please choose a different name or remove the existing directory.")
+            self.io.tool_output(
+                "Please choose a different name or remove the existing directory."
+            )
             return
-        
+
         # Discover templates
         discovered = self._discover_templates()
-        
+
         # Determine template to use
         template_dir = None
         if template_name:
             if template_name in discovered:
                 template_dir = Path(discovered[template_name]).parent
             else:
-                self.io.tool_error(f"Template '{template_name}' not found in template/ directory.")
-                self.io.tool_output(f"Available templates: {', '.join(sorted(discovered.keys()))}")
+                self.io.tool_error(
+                    f"Template '{template_name}' not found in template/ directory."
+                )
+                self.io.tool_output(
+                    f"Available templates: {', '.join(sorted(discovered.keys()))}"
+                )
                 return
         else:
             # Use first available template if any
@@ -3367,7 +3564,7 @@ Just show me the edits I need to make.
                 first_name = sorted(discovered.keys())[0]
                 template_dir = Path(discovered[first_name]).parent
                 self.io.tool_output(f"Using default template: {first_name}")
-        
+
         # Create project directory
         try:
             project_dir.mkdir(parents=True, exist_ok=False)
@@ -3375,7 +3572,7 @@ Just show me the edits I need to make.
         except Exception as e:
             self.io.tool_error(f"Error creating directory: {e}")
             return
-        
+
         # Copy template files if template directory exists
         if template_dir and template_dir.exists():
             try:
@@ -3391,16 +3588,16 @@ Just show me the edits I need to make.
                         dest_file = project_dir / item.name
                         shutil.copy2(item, dest_file)
                         self.io.tool_output(f"Copied: {item.name}")
-                
+
                 # Copy .tex file as main.tex
                 tex_files = list(template_dir.glob("*.tex"))
                 if tex_files:
                     main_tex = project_dir / "main.tex"
                     # Read the template tex content
-                    with open(tex_files[0], 'r', encoding='utf-8') as f:
+                    with open(tex_files[0], "r", encoding="utf-8") as f:
                         tex_content = f.read()
                     # Write as main.tex
-                    with open(main_tex, 'w', encoding='utf-8') as f:
+                    with open(main_tex, "w", encoding="utf-8") as f:
                         f.write(tex_content)
                     self.io.tool_output("Created: main.tex")
             except Exception as e:
@@ -3410,13 +3607,13 @@ Just show me the edits I need to make.
             # No template, create minimal .tex file
             try:
                 main_tex = project_dir / "main.tex"
-                with open(main_tex, 'w', encoding='utf-8') as f:
+                with open(main_tex, "w", encoding="utf-8") as f:
                     f.write(self._generate_minimal_template())
                 self.io.tool_output("Created: main.tex (minimal template)")
             except Exception as e:
                 self.io.tool_error(f"Error creating main.tex: {e}")
                 return
-        
+
         self.io.tool_output("")
         self.io.tool_output(f"Project initialized successfully: {project_dir}")
         self.io.tool_output("")
@@ -3484,34 +3681,38 @@ Text content here.
     def _extract_and_minimize_template(self, template_content):
         """Extract preamble from template and combine with minimal content."""
         import re
-        
+
         # Extract everything before \begin{document}
-        preamble_match = re.search(r'(.*?\\begin\{document\})', template_content, re.DOTALL)
+        preamble_match = re.search(
+            r"(.*?\\begin\{document\})", template_content, re.DOTALL
+        )
         if not preamble_match:
             # If no \begin{document} found, use default template
             return self._generate_minimal_template()
-        
+
         preamble = preamble_match.group(1)
-        
+
         # Check if there's content after \begin{document} that we should preserve
         # Look for \title, \author, \maketitle
-        title_match = re.search(r'(\\title(?:\[[^\]]*\])?\{[^}]+\})', template_content)
-        author_match = re.search(r'(\\author(?:\[[^\]]*\])?\{[^}]+\})', template_content)
-        
+        title_match = re.search(r"(\\title(?:\[[^\]]*\])?\{[^}]+\})", template_content)
+        author_match = re.search(
+            r"(\\author(?:\[[^\]]*\])?\{[^}]+\})", template_content
+        )
+
         # Build minimal content
         minimal_content = preamble + "\n"
-        
+
         # Add title and author if found
         if title_match:
             minimal_content += "\n" + title_match.group(1)
         else:
             minimal_content += "\n\\title{Title}"
-        
+
         if author_match:
             minimal_content += "\n" + author_match.group(1)
         else:
             minimal_content += "\n\\author{Author}"
-        
+
         minimal_content += "\n\\date{\\today}"
         minimal_content += "\n"
         minimal_content += "\n\\maketitle"
@@ -3548,14 +3749,16 @@ Text content here.
         minimal_content += "\n\\begin{figure}[htbp]"
         minimal_content += "\n    \\centering"
         minimal_content += "\n    % Replace placeholder.png with your image file"
-        minimal_content += "\n    \\includegraphics[width=0.5\\textwidth]{placeholder.png}"
+        minimal_content += (
+            "\n    \\includegraphics[width=0.5\\textwidth]{placeholder.png}"
+        )
         minimal_content += "\n    \\caption{Figure caption}"
         minimal_content += "\n    \\label{fig:example}"
         minimal_content += "\n\\end{figure}"
         minimal_content += "\n"
         minimal_content += "\n\\end{document}"
         minimal_content += "\n"
-        
+
         return minimal_content
 
     def cmd_wordcount(self, args):
