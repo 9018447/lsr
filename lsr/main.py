@@ -776,10 +776,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                     " setting."
                 )
 
-    if args.copy_paste and args.edit_format is None:
-        if main_model.edit_format in ("diff", "whole", "diff-fenced"):
-            main_model.edit_format = "editor-" + main_model.edit_format
-
     if args.verbose:
         io.tool_output("Model metadata:")
         io.tool_output(json.dumps(main_model.info, indent=4))
@@ -900,7 +896,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             chat_language=args.chat_language,
             commit_language=args.commit_language,
             detect_urls=args.detect_urls,
-            auto_copy_context=args.copy_paste,
             auto_accept_architect=args.auto_accept_architect,
             add_gitignore_files=args.add_gitignore_files,
             use_cwd=args.cwd_relative,  # 新增参数
