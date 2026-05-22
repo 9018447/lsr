@@ -2,6 +2,7 @@ import difflib
 import math
 import re
 import sys
+import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -149,6 +150,67 @@ def perfect_or_whitespace(whole_lines, part_lines, replace_lines):
         return res
 
 
+# Unicode math/symbol → ASCII mapping for fuzzy matching.
+# LLMs often render Unicode symbols as their ASCII lookalikes.
+UNICODE_TO_ASCII = {
+    # Superscripts
+    "\u207a": "+",  # ⁺ SUPERSCRIPT PLUS
+    "\u207b": "-",  # ⁻ SUPERSCRIPT MINUS
+    "\u2070": "0",  # ⁰ SUPERSCRIPT ZERO
+    "\u00b9": "1",  # ¹ SUPERSCRIPT ONE
+    "\u00b2": "2",  # ² SUPERSCRIPT TWO
+    "\u00b3": "3",  # ³ SUPERSCRIPT THREE
+    "\u2074": "4",  # ⁴ SUPERSCRIPT FOUR
+    "\u2075": "5",  # ⁵ SUPERSCRIPT FIVE
+    "\u2076": "6",  # ⁶ SUPERSCRIPT SIX
+    "\u2077": "7",  # ⁷ SUPERSCRIPT SEVEN
+    "\u2078": "8",  # ⁸ SUPERSCRIPT EIGHT
+    "\u2079": "9",  # ⁹ SUPERSCRIPT NINE
+    # Subscripts
+    "\u2080": "0",  # ₀ SUBSCRIPT ZERO
+    "\u2081": "1",  # ₁ SUBSCRIPT ONE
+    "\u2082": "2",  # ₂ SUBSCRIPT TWO
+    "\u2083": "3",  # ₃ SUBSCRIPT THREE
+    "\u2084": "4",  # ₄ SUBSCRIPT FOUR
+    "\u2085": "5",  # ₅ SUBSCRIPT FIVE
+    "\u2086": "6",  # ₆ SUBSCRIPT SIX
+    "\u2087": "7",  # ₇ SUBSCRIPT SEVEN
+    "\u2088": "8",  # ₈ SUBSCRIPT EIGHT
+    "\u2089": "9",  # ₉ SUBSCRIPT NINE
+    "\u208a": "+",  # ₊ SUBSCRIPT PLUS
+    "\u208b": "-",  # ₋ SUBSCRIPT MINUS
+    # Math operators
+    "\u00d7": "x",  # × MULTIPLICATION SIGN
+    "\u2212": "-",  # − MINUS SIGN
+    "\u2264": "<=",  # ≤ LESS-THAN OR EQUAL TO
+    "\u2265": ">=",  # ≥ GREATER-THAN OR EQUAL TO
+    # Dashes → hyphen for matching
+    "\u2011": "-",  # ‑ NON-BREAKING HYPHEN
+    "\u2013": "-",  # – EN DASH
+    "\u2014": "-",  # — EM DASH
+    # Spaces → regular space
+    "\u202f": " ",  # NARROW NO-BREAK SPACE
+    "\u00a0": " ",  # NO-BREAK SPACE
+    "\u2009": " ",  # THIN SPACE
+    "\u200a": " ",  # HAIR SPACE
+}
+
+# Build a regex pattern for all Unicode chars we want to normalize
+_UNICODE_MAP_RE = re.compile(
+    "(" + "|".join(re.escape(ch) for ch in UNICODE_TO_ASCII) + ")"
+)
+
+
+def normalize_unicode_chars(text):
+    """Map Unicode math symbols and special whitespace to ASCII equivalents.
+
+    This handles the common case where LLMs render Unicode symbols as their
+    ASCII lookalikes (e.g. × → x, ⁺ → +, ² → 2, ‑ → -, narrow no-break
+    space → regular space, etc.).
+    """
+    return _UNICODE_MAP_RE.sub(lambda m: UNICODE_TO_ASCII[m.group(0)], text)
+
+
 def normalize_whitespace(text):
     """Normalize whitespace for comparison: collapse multiple spaces/newlines into single space."""
     # Replace newlines and multiple spaces with single space
@@ -164,13 +226,22 @@ def normalize_latex_escapes(text):
     '\\%' matches '%', '\\$' matches '$', etc.
     """
     # LaTeX special chars that need escaping: % $ & # _ { }
-    text = re.sub(r'\\([%$&#_{}])', r'\1', text)
+    text = re.sub(r"\\([%$&#_{}])", r"\1", text)
     return text
 
 
 def normalize_for_matching(text):
-    """Normalize both whitespace and LaTeX escapes for fuzzy matching."""
+    """Full normalization pipeline for fuzzy matching.
+
+    Applies in order:
+    1. LaTeX escape normalization (\\% → %)
+    2. Unicode character normalization (× → x, ⁺ → +, ² → 2, etc.)
+    3. Unicode NFC normalization (composing/decomposing character equivalence)
+    4. Whitespace normalization (collapse all whitespace to single space)
+    """
     text = normalize_latex_escapes(text)
+    text = normalize_unicode_chars(text)
+    text = unicodedata.normalize("NFC", text)
     return normalize_whitespace(text)
 
 
@@ -204,7 +275,7 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
             # We do a best-effort reconstruction preserving the original line's
             # unmodified prefix and suffix
             before_match = whole_line[:match_pos] if match_pos > 0 else ""
-            after_match = whole_line[match_pos + len(part_text):]
+            after_match = whole_line[match_pos + len(part_text) :]
             if replace_lines:
                 last_replace = replace_lines[-1].rstrip()
                 new_line = before_match + last_replace + after_match + "\n"
@@ -247,6 +318,157 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
     return None
 
 
+def _find_suffix_in_line(original_line, prefix_norm):
+    """Find the unmatched suffix of original_line after the normalized prefix.
+
+    Walks through original_line character by character, consuming those that
+    map to prefix_norm under our normalization pipeline.  Returns the
+    remaining original characters (the suffix that was NOT part of the
+    SEARCH block).
+    """
+    line = original_line.rstrip("\n")
+    norm_pos = 0
+    orig_pos = 0
+
+    # Skip leading whitespace (normalization collapses it to a single space
+    # that is already accounted for in prefix_norm from the join step).
+    while orig_pos < len(line) and line[orig_pos] in (" ", "\t"):
+        orig_pos += 1
+
+    while norm_pos < len(prefix_norm) and orig_pos < len(line):
+        ch = line[orig_pos]
+
+        # Determine what this char (or char sequence) normalizes to
+        consumed = 1
+        if ch == "\\" and orig_pos + 1 < len(line) and line[orig_pos + 1] in "%$&#_{}":
+            # LaTeX escape  \\% → %
+            mapped = line[orig_pos + 1]
+            consumed = 2
+        elif ch in UNICODE_TO_ASCII:
+            mapped = UNICODE_TO_ASCII[ch]
+        elif ch in (" ", "\t"):
+            mapped = " "
+            # Collapse consecutive whitespace
+            while orig_pos + consumed < len(line) and line[orig_pos + consumed] in (
+                " ",
+                "\t",
+            ):
+                consumed += 1
+        else:
+            mapped = ch
+
+        # Advance through prefix_norm by matching mapped characters
+        for c in mapped:
+            if norm_pos < len(prefix_norm) and prefix_norm[norm_pos] == c:
+                norm_pos += 1
+            elif c == " " and norm_pos > 0 and prefix_norm[norm_pos - 1] == " ":
+                pass  # extra space, skip
+            else:
+                # Mismatch – shouldn't happen if prefix was verified
+                break
+
+        orig_pos += consumed
+
+    # Skip whitespace gap between matched content and suffix
+    while orig_pos < len(line) and line[orig_pos] in (" ", "\t"):
+        orig_pos += 1
+
+    return line[orig_pos:]
+
+
+def replace_prefix_match(whole_lines, part_lines, replace_lines):
+    """Handle SEARCH block that is a prefix of actual file content.
+
+    This handles the case where the LLM's SEARCH block ends mid-line
+    (e.g. SEARCH ends with ``water.`` but the file line continues with
+    ``water. First, the surface charge density ...``).
+
+    The function scans multi-line chunks of the file, normalizes both
+    the SEARCH and file chunk, and checks whether the normalized SEARCH
+    is a *prefix* of the normalized chunk.  When found, it splices in
+    the REPLACE lines while preserving the unmatched suffix of the last
+    file line.
+    """
+    if not part_lines:
+        return None
+
+    part_text = " ".join(line.rstrip() for line in part_lines)
+    part_norm = normalize_for_matching(part_text)
+
+    if not part_norm or len(part_norm) < 10:
+        # Too short – risk of false positives
+        return None
+
+    max_chunk = min(30, len(whole_lines))
+
+    for start in range(len(whole_lines)):
+        chunk_norm = ""
+
+        for end in range(start, min(start + max_chunk, len(whole_lines))):
+            line_norm = normalize_for_matching(whole_lines[end].rstrip())
+
+            if chunk_norm and line_norm:
+                chunk_norm += " " + line_norm
+            elif line_norm:
+                chunk_norm = line_norm
+            # Skip empty normalized lines (blank lines in file)
+
+            # Check if SEARCH is a prefix of this chunk
+            if chunk_norm.startswith(part_norm):
+                extra = chunk_norm[len(part_norm) :].strip()
+
+                if not extra:
+                    # Exact match – all lines fully consumed
+                    result = (
+                        whole_lines[:start] + replace_lines + whole_lines[end + 1 :]
+                    )
+                    return "".join(result)
+
+                # Prefix match with extra content on whole_lines[end]
+                # Compute how much of the SEARCH covers the last file line
+                prior_norm = ""
+                if start < end:
+                    prior_text = " ".join(
+                        whole_lines[j].rstrip() for j in range(start, end)
+                    )
+                    prior_norm = normalize_for_matching(prior_text)
+
+                # The part of the SEARCH that should match the last line
+                if prior_norm and part_norm.startswith(prior_norm):
+                    last_search_norm = part_norm[len(prior_norm) :].strip()
+                else:
+                    last_search_norm = part_norm
+
+                last_line_norm = normalize_for_matching(whole_lines[end].rstrip())
+
+                if not last_line_norm.startswith(last_search_norm):
+                    # Can't determine split point – skip
+                    break
+
+                # Find the unmatched suffix on the last line
+                suffix = _find_suffix_in_line(whole_lines[end], last_search_norm)
+
+                # Build result: prior lines + replace + suffix + remaining
+                result_lines = list(whole_lines[:start])
+                if len(replace_lines) > 1:
+                    result_lines.extend(replace_lines[:-1])
+                last_replace = replace_lines[-1].rstrip()
+                if suffix:
+                    result_lines.append(last_replace + suffix + "\n")
+                else:
+                    result_lines.append(replace_lines[-1])
+                result_lines.extend(whole_lines[end + 1 :])
+                return "".join(result_lines)
+
+            # If chunk is already longer and not a prefix match, move on
+            if len(chunk_norm) >= len(part_norm) and not chunk_norm.startswith(
+                part_norm
+            ):
+                break
+
+    return None
+
+
 def perfect_replace(whole_lines, part_lines, replace_lines):
     part_tup = tuple(part_lines)
     part_len = len(part_lines)
@@ -280,6 +502,11 @@ def replace_most_similar_chunk(whole, part, replace):
 
     # Try matching ignoring line breaks (LLM may split long lines)
     res = replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines)
+    if res:
+        return res
+
+    # Try prefix match (SEARCH block ends mid-line in the file)
+    res = replace_prefix_match(whole_lines, part_lines, replace_lines)
     if res:
         return res
 
@@ -429,7 +656,11 @@ def replace_closest_edit_distance(whole_lines, part, part_lines, replace_lines):
             chunk = whole_lines[i : i + length]
             chunk = "".join(chunk)
 
-            similarity = SequenceMatcher(None, chunk, part).ratio()
+            # Use normalized text for similarity comparison so that
+            # Unicode differences (×↔x, ⁺↔+, ²↔2, etc.) don't penalize
+            chunk_norm = normalize_for_matching(chunk)
+            part_norm = normalize_for_matching(part)
+            similarity = SequenceMatcher(None, chunk_norm, part_norm).ratio()
 
             if similarity > max_similarity and similarity:
                 max_similarity = similarity
@@ -733,7 +964,10 @@ def find_similar_lines(search_lines, content_lines, threshold=0.6):
 
     for i in range(len(content_lines) - len(search_lines) + 1):
         chunk = content_lines[i : i + len(search_lines)]
-        ratio = SequenceMatcher(None, search_lines, chunk).ratio()
+        # Use normalized comparison for Unicode/LaTeX robustness
+        chunk_norm = [normalize_for_matching(line) for line in chunk]
+        search_norm = [normalize_for_matching(line) for line in search_lines]
+        ratio = SequenceMatcher(None, search_norm, chunk_norm).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
             best_match = chunk

@@ -15,16 +15,18 @@ from lsr.coders.editblock_coder import (
     do_replace,
     normalize_for_matching,
     normalize_latex_escapes,
-    normalize_whitespace,
+    normalize_unicode_chars,
     prep,
     replace_ignoring_line_breaks,
     replace_most_similar_chunk,
+    replace_prefix_match,
 )
 
 
 # ============================================================
 # Unit tests: normalize_latex_escapes
 # ============================================================
+
 
 class TestNormalizeLatexEscapes:
     """Test LaTeX escape normalization."""
@@ -48,7 +50,10 @@ class TestNormalizeLatexEscapes:
     def test_multiple_escapes_in_line(self):
         """Real abstract line with 86\\%."""
         line = "regeneration achieved 86\\% capacity recovery"
-        assert normalize_latex_escapes(line) == "regeneration achieved 86% capacity recovery"
+        assert (
+            normalize_latex_escapes(line)
+            == "regeneration achieved 86% capacity recovery"
+        )
 
     def test_r_and_d(self):
         """R\\&D from funding line."""
@@ -65,22 +70,22 @@ class TestNormalizeLatexEscapes:
 # Unit tests: normalize_for_matching
 # ============================================================
 
-class TestNormalizeForMatching:
 
+class TestNormalizeForMatching:
     def test_u202F_narrow_no_break_space_equals_regular_space(self):
         """File uses U+202F, LLM uses regular space."""
-        file_ver = "25\u201340\u202F\\% energy penalty"
+        file_ver = "25\u201340\u202f\\% energy penalty"
         llm_ver = "25\u201340 % energy penalty"
         assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
 
     def test_u00A0_nbsp_equals_regular_space(self):
-        file_ver = "25\u00A0\\%"
+        file_ver = "25\u00a0\\%"
         llm_ver = "25 %"
         assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
 
     def test_escaped_percent_and_u202F_combined(self):
         """Primary bug: both issues in one token."""
-        file_ver = "impose an additional 25\u201340\u202F\\% energy penalty"
+        file_ver = "impose an additional 25\u201340\u202f\\% energy penalty"
         llm_ver = "impose an additional 25\u201340 % energy penalty"
         assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
 
@@ -88,6 +93,7 @@ class TestNormalizeForMatching:
 # ============================================================
 # Integration: replace_ignoring_line_breaks (line-level matching)
 # ============================================================
+
 
 class TestReplaceIgnoringLineBreaks:
     """Test the improved function with real LaTeX content."""
@@ -103,7 +109,7 @@ class TestReplaceIgnoringLineBreaks:
     def test_pattern1_energy_penalty_iea(self):
         whole = (
             "yet current capture processes impose an additional "
-            "25\u201340\u202F\\% energy penalty on the overall system \\cite{IEA2023}.\n"
+            "25\u201340\u202f\\% energy penalty on the overall system \\cite{IEA2023}.\n"
         )
         search = "25\u201340 % energy penalty on the overall system \\cite{IEA2023}."
         replace = "25\u201340 % energy penalty on the overall system \\cite{REF1}."
@@ -144,10 +150,10 @@ class TestReplaceIgnoringLineBreaks:
     # --- scientific notation with unicode superscripts ---
 
     def test_gaussian16_scientific_notation(self):
-        """L145: RMS force\u202F<\u202F1.0\u202F\u00D7\u202F10\u207B\u2075\u202F Hartree"""
+        """L145: RMS force\u202f<\u202f1.0\u202f\u00d7\u202f10\u207b\u2075\u202f Hartree"""
         whole = (
-            "Tight convergence criteria (RMS force\u202F<\u202F1.0\u202F\u00D7\u202F10\u207B\u2075"
-            "\u202FHartree/Bohr) were used.\n"
+            "Tight convergence criteria (RMS force\u202f<\u202f1.0\u202f\u00d7\u202f10\u207b\u2075"
+            "\u202fHartree/Bohr) were used.\n"
         )
         # LLM might render the superscripts as plain text
         search = "RMS force < 1.0 x 10^-5 Hartree/Bohr) were used."
@@ -161,19 +167,19 @@ class TestReplaceIgnoringLineBreaks:
         # else: acceptable – very different unicode chars, fuzzy would handle it
 
     def test_degree_celsius_u202F(self):
-        """L160: 25\u202F\u00B0C with narrow no-break space before degree.
-        
+        """L160: 25\u202f\u00b0C with narrow no-break space before degree.
+
         U+202F splits into space during normalization, so the search must
         include the space: '25 °C' not '25°C'. This is correct behavior
         since the LLM would see the space in rendered output.
         """
         whole = (
-            "Under ambient conditions (25\u202F\u00B0C, 101.325\u202FkPa), "
+            "Under ambient conditions (25\u202f\u00b0C, 101.325\u202fkPa), "
             "CO$_2$ interacts weakly\n"
         )
         # LLM sees rendered "25 °C" (with space from U+202F)
-        search = "Under ambient conditions (25 \u00B0C, 101.325 kPa), CO$_2$ interacts weakly"
-        replace = "Under ambient conditions (25 \u00B0C, 101.325 kPa), CO$_2$ interacts strongly"
+        search = "Under ambient conditions (25 \u00b0C, 101.325 kPa), CO$_2$ interacts weakly"
+        replace = "Under ambient conditions (25 \u00b0C, 101.325 kPa), CO$_2$ interacts strongly"
         result = self._run(whole, search, replace)
         assert result is not None
         assert "strongly" in result
@@ -184,12 +190,12 @@ class TestReplaceIgnoringLineBreaks:
         """Full line 145 from manuscript – 1191 chars, 34 non-ASCII."""
         whole = (
             "All geometry optimizations and electronic structure calculations for the target "
-            "molecular systems were carried out with the Gaussian\u202F16 program.  The B3LYP "
+            "molecular systems were carried out with the Gaussian\u202f16 program.  The B3LYP "
             "hybrid functional combined with the 6\u2011311++G(d,p) split\u2011valence basis "
-            "set was employed.  Tight convergence criteria (RMS force\u202F<\u202F1.0"
-            "\u202F\u00D7\u202F10\u207B\u2075\u202FHartree/Bohr, maximum force\u202F<"
-            "\u202F1.5\u202F\u00D7\u202F10\u207B\u2074\u202FHartree/Bohr) and an "
-            "ultrafine integration grid (99\u202F\u00D7\u202F590) were used to obtain "
+            "set was employed.  Tight convergence criteria (RMS force\u202f<\u202f1.0"
+            "\u202f\u00d7\u202f10\u207b\u2075\u202fHartree/Bohr, maximum force\u202f<"
+            "\u202f1.5\u202f\u00d7\u202f10\u207b\u2074\u202fHartree/Bohr) and an "
+            "ultrafine integration grid (99\u202f\u00d7\u202f590) were used to obtain "
             "reliable stationary points.  All computational steps followed protocols reported "
             "in earlier studies \\cite{}.\n"
         )
@@ -202,14 +208,14 @@ class TestReplaceIgnoringLineBreaks:
     # --- em-dash and en-dash in names ---
 
     def test_pitzer_debye_huckel_name(self):
-        """L66: Pitzer\u2013Debye\u2013H\u00FCckel with en-dashes and u-umlaut."""
+        """L66: Pitzer\u2013Debye\u2013H\u00fcckel with en-dashes and u-umlaut."""
         whole = (
-            "incorporating the Pitzer\u2013Debye\u2013H\u00FCckel (PDH) theory "
+            "incorporating the Pitzer\u2013Debye\u2013H\u00fcckel (PDH) theory "
             "to explicitly account for long\u2011range electrostatic "
             "contributions\u2014has been applied\n"
         )
-        search = "Pitzer\u2013Debye\u2013H\u00FCckel (PDH) theory"
-        replace = "Pitzer\u2013Debye\u2013H\u00FCckel (PDH) framework"
+        search = "Pitzer\u2013Debye\u2013H\u00fcckel (PDH) theory"
+        replace = "Pitzer\u2013Debye\u2013H\u00fcckel (PDH) framework"
         result = self._run(whole, search, replace)
         assert result is not None
         assert "framework" in result
@@ -219,8 +225,8 @@ class TestReplaceIgnoringLineBreaks:
 # Integration: replace_most_similar_chunk (full pipeline)
 # ============================================================
 
-class TestReplaceMostSimilarChunk:
 
+class TestReplaceMostSimilarChunk:
     def _run(self, whole, search, replace):
         return replace_most_similar_chunk(whole, search, replace)
 
@@ -232,7 +238,7 @@ class TestReplaceMostSimilarChunk:
             "development of efficient and sustainable carbon\u2011capture technologies. "
             "For large point sources such as power plants, carbon\u2011capture and storage "
             "(CCS) remains an effective strategy to mitigate anthropogenic CO\u2082 emissions, "
-            "yet current capture processes impose an additional 25\u201340\u202F\\% energy "
+            "yet current capture processes impose an additional 25\u201340\u202f\\% energy "
             "penalty on the overall system \\cite{IEA2023}. In this context, the removal of "
             "water vapor from flue gas is an unavoidable prerequisite.\n"
         )
@@ -281,7 +287,9 @@ class TestReplaceMostSimilarChunk:
             "of [Ch]$^{+}$, [Cl]$^{-}$, CO$_2$ and H$_2$O. "
             "The surface charge density of CO$_2$ is co\n"
         )
-        search = "shows the $\\sigma$-profiles of [Ch]$^{+}$, [Cl]$^{-}$, CO$_2$ and H$_2$O."
+        search = (
+            "shows the $\\sigma$-profiles of [Ch]$^{+}$, [Cl]$^{-}$, CO$_2$ and H$_2$O."
+        )
         replace = "displays the $\\sigma$-profiles of [Ch]$^{+}$, [Cl]$^{-}$, CO$_2$ and H$_2$O."
         result = self._run(file_content, search, replace)
         assert result is not None
@@ -361,16 +369,16 @@ class TestReplaceMostSimilarChunk:
         """Full L66 paragraph with em-dash, en-dash, u-umlaut, U+202F."""
         file_content = (
             "To overcome these deficiencies, the conventional strategy for highly concentrated "
-            "electrolyte solutions\u2014incorporating the Pitzer\u2013Debye\u2013H\u00FCckel "
+            "electrolyte solutions\u2014incorporating the Pitzer\u2013Debye\u2013H\u00fcckel "
             "(PDH) theory to explicitly account for long\u2011range electrostatic "
             "contributions\u2014has been applied to models such as e\u2011NRTL and "
             "e\u2011PC\u2011SAFT. Following this approach, PDH\u2011coupled "
-            "COSMO\u2011RS (COSMO\u2011RS\u202FPDH) and a hydrogen\u2011bond\u2011corrected "
-            "COSMO\u2011SAC variant (COSMO\u2011SAC\u202FDHB\u202FPDH) have been proposed. "
+            "COSMO\u2011RS (COSMO\u2011RS\u202fPDH) and a hydrogen\u2011bond\u2011corrected "
+            "COSMO\u2011SAC variant (COSMO\u2011SAC\u202fDHB\u202fPDH) have been proposed. "
             "However, most validation efforts have focused on dilute aqueous electrolytes.\n"
         )
-        search = "PDH\u2011coupled COSMO\u2011RS (COSMO\u2011RS\u202FPDH)"
-        replace = "PDH\u2011coupled COSMO\u2011RS (COSMO\u2011RS\u202FPDH) model"
+        search = "PDH\u2011coupled COSMO\u2011RS (COSMO\u2011RS\u202fPDH)"
+        replace = "PDH\u2011coupled COSMO\u2011RS (COSMO\u2011RS\u202fPDH) model"
         result = self._run(file_content, search, replace)
         assert result is not None
         assert "model" in result
@@ -380,8 +388,8 @@ class TestReplaceMostSimilarChunk:
 # End-to-end: do_replace
 # ============================================================
 
-class TestDoReplace:
 
+class TestDoReplace:
     def test_cite_replacement_in_paragraph(self):
         """Simulates the exact scenario from the bug report."""
         content = (
@@ -390,7 +398,7 @@ class TestDoReplace:
             "\n"
             "The continuous increase in atmospheric CO\u2082 concentration represents a "
             "critical 21st\u2011century environmental challenge, yet current capture processes "
-            "impose an additional 25\u201340\u202F\\% energy penalty on the overall system "
+            "impose an additional 25\u201340\u202f\\% energy penalty on the overall system "
             "\\cite{IEA2023}. In this context, the removal of water vapor is essential.\n"
         )
         result = do_replace(
@@ -424,6 +432,7 @@ class TestDoReplace:
 # Edge cases: multiple edits on same content
 # ============================================================
 
+
 class TestSequentialEdits:
     """Test that multiple edits can be applied sequentially."""
 
@@ -454,9 +463,7 @@ class TestSequentialEdits:
 
     def test_edit_preserves_surrounding_content(self):
         """Ensure edits don't corrupt surrounding text."""
-        content = (
-            "AAA sentence one. BBB\\% important. CCC sentence three.\n"
-        )
+        content = "AAA sentence one. BBB\\% important. CCC sentence three.\n"
         result = replace_most_similar_chunk(
             content,
             "BBB\\% important.",
@@ -465,6 +472,304 @@ class TestSequentialEdits:
         assert result is not None
         assert result.startswith("AAA sentence one. ")
         assert result.strip().endswith("CCC sentence three.")
+
+
+# ============================================================
+# Unit tests: normalize_unicode_chars
+# ============================================================
+
+
+class TestNormalizeUnicodeChars:
+    """Test Unicode character normalization for fuzzy matching."""
+
+    def test_superscript_plus(self):
+        """⁺ (U+207A) should map to +."""
+        assert normalize_unicode_chars("[Ch]\u207a") == "[Ch]+"
+
+    def test_superscript_minus(self):
+        """⁻ (U+207B) should map to -."""
+        assert normalize_unicode_chars("[Cl]\u207b") == "[Cl]-"
+
+    def test_subscript_2(self):
+        """₂ (U+2082) should map to 2."""
+        assert normalize_unicode_chars("CO\u2082") == "CO2"
+
+    def test_multiplication_sign(self):
+        """× (U+00D7) should map to x."""
+        assert normalize_unicode_chars("1.0\u00d710") == "1.0x10"
+
+    def test_non_breaking_hyphen(self):
+        """‑ (U+2011) should map to -."""
+        assert normalize_unicode_chars("carbon\u2011capture") == "carbon-capture"
+
+    def test_narrow_no_break_space(self):
+        """(U+202F) should map to regular space."""
+        assert normalize_unicode_chars("25\u202f%") == "25 %"
+
+    def test_no_change_on_ascii(self):
+        """Plain ASCII should not be changed."""
+        assert normalize_unicode_chars("hello world") == "hello world"
+
+    def test_combined_unicode_line(self):
+        """Multiple Unicode chars in one line."""
+        file_ver = "[Ch]\u207a[Cl]\u207b, CO\u2082 and H\u2082O"
+        result = normalize_unicode_chars(file_ver)
+        assert result == "[Ch]+[Cl]-, CO2 and H2O"
+
+
+class TestNormalizeForMatchingUnicode:
+    """Test the full normalize_for_matching pipeline with Unicode."""
+
+    def test_unicode_sigma_profile_paragraph(self):
+        """The exact scenario from user's failing edit.
+
+        File has σ (U+03C3), ⁺ (U+207A), ⁻ (U+207B), ₂ (U+2082)
+        LLM might generate the same Unicode but with different NFC/NFD composition.
+        """
+        file_ver = (
+            "the \u03c3-profile is a function describing the distribution of "
+            "shielded charge density on the molecular surface"
+        )
+        llm_ver = (
+            "the \u03c3-profile is a function describing the distribution of "
+            "shielded charge density on the molecular surface"
+        )
+        assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
+
+    def test_unicode_subscript_co2(self):
+        """CO₂ (with U+2082) should match CO2 after normalization."""
+        file_ver = "atmospheric CO\u2082 concentration"
+        llm_ver = "atmospheric CO2 concentration"
+        assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
+
+    def test_unicode_superscript_ions(self):
+        """[Ch]⁺[Cl]⁻ should match [Ch]+[Cl]- after normalization."""
+        file_ver = "[Ch]\u207a[Cl]\u207b, CO\u2082 and H\u2082O"
+        llm_ver = "[Ch]+[Cl]-, CO2 and H2O"
+        assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
+
+    def test_unicode_times_x_equivalent(self):
+        """× (U+00D7) should match x after normalization."""
+        file_ver = "1.0\u00d710\u207b\u2075 Hartree"
+        llm_ver = "1.0x10-5 Hartree"
+        assert normalize_for_matching(file_ver) == normalize_for_matching(llm_ver)
+
+    def test_nfc_normalization(self):
+        """NFC normalization handles composing/decomposing character equivalence."""
+        # é can be U+00E9 (composed) or U+0065 + U+0301 (decomposed)
+        composed = "caf\u00e9"
+        decomposed = "cafe\u0301"
+        assert normalize_for_matching(composed) == normalize_for_matching(decomposed)
+
+
+class TestUserFailingCase:
+    """Test the exact scenario from the user's failing SEARCH/REPLACE edit.
+
+    The user's file contains σ-profiles with Unicode chars like ⁺ ⁻ ₂.
+    The LLM generated a SEARCH block that was close but failed exact matching.
+    With Unicode normalization in replace_closest_edit_distance, this should now
+    succeed via fuzzy matching.
+    """
+
+    def test_sigma_profile_subsection_replacement(self):
+        """The actual failing case from the user."""
+        # This is what's in the file (simplified)
+        file_content = (
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "In the theory of COSMO-RS, the \u03c3-profile is a function describing "
+            "the distribution of shielded charge density on the\n"
+            "molecular surface, and the infinite dilution activity coefficient of a "
+            "mixture depends solely on the \u03c3-profile. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water. First, the surface charge\n"
+            "density of CO\u2082 molecules is entirely concentrated in the range\n"
+        )
+        # This is what the LLM might generate (same content, possibly different line breaks)
+        search = (
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "In the theory of COSMO-RS, the \u03c3-profile is a function describing "
+            "the distribution of shielded charge density on the\n"
+            "molecular surface, and the infinite dilution activity coefficient of a "
+            "mixture depends solely on the \u03c3-profile. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        replace_text = (
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "To qualitatively characterize the intermolecular interaction strength, "
+            "we first analyzed the \u03c3-profiles. In\n"
+            "the theoretical framework of COSMO-RS, the \u03c3-profile describes "
+            "the distribution of screening charge density on\n"
+            "the molecular van der Waals surface. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        result = replace_most_similar_chunk(file_content, search, replace_text)
+        assert result is not None
+        assert "To qualitatively characterize" in result
+
+    def test_unicode_superscript_ions_ascii_search(self):
+        """LLM generates ASCII versions of Unicode superscripts.
+
+        File has ⁺ (U+207A), ⁻ (U+207B), ₂ (U+2082).
+        LLM generates +, -, 2 instead.
+        """
+        file_content = (
+            "shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water. First, the surface\n"
+        )
+        # LLM uses ASCII: +, -, 2 instead of Unicode superscripts
+        search = "shows the \u03c3-profile distributions of [Ch]+[Cl]-, CO2, and water."
+        replace_text = (
+            "shows the \u03c3-profile distributions of [Ch]+[Cl]-, CO2, and H2O."
+        )
+        result = replace_most_similar_chunk(file_content, search, replace_text)
+        assert result is not None
+        assert "H2O" in result or "H\u2082O" in result
+
+
+# ============================================================
+# Tests: replace_prefix_match (SEARCH ends mid-line)
+# ============================================================
+
+
+class TestReplacePrefixMatch:
+    """Test the prefix-match strategy for SEARCH blocks that end mid-line."""
+
+    def _run(self, whole, search, replace):
+        _, wl = prep(whole)
+        _, pl = prep(search)
+        _, rl = prep(replace)
+        return replace_prefix_match(wl, pl, rl)
+
+    def test_search_ends_mid_line_basic(self):
+        """SEARCH block ends at 'water.' but file line continues."""
+        file_content = (
+            "shows the distributions of [Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+            " First, the surface charge density of CO\u2082 molecules.\n"
+        )
+        search = "shows the distributions of [Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        replace_text = "displays the distributions of [Ch]\u207a[Cl]\u207b, CO\u2082, and H\u2082O."
+        result = self._run(file_content, search, replace_text)
+        assert result is not None
+        assert "displays" in result
+        assert "First, the surface charge density" in result
+
+    def test_search_ends_mid_line_multiline(self):
+        """Multi-line SEARCH block ending mid-line in file."""
+        file_content = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "In COSMO-RS, the \u03c3-profile describes charge density on the\n"
+            "molecular surface. Figure\\ref{fig} shows results for\n"
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water. First, additional text.\n"
+        )
+        search = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "In COSMO-RS, the \u03c3-profile describes charge density on the\n"
+            "molecular surface. Figure\\ref{fig} shows results for\n"
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        replace_text = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "In COSMO-RS, the \u03c3-profile describes charge density on the\n"
+            "molecular surface. Figure\\ref{fig} shows results for\n"
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and H\u2082O."
+        )
+        result = self._run(file_content, search, replace_text)
+        assert result is not None
+        assert "H\u2082O" in result
+        assert "First, additional text" in result
+
+    def test_user_exact_failing_case(self):
+        """The exact failing case from the user's bug report."""
+        file_content = (
+            "% LSR Note File\n"
+            "% Review and add comments in the browser.\n"
+            "\n"
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "In the theory of COSMO-RS, the \u03c3-profile is a function describing "
+            "the distribution of shielded charge density on the\n"
+            "molecular surface, and the infinite dilution activity coefficient of a "
+            "mixture depends solely on the \u03c3-profile. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water. First, the surface charge\n"
+            "density of CO\u2082 molecules is entirely concentrated in the range\n"
+        )
+        search = (
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "In the theory of COSMO-RS, the \u03c3-profile is a function describing "
+            "the distribution of shielded charge density on the\n"
+            "molecular surface, and the infinite dilution activity coefficient of a "
+            "mixture depends solely on the \u03c3-profile. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        replace_text = (
+            "\\subsection{$\\sigma$-profile Analysis}\n"
+            "\n"
+            "To qualitatively characterize the intermolecular interaction strength, "
+            "we first analyzed the \u03c3-profiles. In\n"
+            "the theoretical framework of COSMO-RS, the \u03c3-profile describes "
+            "the distribution of screening charge density on\n"
+            "the molecular van der Waals surface. Figure\n"
+            "\\ref{sigma-profile} (a) shows the \u03c3-profile distributions of "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        result = self._run(file_content, search, replace_text)
+        assert result is not None
+        assert "To qualitatively characterize" in result
+        assert "First, the surface charge" in result
+
+    def test_via_replace_most_similar_chunk(self):
+        """Full pipeline: prefix match reached from replace_most_similar_chunk."""
+        file_content = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "The \u03c3-profile describes charge density. Figure\\ref{fig} shows "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water. First, more text follows.\n"
+        )
+        search = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "The \u03c3-profile describes charge density. Figure\\ref{fig} shows "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and water."
+        )
+        replace_text = (
+            "\\subsection{Analysis}\n"
+            "\n"
+            "The \u03c3-profile describes charge density. Figure\\ref{fig} shows "
+            "[Ch]\u207a[Cl]\u207b, CO\u2082, and H\u2082O."
+        )
+        result = replace_most_similar_chunk(file_content, search, replace_text)
+        assert result is not None
+        assert "H\u2082O" in result
+        assert "First, more text follows" in result
+
+    def test_search_too_short_rejected(self):
+        """SEARCH blocks shorter than 10 normalized chars should be rejected."""
+        file_content = "Hello world and more text.\n"
+        search = "Hello"
+        replace_text = "Goodbye"
+        result = self._run(file_content, search, replace_text)
+        assert result is None
+
+    def test_exact_match_no_suffix(self):
+        """When SEARCH exactly matches the chunk (no extra content), still works."""
+        file_content = "line one\nline two with enough content here.\nline three\n"
+        search = "line one\nline two with enough content here."
+        replace_text = "line ONE\nline TWO with enough content here."
+        result = self._run(file_content, search, replace_text)
+        assert result is not None
+        assert "line ONE" in result
+        assert "line three" in result
 
 
 if __name__ == "__main__":
