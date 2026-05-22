@@ -29,7 +29,6 @@ from typing import List
 from rich.console import Console
 
 from lsr import __version__, models, prompts, urls, utils
-from lsr.analytics import Analytics
 from lsr.commands import Commands
 from lsr.exceptions import LiteLLMExceptions
 from lsr.history import ChatSummary
@@ -338,7 +337,6 @@ class Coder:
         commands=None,
         summarizer=None,
         total_cost=0.0,
-        analytics=None,
         map_refresh="auto",
         cache_prompts=False,
         num_cache_warming_pings=0,
@@ -355,10 +353,6 @@ class Coder:
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
         current_plan=None,
     ):
-        # Fill in a dummy Analytics if needed, but it is never .enable()'d
-        self.analytics = analytics if analytics is not None else Analytics()
-
-        self.event = self.analytics.event
         self.chat_language = chat_language
         self.commit_language = commit_language
         self.commit_before_message = []
@@ -1067,7 +1061,6 @@ class Coder:
         thresh = 2  # seconds
         if self.last_keyboard_interrupt and now - self.last_keyboard_interrupt < thresh:
             self.io.tool_warning("\n\n^C KeyboardInterrupt")
-            self.event("exit", reason="Control-C")
             sys.exit()
 
         self.io.tool_warning("\n\n^C again to exit")
@@ -1524,7 +1517,6 @@ class Coder:
         return True
 
     def send_message(self, inp):
-        self.event("message_send_starting")
 
         # Notify IO that LLM processing is starting
         self.io.llm_started()
@@ -1623,7 +1615,6 @@ class Coder:
                     )
                     self.io.tool_warning("".join(lines))
                     self.io.tool_error(str(err))
-                    self.event("message_send_exception", exception=str(err))
                     return
         finally:
             if self.mdstream:
@@ -2252,19 +2243,6 @@ class Coder:
         self.total_tokens_received += self.message_tokens_received
 
         self.io.tool_output(self.usage_report)
-
-        prompt_tokens = self.message_tokens_sent
-        completion_tokens = self.message_tokens_received
-        self.event(
-            "message_send",
-            main_model=self.main_model,
-            edit_format=self.edit_format,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-            cost=self.message_cost,
-            total_cost=self.total_cost,
-        )
 
         self.message_cost = 0.0
         self.message_tokens_sent = 0

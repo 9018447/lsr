@@ -76,13 +76,12 @@ def try_to_select_default_model():
     return None
 
 
-def offer_openrouter_oauth(io, analytics):
+def offer_openrouter_oauth(io):
     """
     Offers OpenRouter OAuth flow to the user if no API keys are found.
 
     Args:
         io: The InputOutput object for user interaction.
-        analytics: The Analytics object for tracking events.
 
     Returns:
         True if authentication was successful, False otherwise.
@@ -94,26 +93,22 @@ def offer_openrouter_oauth(io, analytics):
         "Login to OpenRouter or create a free account?",
         default="y",
     ):
-        analytics.event("oauth_flow_initiated", provider="openrouter")
-        openrouter_key = start_openrouter_oauth_flow(io, analytics)
+        openrouter_key = start_openrouter_oauth_flow(io)
         if openrouter_key:
             # Successfully got key via OAuth, use the default OpenRouter model
             # Ensure OPENROUTER_API_KEY is now set in the environment for later use
             os.environ["OPENROUTER_API_KEY"] = openrouter_key
-            # Track OAuth success leading to model selection
-            analytics.event("oauth_flow_success")
             return True
 
         # OAuth failed or was cancelled by user implicitly (e.g., closing browser)
         # Error messages are handled within start_openrouter_oauth_flow
-        analytics.event("oauth_flow_failure")
         io.tool_error("OpenRouter authentication did not complete successfully.")
         # Fall through to the final error message
 
     return False
 
 
-def select_default_model(args, io, analytics):
+def select_default_model(args, io):
     """
     Selects a default model based on available API keys if no model is specified.
     Offers OAuth flow for OpenRouter if no keys are found.
@@ -121,7 +116,6 @@ def select_default_model(args, io, analytics):
     Args:
         args: The command line arguments object.
         io: The InputOutput object for user interaction.
-        analytics: The Analytics object for tracking events.
 
     Returns:
         The name of the selected model, or None if no suitable default is found.
@@ -132,14 +126,13 @@ def select_default_model(args, io, analytics):
     model = try_to_select_default_model()
     if model:
         io.tool_warning(f"Using {model} model with API key from environment.")
-        analytics.event("auto_model_selection", model=model)
         return model
 
     no_model_msg = "No LLM model was specified and no API keys were provided."
     io.tool_warning(no_model_msg)
 
     # Try OAuth if no model was detected
-    offer_openrouter_oauth(io, analytics)
+    offer_openrouter_oauth(io)
 
     # Check again after potential OAuth success
     model = try_to_select_default_model()
@@ -211,7 +204,7 @@ def exchange_code_for_key(code, code_verifier, io):
 
 
 # Function to start the OAuth flow
-def start_openrouter_oauth_flow(io, analytics):
+def start_openrouter_oauth_flow(io):
     """Initiates the OpenRouter OAuth PKCE flow using a local server."""
 
     port = find_available_port()
@@ -327,7 +320,6 @@ def start_openrouter_oauth_flow(io, analytics):
         shutdown_server.wait(timeout=MINUTES * 60)  # Convert minutes to seconds
     except KeyboardInterrupt:
         io.tool_warning("\nOAuth flow interrupted.")
-        analytics.event("oauth_flow_failed", provider="openrouter", reason="user_interrupt")
         interrupted = True
         # Ensure the server thread is signaled to shut down
         shutdown_server.set()
@@ -340,16 +332,13 @@ def start_openrouter_oauth_flow(io, analytics):
 
     if server_error:
         io.tool_error(f"Authentication failed: {server_error}")
-        analytics.event("oauth_flow_failed", provider="openrouter", reason=server_error)
         return None
 
     if not auth_code:
         io.tool_error("Authentication with OpenRouter failed.")
-        analytics.event("oauth_flow_failed", provider="openrouter")
         return None
 
     io.tool_output("Completing authentication...")
-    analytics.event("oauth_flow_code_received", provider="openrouter")
 
     # Exchange code for key
     api_key = exchange_code_for_key(auth_code, code_verifier, io)
@@ -369,25 +358,15 @@ def start_openrouter_oauth_flow(io, analytics):
             io.tool_warning("Aider will load the OpenRouter key automatically in future sessions.")
             io.tool_output()
 
-            analytics.event("oauth_flow_success", provider="openrouter")
             return api_key
         except Exception as e:
             io.tool_error(f"Successfully obtained key, but failed to save it to file: {e}")
             io.tool_warning("Set OPENROUTER_API_KEY environment variable for this session only.")
             # Still return the key for the current session even if saving failed
-            analytics.event("oauth_flow_save_failed", provider="openrouter", reason=str(e))
             return api_key
     else:
         io.tool_error("Authentication with OpenRouter failed.")
-        analytics.event("oauth_flow_failed", provider="openrouter", reason="code_exchange_failed")
         return None
-
-
-# Dummy Analytics class for testing
-class DummyAnalytics:
-    def event(self, *args, **kwargs):
-        # print(f"Analytics Event: {args} {kwargs}") # Optional: print events
-        pass
 
 
 def main():
@@ -403,8 +382,6 @@ def main():
         tool_output_color="BLUE",
         tool_error_color="RED",
     )
-    # Use a dummy analytics object
-    analytics = DummyAnalytics()
 
     # Ensure OPENROUTER_API_KEY is not set, to trigger the flow naturally
     # (though start_openrouter_oauth_flow doesn't check this itself)
@@ -412,7 +389,7 @@ def main():
         print("Warning: OPENROUTER_API_KEY is already set in environment.")
         # del os.environ["OPENROUTER_API_KEY"] # Optionally unset it for testing
 
-    api_key = start_openrouter_oauth_flow(io, analytics)
+    api_key = start_openrouter_oauth_flow(io)
 
     if api_key:
         print("\nOAuth flow completed successfully!")

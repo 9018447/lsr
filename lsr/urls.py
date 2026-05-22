@@ -15,7 +15,6 @@ git_index_version = "https://github.com/your-username/lsr/issues/1"
 install_properly = (
     "https://github.com/your-username/lsr/blob/main/docs/troubleshooting.md#imports"
 )
-analytics = "https://github.com/your-username/lsr/blob/main/docs/analytics.md"
 release_notes = "https://github.com/your-username/lsr/blob/main/HISTORY.md"
 edit_formats = "https://github.com/your-username/lsr/blob/main/docs/edit-formats.md"
 models_and_keys = "https://github.com/your-username/lsr/blob/main/docs/models.md"

@@ -573,36 +573,6 @@ def get_parser(default_config_files, git_root):
         default=False,
     )
 
-    ##########
-    group = parser.add_argument_group("Analytics")
-    group.add_argument(
-        "--analytics",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Enable/disable analytics for current session (default: random)",
-    )
-    group.add_argument(
-        "--analytics-log",
-        metavar="ANALYTICS_LOG_FILE",
-        help="Specify a file to log analytics events",
-    ).complete = shtab.FILE
-    group.add_argument(
-        "--analytics-disable",
-        action="store_true",
-        help="Permanently disable analytics",
-        default=False,
-    )
-    group.add_argument(
-        "--analytics-posthog-host",
-        metavar="ANALYTICS_POSTHOG_HOST",
-        help="Send analytics to custom PostHog instance",
-    )
-    group.add_argument(
-        "--analytics-posthog-project-api-key",
-        metavar="ANALYTICS_POSTHOG_PROJECT_API_KEY",
-        help="Send analytics to custom PostHog project",
-    )
-
     #########
     group = parser.add_argument_group("Upgrading")
     group.add_argument(

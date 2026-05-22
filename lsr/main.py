@@ -19,7 +19,6 @@ from dotenv import load_dotenv
 from prompt_toolkit.enums import EditingMode
 
 from lsr import __version__, models, urls, utils
-from lsr.analytics import Analytics
 from lsr.args import get_parser
 from lsr.coders import Coder
 from lsr.coders.base_coder import UnknownEditFormat
@@ -529,10 +528,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     if git is None:
         args.git = False
 
-    if args.analytics_disable:
-        analytics = Analytics(permanently_disable=True)
-        print("Analytics have been permanently disabled.")
-
     if not args.verify_ssl:
         import httpx
 
@@ -652,43 +647,10 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         )
         os.environ["OPENAI_ORGANIZATION"] = args.openai_organization_id
 
-    analytics = Analytics(
-        logfile=args.analytics_log,
-        permanently_disable=args.analytics_disable,
-        posthog_host=args.analytics_posthog_host,
-        posthog_project_api_key=args.analytics_posthog_project_api_key,
-    )
-    if args.analytics is not False:
-        if analytics.need_to_ask(args.analytics):
-            io.tool_output(
-                "Aider respects your privacy and never collects your code, chat messages, keys or"
-                " personal info."
-            )
-            io.tool_output(f"For more info: {urls.analytics}")
-            disable = not io.confirm_ask(
-                "Allow collection of anonymous analytics to help improve lsr?"
-            )
-
-            analytics.asked_opt_in = True
-            if disable:
-                analytics.disable(permanently=True)
-                io.tool_output("Analytics have been permanently disabled.")
-
-            analytics.save_data()
-            io.tool_output()
-
-        # This is a no-op if the user has opted out
-        analytics.enable()
-
-    analytics.event("launched")
-
     if args.gui and not return_coder:
         if not check_streamlit_install(io):
-            analytics.event("exit", reason="Streamlit not installed")
             return
-        analytics.event("gui session")
         launch_gui(argv)
-        analytics.event("exit", reason="GUI session ended")
         return
 
     if args.verbose:
@@ -722,7 +684,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             io.tool_output(
                 "Provide either a single directory of a git repo, or a list of one or more files."
             )
-            analytics.event("exit", reason="Invalid directory input")
             return 1
 
     git_dname = None
@@ -733,7 +694,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 fnames = []
             else:
                 io.tool_error(f"{all_files[0]} is a directory, but --no-git selected.")
-                analytics.event("exit", reason="Directory with --no-git")
                 return 1
 
     # We can't know the git repo for sure until after parsing the args.
@@ -742,22 +702,18 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     if args.git and not force_git_root and git is not None:
         right_repo_root = guessed_wrong_repo(io, git_root, fnames, git_dname)
         if right_repo_root:
-            analytics.event("exit", reason="Recursing with correct repo")
             return main(argv, input, output, right_repo_root, return_coder=return_coder)
 
     if args.just_check_update:
         update_available = check_version(io, just_check=True, verbose=args.verbose)
-        analytics.event("exit", reason="Just checking update")
         return 0 if not update_available else 1
 
     if args.install_main_branch:
         success = install_from_main_branch(io)
-        analytics.event("exit", reason="Installed main branch")
         return 0 if success else 1
 
     if args.upgrade:
         success = install_upgrade(io)
-        analytics.event("exit", reason="Upgrade completed")
         return 0 if success else 1
 
     if args.check_update:
@@ -786,7 +742,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
     if args.list_models:
         models.print_matching_models(io, args.list_models)
-        analytics.event("exit", reason="Listed models")
         return 0
 
     # Process any command line aliases
@@ -797,14 +752,13 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             if len(parts) != 2:
                 io.tool_error(f"Invalid alias format: {alias_def}")
                 io.tool_output("Format should be: alias:model-name")
-                analytics.event("exit", reason="Invalid alias format error")
                 return 1
             alias, model = parts
             models.MODEL_ALIASES[alias.strip()] = model.strip()
 
-    selected_model_name = select_default_model(args, io, analytics)
+    selected_model_name = select_default_model(args, io)
     if not selected_model_name:
-        # Error message and analytics event are handled within select_default_model
+        # Error message is handled within select_default_model
         # It might have already offered OAuth if no model/keys were found.
         # If it failed here, we exit.
         return 1
@@ -819,7 +773,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             " found."
         )
         # Attempt OAuth flow because the specific model needs it
-        if offer_openrouter_oauth(io, analytics):
+        if offer_openrouter_oauth(io):
             # OAuth succeeded, the key should now be in os.environ.
             # Check if the key is now present after the flow.
             if os.environ.get("OPENROUTER_API_KEY"):
@@ -832,10 +786,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 io.tool_error(
                     "OpenRouter authentication seemed successful, but the key is still missing."
                 )
-                analytics.event(
-                    "exit",
-                    reason="OpenRouter key missing after successful OAuth for specified model",
-                )
                 return 1
         else:
             # OAuth failed or was declined by the user
@@ -843,10 +793,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 f"Unable to proceed without an OpenRouter API key for model '{args.model}'."
             )
             io.offer_url(urls.models_and_keys, "Open documentation URL for more info?")
-            analytics.event(
-                "exit",
-                reason="OpenRouter key missing for specified model and OAuth failed/declined",
-            )
             return 1
 
     main_model = models.Model(
@@ -916,13 +862,11 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
     lint_cmds = parse_lint_cmds(args.lint_cmd, io)
     if lint_cmds is None:
-        analytics.event("exit", reason="Invalid lint command format")
         return 1
 
     if args.show_model_warnings:
         problem = models.sanity_check_models(io, main_model)
         if problem:
-            analytics.event("model warning", main_model=main_model)
             io.tool_output("You can skip this check with --no-show-model-warnings")
 
             try:
@@ -931,9 +875,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 )
                 io.tool_output()
             except KeyboardInterrupt:
-                analytics.event(
-                    "exit", reason="Keyboard interrupt during model warnings"
-                )
                 return 1
 
     repo = None
@@ -960,14 +901,10 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
     if not args.skip_sanity_check_repo:
         if not sanity_check_repo(repo, io):
-            analytics.event("exit", reason="Repository sanity check failed")
             return 1
 
     if repo and not args.skip_sanity_check_repo:
         num_files = len(repo.get_tracked_files())
-        analytics.event("repo", num_files=num_files)
-    else:
-        analytics.event("no-repo")
 
     commands = Commands(
         io,
@@ -1004,7 +941,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         map_tokens = args.map_tokens
 
     # Track auto-commits configuration
-    analytics.event("auto_commits", enabled=bool(args.auto_commits))
 
     try:
         coder = Coder.create(
@@ -1029,7 +965,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             test_cmd=args.test_cmd,
             commands=commands,
             summarizer=summarizer,
-            analytics=analytics,
             map_refresh=args.map_refresh,
             cache_prompts=args.cache_prompts,
             map_mul_no_files=args.map_multiplier_no_files,
@@ -1046,15 +981,12 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     except UnknownEditFormat as err:
         io.tool_error(str(err))
         io.offer_url(urls.edit_formats, "Open documentation about edit formats?")
-        analytics.event("exit", reason="Unknown edit format")
         return 1
     except ValueError as err:
         io.tool_error(str(err))
-        analytics.event("exit", reason="ValueError during coder creation")
         return 1
 
     if return_coder:
-        analytics.event("exit", reason="Returning coder object")
         return coder
 
     ignores = []
@@ -1068,13 +1000,11 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             coder,
             gitignores=ignores,
             verbose=args.verbose,
-            analytics=analytics,
             root=str(Path.cwd()) if args.subtree_only else None,
         )
         coder.file_watcher = file_watcher
 
     if args.copy_paste:
-        analytics.event("copy-paste mode")
         ClipboardWatcher(coder.io, verbose=args.verbose)
 
     coder.show_announcements()
@@ -1085,7 +1015,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         ]
         messages = coder.format_messages().all_messages()
         utils.show_messages(messages)
-        analytics.event("exit", reason="Showed prompts")
         return
 
     if args.lint:
@@ -1094,7 +1023,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     if args.test:
         if not args.test_cmd:
             io.tool_error("No --test-cmd provided.")
-            analytics.event("exit", reason="No test command provided")
             return 1
         coder.commands.cmd_test(args.test_cmd)
         if io.placeholder:
@@ -1107,27 +1035,23 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             coder.commands.cmd_commit()
 
     if args.lint or args.test or args.commit:
-        analytics.event("exit", reason="Completed lint/test/commit")
         return
 
     if args.show_repo_map:
         repo_map = coder.get_repo_map()
         if repo_map:
             io.tool_output(repo_map)
-        analytics.event("exit", reason="Showed repo map")
         return
 
     if args.apply:
         content = io.read_text(args.apply)
         if content is None:
-            analytics.event("exit", reason="Failed to read apply content")
             return
         coder.partial_response_content = content
         # For testing #2879
         # from lsr.coders.base_coder import all_fences
         # coder.fence = all_fences[1]
         coder.apply_updates()
-        analytics.event("exit", reason="Applied updates")
         return
 
     if args.apply_clipboard_edits:
@@ -1170,7 +1094,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             coder.run(with_message=args.message)
         except SwitchCoder:
             pass
-        analytics.event("exit", reason="Completed --message")
         return
 
     if args.message_file:
@@ -1180,29 +1103,20 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             coder.run(with_message=message_from_file)
         except FileNotFoundError:
             io.tool_error(f"Message file not found: {args.message_file}")
-            analytics.event("exit", reason="Message file not found")
             return 1
         except IOError as e:
             io.tool_error(f"Error reading message file: {e}")
-            analytics.event("exit", reason="Message file IO error")
             return 1
 
-        analytics.event("exit", reason="Completed --message-file")
         return
 
     if args.exit:
-        analytics.event("exit", reason="Exit flag set")
         return
-
-    analytics.event(
-        "cli session", main_model=main_model, edit_format=main_model.edit_format
-    )
 
     while True:
         try:
             coder.ok_to_warm_cache = bool(args.cache_keepalive_pings)
             coder.run()
-            analytics.event("exit", reason="Completed main CLI coder.run")
             return
         except SwitchCoder as switch:
             coder.ok_to_warm_cache = False
