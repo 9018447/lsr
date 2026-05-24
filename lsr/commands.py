@@ -1179,9 +1179,7 @@ class Commands:
                 self.io.tool_error("Invalid selection.")
                 return None
         else:
-            self.io.tool_error(
-                f"No .tex file found. Use: /{engine_name} <file.tex>"
-            )
+            self.io.tool_error(f"No .tex file found. Use: /{engine_name} <file.tex>")
             return None
 
     def _open_pdf(self, tex_file):
@@ -1206,7 +1204,9 @@ class Commands:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self.io.tool_output(f"\n📖 Opened {os.path.basename(pdf_file)} with zathura")
+            self.io.tool_output(
+                f"\n📖 Opened {os.path.basename(pdf_file)} with zathura"
+            )
         except Exception as e:
             self.io.tool_error(f"Failed to open zathura: {e}")
 
@@ -1999,7 +1999,9 @@ class Commands:
         adjusted_start = -len(after_command)
 
         for completion in path_completer.get_completions(new_document, complete_event):
-            if not completion.text.endswith(".tex") and not completion.text.endswith("/"):
+            if not completion.text.endswith(".tex") and not completion.text.endswith(
+                "/"
+            ):
                 continue
             quoted = self.quote_fname(after_command + completion.text)
             yield Completion(
@@ -2268,45 +2270,60 @@ class Commands:
         edit_counts_all = self._load_edit_counts()
         edit_counts = edit_counts_all.get(abs_path, {})
 
-        # Display structure with per-section edit count and marked status
+        # Display structure ──────────────────────────────────────
+        dim = "\u001b[2m"
+        bold = "\u001b[1m"
+        rst = "\u001b[0m"
+        cyan = "\u001b[36m"
+        green = "\u001b[32m"
+        yellow = "\u001b[33m"
+        red = "\u001b[31m"
+
+        bar = "\u2500" * 42
         self.io.tool_output(
-            f"\n\u001b[1m\u250c\u2500 Structure of {filename} \u2500\u2510\u001b[0m"
+            f"\n{bold}\u250c{bar}\u2510{rst}"
+        )
+        self.io.tool_output(
+            f"{bold}\u2502{rst}  {filename}{rst}"
+            f"{' ' * max(1, 40 - len(filename))}{bold}\u2502{rst}"
+        )
+        self.io.tool_output(
+            f"{bold}\u251c{bar}\u2524{rst}"
         )
         for idx, (item_type, title, start, end, _) in enumerate(items, 1):
-            indent = (
-                "  "
-                if item_type == "subsection"
-                else ("    " if item_type == "subsubsection" else "")
-            )
-            icons = {
-                "section": "\u001b[36m\u00a7\u001b[0m",
-                "subsection": " \u00a7",
-                "subsubsection": "  \u00a7",
-            }
-            icon = icons.get(item_type, "\u25a1")
-            # Show ✓ in green for marked sections
+            is_last = idx == len(items)
+            branch = "\u2514\u2500" if is_last else "\u251c\u2500"
+            level_depth = {
+                "section": 0,
+                "subsection": 1,
+                "subsubsection": 2,
+            }.get(item_type, 0)
+            level_pad = "  " * level_depth
+            level_icon = {
+                "section": f"{cyan}\u2588{rst}",
+                "subsection": f"{cyan}\u2591\u2591{rst}",
+                "subsubsection": f"{dim}{cyan}\u2591\u2591\u2591{rst}",
+            }.get(item_type, "\u25a1")
             is_marked = title in marked_titles
-            if is_marked:
-                mark_prefix = "\u001b[32m\u2713\u001b[0m "
-            else:
-                mark_prefix = "  "
-            # Show per-section edit count in yellow if > 0
+            mark = f" {green}\u2713{rst}" if is_marked else ""
             count = edit_counts.get(title, 0)
-            count_str = f" \u001b[33m(×{count})\u001b[0m" if count > 0 else ""
+            count_tag = f" {yellow}\u00d7{count}{rst}" if count > 0 else ""
             self.io.tool_output(
-                f"  {idx:2d}. {mark_prefix}{icon} {indent}{title} [{start + 1}-{end + 1}]{count_str}"
+                f"{bold}\u2502{rst} {idx:2d} {branch}{level_pad}{level_icon} "
+                f"{title}{mark}"
+                f"{dim} L{start + 1}\u2013{end + 1}{rst}{count_tag}"
             )
+        self.io.tool_output(
+            f"{bold}\u2514{bar}\u2518{rst}"
+        )
 
-        self.io.tool_output(f"\nSelect sections to {action_verb}:")
-        self.io.tool_output("  - Single: 1,3,5")
-        self.io.tool_output("  - Range:  1-5")
-        self.io.tool_output("  - All:    all")
-        self.io.tool_output("  - Create: c")
-        self.io.tool_output("  - Remove: r")
-        self.io.tool_output("  - Move:   m")
-        self.io.tool_output("  - Cancel: q")
+        # Selection menu ──────────────────────────────────────────
+        self.io.tool_output(
+            f"\n  {bold}Select{rst}  1,3  1-5  all  "
+            f"{dim}|{rst}  c create  r remove  m move  q quit"
+        )
 
-        selection = input("\nSelection: ")
+        selection = input(f"  {cyan}\u276f{rst} ")
 
         if not selection or selection.lower() == "q":
             return None
@@ -2346,7 +2363,7 @@ class Commands:
                         pass
 
         if not selected_indices:
-            self.io.tool_output("No valid selection.")
+            self.io.tool_output(f"  {red}No valid selection.{rst}")
             return None
 
         selected_items = [items[i] for i in sorted(selected_indices)]
@@ -2357,6 +2374,12 @@ class Commands:
 
         Flow: level → title → position → insert into file → re-invoke picker.
         """
+        dim = "\u001b[2m"
+        bold = "\u001b[1m"
+        rst = "\u001b[0m"
+        cyan = "\u001b[36m"
+        green = "\u001b[32m"
+
         level_names = {
             "1": "section",
             "2": "subsection",
@@ -2364,61 +2387,71 @@ class Commands:
             "4": "paragraph",
         }
 
-        # ── Step 1: Choose level ─────────────────────────────
-        self.io.tool_output("\n\u001b[1mCreate new section\u001b[0m")
-        self.io.tool_output("  1. section")
-        self.io.tool_output("  2. subsection")
-        self.io.tool_output("  3. subsubsection")
-        self.io.tool_output("  4. paragraph")
+        # ── Step 1: Choose level ──────────────────────
+        self.io.tool_output(
+            f"\n  {bold}\u250c\u2500 Create section \u2500\u2510{rst}"
+        )
+        self.io.tool_output(
+            f"  {cyan}\u2502{rst} 1 {cyan}\u2502{rst} section"
+            f"     2 {cyan}\u2502{rst} subsection"
+        )
+        self.io.tool_output(
+            f"  {cyan}\u2502{rst} 3 {cyan}\u2502{rst} subsubsection"
+            f"  4 {cyan}\u2502{rst} paragraph"
+        )
+        self.io.tool_output(
+            f"  {bold}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518{rst}"
+        )
 
-        level_choice = input("\nLevel [1-4]: ").strip()
+        level_choice = input(f"  {cyan}\u276f{rst} Level [1-4]: ").strip()
         if level_choice not in level_names:
             self.io.tool_error("Invalid level.")
             return None
         level_name = level_names[level_choice]
         latex_cmd = "\\" + level_name
 
-        # ── Step 2: Enter title ──────────────────────────────
-        title = input("Title: ").strip()
+        # ── Step 2: Enter title ─────────────────────
+        title = input(f"  {cyan}\u276f{rst} Title: ").strip()
         if not title:
             self.io.tool_error("Empty title, cancelled.")
             return None
 
-        # ── Step 3: Choose position ──────────────────────────
-        self.io.tool_output(f"\nInsert \\{level_name}{{{title}}} at position:")
-        self.io.tool_output("  - Before section 1, after section N, etc.")
-        self.io.tool_output(f"  - Enter 1–{len(items)} to insert before that section")
-        self.io.tool_output(f"  - Enter {len(items) + 1} or larger to append at end")
+        # ── Step 3: Choose position ──────────────────
+        n = len(items)
+        self.io.tool_output(
+            f"\n  {dim}Insert \\{level_name}{{{title}}} before section N{rst}"
+        )
+        self.io.tool_output(
+            f"  {dim}1 \u2192 before \u00a71  \u00b7  "
+            f"{n} \u2192 before \u00a7{n}  \u00b7  "
+            f"{n + 1} \u2192 append{rst}"
+        )
 
-        pos_input = input(f"\nPosition [1-{len(items) + 1}]: ").strip()
+        pos_input = input(f"  {cyan}\u276f{rst} Position [1-{n + 1}]: ").strip()
         try:
             pos = int(pos_input)
         except ValueError:
             self.io.tool_error("Invalid position.")
             return None
 
-        # Clamp to valid range
-        pos = max(1, min(pos, len(items) + 1))
+        pos = max(1, min(pos, n + 1))
 
-        # ── Step 4: Build the new section text ───────────────
+        # ── Step 4: Build the new section text ───────────
         new_text = f"{latex_cmd}{{{title}}}"
-        # Add a TODO placeholder body
         new_text += f"\n% TODO: Write {level_name} content here"
 
-        # ── Step 5: Determine insertion line ──────────────────
-        if pos <= len(items):
-            # Insert before section at index (pos-1)
-            insert_line = items[pos - 1][2]  # start_line of target
+        # ── Step 5: Determine insertion line ──────────
+        if pos <= n:
+            insert_line = items[pos - 1][2]
         else:
-            # Append at end of file
             insert_line = len(lines)
 
-        # ── Step 6: Insert into file ─────────────────────────
+        # ── Step 6: Insert into file ──────────────
         new_lines = new_text.split("\n")
-        # Add blank line separator before new section (unless at start)
         if insert_line > 0 and lines[insert_line - 1].strip():
             new_lines.insert(0, "")
-        # Add blank line after
         new_lines.append("")
 
         lines[insert_line:insert_line] = new_lines
@@ -2427,10 +2460,10 @@ class Commands:
             f.write("\n".join(lines))
 
         self.io.tool_output(
-            f"\n\u001b[32m\u2714 Created \\{level_name}{{{title}}} at position {pos}\u001b[0m"
+            f"\n  {green}\u2714 Created \\{level_name}{{{title}}} "
+            f"{dim}at position {pos}{rst}"
         )
 
-        # ── Step 7: Re-invoke the section picker ─────────────
         return self._parse_and_select_sections(filename, action_verb="edit")
 
     def _remove_section(self, abs_path, filename, lines, items):
@@ -2438,13 +2471,28 @@ class Commands:
 
         Flow: select section → confirm → confirm again → delete → re-invoke picker.
         """
+        dim = "\u001b[2m"
+        bold = "\u001b[1m"
+        rst = "\u001b[0m"
+        cyan = "\u001b[36m"
+        green = "\u001b[32m"
+        yellow = "\u001b[33m"
+        red = "\u001b[31m"
+
         self.io.tool_output(
-            "\n\u001b[1m\u001b[31mRemove section\u001b[0m — select section to delete"
+            f"\n  {bold}{red}\u250c\u2500 Remove section \u2500\u2510{rst}"
         )
         for i, (sec_type, title, *_rest) in enumerate(items, 1):
-            self.io.tool_output(f"  {i}. \\{sec_type}{{{title}}}")
+            self.io.tool_output(
+                f"  {red}{dim}\u2502{rst} {i:2d}. \\{sec_type}{{{title}}}"
+            )
+        self.io.tool_output(
+            f"  {bold}{red}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518{rst}"
+        )
 
-        idx_input = input(f"\nSection to remove [1-{len(items)}]: ").strip()
+        idx_input = input(f"  {cyan}\u276f{rst} Remove [1-{len(items)}]: ").strip()
         try:
             idx = int(idx_input) - 1
             if not (0 <= idx < len(items)):
@@ -2453,34 +2501,34 @@ class Commands:
             self.io.tool_error("Invalid selection.")
             return None
 
-        sec_type, title, start, end, content = items[idx]
+        sec_type, title, start, end, content_item = items[idx]
+        line_count = end - start + 1
 
         # First confirmation
         self.io.tool_output(
-            f"\n\u001b[33m\u26a0 About to delete \\{sec_type}{{{title}}} "
-            f"(lines {start + 1}–{end + 1}, {end - start + 1} lines)\u001b[0m"
+            f"\n  {yellow}\u26a0 About to delete \\{sec_type}{{{title}}}{rst}"
         )
-        confirm1 = input("Type 'yes' to confirm: ").strip().lower()
+        self.io.tool_output(
+            f"    {dim}{line_count} lines (L{start + 1}\u2013{end + 1}){rst}"
+        )
+        confirm1 = input(f"  {yellow}\u276f{rst} Type 'yes' to confirm: ").strip().lower()
         if confirm1 != "yes":
-            self.io.tool_output("Cancelled.")
+            self.io.tool_output(f"  {dim}Cancelled.{rst}")
             return self._parse_and_select_sections(filename, action_verb="edit")
 
         # Second confirmation
         self.io.tool_output(
-            "\n\u001b[31m\u26a0 FINAL WARNING: This cannot be undone.\u001b[0m"
+            f"  {red}{bold}\u26a0 FINAL WARNING \u2014 cannot be undone{rst}"
         )
-        self.io.tool_output(f"  Deleting \\{sec_type}{{{title}}} permanently.")
-        confirm2 = input("Type 'DELETE' to proceed: ").strip()
+        confirm2 = input(f"  {red}\u276f{rst} Type 'DELETE' to proceed: ").strip()
         if confirm2 != "DELETE":
-            self.io.tool_output("Cancelled.")
+            self.io.tool_output(f"  {dim}Cancelled.{rst}")
             return self._parse_and_select_sections(filename, action_verb="edit")
 
         # Remove lines from file
-        # Also remove blank lines before the section (separator)
         rm_start = start
         while rm_start > 0 and not lines[rm_start - 1].strip():
             rm_start -= 1
-        # And blank lines after
         rm_end = end
         while rm_end < len(lines) - 1 and not lines[rm_end + 1].strip():
             rm_end += 1
@@ -2491,7 +2539,7 @@ class Commands:
             f.write("\n".join(lines))
 
         self.io.tool_output(
-            f"\n\u001b[32m\u2714 Removed \\{sec_type}{{{title}}}\u001b[0m"
+            f"\n  {green}\u2714 Removed \\{sec_type}{{{title}}}{rst}"
         )
 
         return self._parse_and_select_sections(filename, action_verb="edit")
@@ -2501,53 +2549,75 @@ class Commands:
 
         Flow: select section → choose target position → move → re-invoke picker.
         """
+        dim = "\u001b[2m"
+        bold = "\u001b[1m"
+        rst = "\u001b[0m"
+        cyan = "\u001b[36m"
+        green = "\u001b[32m"
+        yellow = "\u001b[33m"
+
         self.io.tool_output(
-            "\n\u001b[1mMove section\u001b[0m — select section and target position"
+            f"\n  {bold}{cyan}\u250c\u2500 Move section \u2500\u2510{rst}"
         )
         for i, (sec_type, title, *_rest) in enumerate(items, 1):
-            self.io.tool_output(f"  {i}. \\{sec_type}{{{title}}}")
+            self.io.tool_output(
+                f"  {cyan}{dim}\u2502{rst} {i:2d}. \\{sec_type}{{{title}}}"
+            )
+        self.io.tool_output(
+            f"  {bold}{cyan}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518{rst}"
+        )
 
-        src_input = input(f"\nSection to move [1-{len(items)}]: ").strip()
+        src_input = input(f"  {cyan}\u276f{rst} Move [1-{len(items)}]: ").strip()
         try:
             src_idx = int(src_input) - 1
             if not (0 <= src_idx < len(items)):
                 raise ValueError
         except ValueError:
-            self.io.tool_output("Invalid selection.")
+            self.io.tool_output(f"  {dim}Invalid selection.{rst}")
             return None
 
         src_type, src_title, src_start, src_end, src_content = items[src_idx]
 
-        self.io.tool_output(f"\nMove \\{src_type}{{{src_title}}} before which section?")
-        # Re-list with current positions (excluding the moving section)
+        # Re-list targets (excluding the moving section)
         display_idx = 0
-        target_map = {}  # display_idx → actual position in file
+        target_map = {}
+        self.io.tool_output(
+            f"\n  {yellow}\u250c\u2500 Insert \\{src_type}{{{src_title}}} before \u2500\u2510{rst}"
+        )
         for i, (sec_type, title, *_rest) in enumerate(items):
             if i == src_idx:
                 continue
             display_idx += 1
             target_map[display_idx] = i
-            self.io.tool_output(f"  {display_idx}. \\{sec_type}{{{title}}}")
-        # Option to append at end
+            self.io.tool_output(
+                f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. \\{sec_type}{{{title}}}"
+            )
         display_idx += 1
-        target_map[display_idx] = len(items)  # sentinel: append
-        self.io.tool_output(f"  {display_idx}. (end of file)")
+        target_map[display_idx] = len(items)
+        self.io.tool_output(
+            f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. {dim}(end of file){rst}"
+        )
+        self.io.tool_output(
+            f"  {yellow}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518{rst}"
+        )
 
-        tgt_input = input(f"\nInsert before [1-{display_idx}]: ").strip()
+        tgt_input = input(f"  {cyan}\u276f{rst} Before [1-{display_idx}]: ").strip()
         try:
             tgt_display = int(tgt_input)
             if not (1 <= tgt_display <= display_idx):
                 raise ValueError
         except ValueError:
-            self.io.tool_output("Invalid target.")
+            self.io.tool_output(f"  {dim}Invalid target.{rst}")
             return None
 
-        # Determine actual target index in items[]
         tgt_idx = target_map[tgt_display]
 
         if tgt_idx == src_idx or (src_idx + 1 == tgt_idx):
-            # Moving to same position — no-op
-            self.io.tool_output("Already in that position.")
+            self.io.tool_output(f"  {dim}Already in that position.{rst}")
             return self._parse_and_select_sections(filename, action_verb="edit")
 
         # ── Perform the move on lines[] ─────────────────────
@@ -2591,7 +2661,7 @@ class Commands:
             f.write("\n".join(lines))
 
         self.io.tool_output(
-            f"\n\u001b[32m\u2714 Moved \\{src_type}{{{src_title}}} to new position\u001b[0m"
+            f"\n  \u001b[32m\u2714 Moved \\{src_type}{{{src_title}}} to new position\u001b[0m"
         )
 
         return self._parse_and_select_sections(filename, action_verb="edit")
@@ -2765,15 +2835,23 @@ class Commands:
         self.coder.abs_fnames.add(tmp_path)
 
         # Show summary with per-section edit counts
-        self.io.tool_output("\n\u001b[32m\u2714 Ready to edit!\u001b[0m")
+        dim = "\u001b[2m"
+        bold = "\u001b[1m"
+        rst = "\u001b[0m"
+        cyan = "\u001b[36m"
+        green = "\u001b[32m"
+        yellow = "\u001b[33m"
+
+        bar = "\u2500" * 42
+        self.io.tool_output(f"\n\u001b[32m\u001b[1m  \u2714 Ready to edit\u001b[0m")
         for _, title, _, _, _ in selected_items:
             c = file_counts.get(title, 0)
-            self.io.tool_output(f"  \u001b[33m×{c}\u001b[0m {title}")
-        self.io.tool_output(f"\u001b[36m\u250c\u2500 Edit file:\u001b[0m {tmp_path}")
-        self.io.tool_output(f"\u001b[36m\u2514\u2500 Original:\u001b[0m   {filename}")
-        self.io.tool_output("\nNext steps:")
-        self.io.tool_output("  1. Ask LLM to edit the sections")
-        self.io.tool_output("  2. Run /edit-done to merge changes back")
+            c_tag = f" \u001b[33m\u00d7{c}\u001b[0m" if c > 0 else ""
+            self.io.tool_output(f"    \u001b[36m\u2502\u001b[0m {title}{c_tag}")
+        self.io.tool_output(f"  \u001b[2m{bar}\u001b[0m")
+        self.io.tool_output(f"  \u001b[2mEdit:\u001b[0m  {tmp_path}")
+        self.io.tool_output(f"  \u001b[2mFrom:\u001b[0m  {filename}")
+        self.io.tool_output(f"\n  \u001b[2mAsk LLM to edit, then run\u001b[0m \u001b[1m/edit-done\u001b[0m")
 
     def _merge_sections_from_session(self, session_file):
         """Merge sections from a session file back to the original file.
@@ -2857,10 +2935,14 @@ class Commands:
             self.coder.abs_fnames.remove(tmp_file)
 
         action = session.get("action", "edit")
+        green = "\u001b[32m"
+        rst = "\u001b[0m"
+        bold = "\u001b[1m"
+        dim = "\u001b[2m"
         self.io.tool_output(
-            f"\n\u001b[32m\u2714 Merged {replaced_count} section(s) back to:\u001b[0m"
+            f"\n  \u001b[32m\u001b[1m\u2714 Merged {replaced_count} section(s)\u001b[0m"
         )
-        self.io.tool_output(f"   {original_file}")
+        self.io.tool_output(f"    \u001b[2m\u2192\u001b[0m {original_file}")
 
     def _done_command(self, action_verb):
         """Shared merge-back logic for /{action}-done commands."""
