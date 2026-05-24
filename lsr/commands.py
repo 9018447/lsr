@@ -3198,6 +3198,26 @@ class Commands:
 
         abs_path, filename, items, selected_items = result
 
+        # If abs_path points to a temp file, resolve to the original file
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        if abs_path.startswith(lsr_home):
+            # Check for existing session file with this temp file
+            session_file = abs_path + ".session"
+            if os.path.exists(session_file):
+                try:
+                    import json
+                    with open(session_file, encoding="utf-8") as f:
+                        existing_session = json.load(f)
+                    real_original = existing_session.get("original_file")
+                    if real_original and os.path.exists(real_original):
+                        abs_path = real_original
+                        filename = os.path.basename(abs_path)
+                        self.io.tool_output(
+                            f"\n\u001b[2mResolved temp file to original: {filename}\u001b[0m"
+                        )
+                except Exception:
+                    pass
+
         # Build session data and temp file content
         session_data = {
             "action": action_verb,
