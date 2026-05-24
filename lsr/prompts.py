@@ -69,7 +69,7 @@ deai_prompt = (
     "academic manuscript. Do NOT make the text casual, chatty, or personal.\n"
     "\n"
     "MANDATORY TONE RULES:\n"
-    "- THIRD PERSON ONLY. Never introduce first person (\"I\", \"we\") "
+    '- THIRD PERSON ONLY. Never introduce first person ("I", "we") '
     "unless the original text already uses it.\n"
     "- Maintain formal academic register throughout. The result should "
     "be suitable for a peer-reviewed journal.\n"
@@ -102,7 +102,7 @@ deai_prompt = (
     "underscore, vibrant\n"
     '  - Copula avoidance: "serves as" → "is", "boasts" → "has"\n'
     '  - Negative parallelisms: "Not only X but also Y", '
-    '"It\'s not just X, it\'s Y"\n'
+    "\"It's not just X, it's Y\"\n"
     "  - Rule-of-three enumerations unless genuinely needed\n"
     "  - Synonym cycling / elegant variation\n"
     '  - False ranges: "from X to Y" where no real scale exists\n'
@@ -143,12 +143,12 @@ deai_prompt = (
     "3. Maintain formal academic register — this is a journal paper.\n"
     '4. Replace vague amplifiers with concrete data (not "significant '
     'improvement" but "accuracy increased from 72% to 89%").\n'
-    "5. Vary sentence length naturally but do NOT chase \"punchy\" style.\n"
+    '5. Vary sentence length naturally but do NOT chase "punchy" style.\n'
     "6. Use simple constructions (is/are/has) where they suffice.\n"
     r"7. Do NOT alter the \section / \subsection / \subsubsection hierarchy."
     "\n"
     "8. All LaTeX commands and environments must remain syntactically correct.\n"
-    "9. If the original text uses \"we\", keep \"we\". If it uses third person, "
+    '9. If the original text uses "we", keep "we". If it uses third person, '
     "keep third person. NEVER switch person.\n"
     "\n"
     "OUTPUT FORMAT: Output the self-audit as LaTeX comments "

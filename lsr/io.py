@@ -1082,9 +1082,7 @@ class InputOutput:
             pretty = self.pretty
 
         if pretty:
-            show_resp = Markdown(
-                message, code_theme="monokai"
-            )
+            show_resp = Markdown(message, code_theme="monokai")
         else:
             show_resp = Text(message or "(empty response)")
 
