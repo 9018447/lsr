@@ -54,6 +54,89 @@ _shared_output_format = (
 )
 
 # =============================================================================
+# /deai — Remove AI writing patterns from academic LaTeX sections
+# =============================================================================
+
+deai_prompt = (
+    "\nTASK: DE-AI the following LaTeX section(s). Remove ALL remaining traces of "
+    "AI-generated writing while preserving scholarly rigor, citations, and technical accuracy.\n"
+    "\nYou must perform this task ITERATIVELY:\n"
+    "\n"
+    "  ROUND 1 — Identify & Fix\n"
+    "  Scan every sentence for the following AI patterns and rewrite:\n"
+    "\n"
+    "  Content patterns:\n"
+    '  - Inflated significance ("testament to", "pivotal moment", "underscores", '
+    '"evolving landscape", "setting the stage for", "marking a shift")\n'
+    '  - Promotional tone ("groundbreaking", "notably", "nestled", "vibrant", '
+    '"boasts a", "stunning")\n'
+    '  - Vague attribution ("experts suggest", "it is widely acknowledged" '
+    '"without specific citation)\n'
+    '  - Formulaic challenges sections ("Despite challenges, X continues to thrive")\n'
+    '  - Gerund analysis strings ("highlighting X, reflecting Y, symbolizing Z")\n'
+    '  - Generic positive conclusions ("The future looks bright", '
+    '"exciting times lie ahead")\n'
+    "\n"
+    "  Language patterns:\n"
+    "  - AI vocabulary (additionally, crucial, delve, enhance, fostering, garner, "
+    '"interplay, intricate, pivotal, showcase, tapestry, testament, underscore, vibrant)\n'
+    '  - Copula avoidance ("serves as" → "is", "boasts" → "has")\n'
+    '  - Negative parallelisms ("Not only X but also Y", "It\'s not just X, it\'s Y")\n'
+    "  - Rule-of-three enumerations unless genuinely needed\n"
+    "  - Synonym cycling / elegant variation\n"
+    '  - False ranges ("from X to Y" where no real scale exists)\n'
+    '  - Excessive hedging ("could potentially possibly" → "may")\n'
+    "\n"
+    "  Style patterns:\n"
+    "  - Em-dash overuse → commas or restructure\n"
+    "  - Excessive boldface → remove\n"
+    "  - Bold-colon inline lists → flowing prose\n"
+    "  - Title-case headings → sentence case\n"
+    '  - Filler phrases ("In order to" → "To", "Due to the fact that" → "Because")\n'
+    "\n"
+    "  Academic-specific AI tells:\n"
+    '  - Hedging overload: "may potentially suggest the possibility that" → "suggests that"\n'
+    '  - Significance inflation: every finding is "significant" or "novel"\n'
+    '  - Transition word machinery: "Furthermore", "Moreover", "Additionally", '
+    '"Consequently" at every paragraph opening\n'
+    "  - Methodology-as-narrative: dramatic flair in methods instead of plain procedure\n"
+    "  - Results-as-commentary: editorializing results instead of stating them\n"
+    "  - Discussion-as-promotional: overselling implications or claiming paradigm shifts\n"
+    "  - Paragraph uniformity: every paragraph identical in structure and length\n"
+    "\n"
+    "  ROUND 2 — Self-Audit\n"
+    "  After producing the Round 1 output, ask yourself:\n"
+    '  "What makes the below so obviously AI generated?"\n'
+    "  Answer with brief bullets listing remaining tells.\n"
+    "  Then revise AGAIN to eliminate every remaining tell.\n"
+    "\n"
+    "  ROUND 3 — Final Pass\n"
+    "  Re-examine the Round 2 output one more time.\n"
+    "  If any AI patterns still remain, fix them.\n"
+    "  The final output must read like a competent human scholar wrote it —\n"
+    "  precise, specific, with natural rhythm and genuine intellectual engagement.\n"
+    "\n"
+    "\n"
+    "De-AI rules:\n"
+    "1. Preserve ALL \\cite{{}}, \\ref{{}}, \\label{{}}, and bibliography keys unchanged.\n"
+    "2. Keep all mathematical formulas, equations, and notation exactly as-is.\n"
+    "3. Maintain the academic register — formal, precise, but not robotic.\n"
+    '4. Use concrete data over vague amplifiers (not "significant improvement" but '
+    '"accuracy increased from 72% to 89%").\n'
+    "5. Vary sentence length and structure naturally.\n"
+    "6. Use simple constructions (is/are/has) where they suffice.\n"
+    "7. Let the data speak — do not inflate it.\n"
+    r"8. Do NOT alter the \\section / \\subsection / \\subsubsection hierarchy or heading text."
+    "\n"
+    "9. All LaTeX commands and environments must remain syntactically correct.\n"
+    "\n"
+    "OUTPUT FORMAT: First output your Round 2 self-audit as LaTeX comments "
+    "(% lines). Then output the final de-AI'd LaTeX using SEARCH/REPLACE blocks.\n"
+    "Do NOT add any non-commentary text outside the blocks.\n"
+    "\n--- BEGIN SECTIONS TO DE-AI ---\n{content}\n--- END SECTIONS TO DE-AI ---\n"
+)
+
+# =============================================================================
 # /expand — Expand LaTeX sections with richer scientific detail
 # =============================================================================
 

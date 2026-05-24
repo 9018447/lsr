@@ -2569,6 +2569,10 @@ class Commands:
         "Apply condensed sections back to original file"
         return self._done_command("condense")
 
+    def cmd_deai_done(self, args=""):
+        "Apply de-AI'd sections back to original file"
+        return self._done_command("deai")
+
     def cmd_note_done(self, args=""):
         "Deprecated: use /edit-done instead."
         self.io.tool_output(
@@ -2822,6 +2826,10 @@ class Commands:
         return self._generic_chat_command_for_file(
             tmp_path, user_msg, self.coder.main_model.edit_format
         )
+
+    def cmd_deai(self, args=""):
+        "Remove AI writing patterns from LaTeX sections (iterative self-audit)"
+        return self._run_section_command(args, "deai", prompts.deai_prompt)
 
     def cmd_expand(self, args=""):
         "Expand LaTeX sections with richer scientific detail"
