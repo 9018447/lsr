@@ -2558,20 +2558,25 @@ class Commands:
         self._merge_sections_from_session(session_file)
 
     def cmd_expand_done(self, args=""):
-        "Apply expanded sections back to original file"
-        return self._done_command("expand")
+        "Deprecated: use /edit-done instead."
+        self.io.tool_output(
+            "\033[33m/expand-done is deprecated. Use /edit-done instead.\033[0m"
+        )
+        return self.cmd_edit_done(args)
 
     def cmd_translate_done(self, args=""):
-        "Apply translated sections back to original file"
-        return self._done_command("translate")
+        "Deprecated: use /edit-done instead."
+        self.io.tool_output(
+            "\033[33m/translate-done is deprecated. Use /edit-done instead.\033[0m"
+        )
+        return self.cmd_edit_done(args)
 
     def cmd_condense_done(self, args=""):
-        "Apply condensed sections back to original file"
-        return self._done_command("condense")
-
-    def cmd_deai_done(self, args=""):
-        "Apply de-AI'd sections back to original file"
-        return self._done_command("deai")
+        "Deprecated: use /edit-done instead."
+        self.io.tool_output(
+            "\033[33m/condense-done is deprecated. Use /edit-done instead.\033[0m"
+        )
+        return self.cmd_edit_done(args)
 
     def cmd_note_done(self, args=""):
         "Deprecated: use /edit-done instead."
@@ -2752,7 +2757,7 @@ class Commands:
 
         tmp_content = [
             f"% LSR {action_verb.capitalize()} File",
-            f"% The sections below will be {action_verb}d. Run /{action_verb}-done to apply.",
+            "% The sections below will be edited. Run /edit-done to apply.",
             "",
         ]
 
@@ -2791,7 +2796,7 @@ class Commands:
         # Write temp file to ~/.lsr/tmp/
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_{action_verb}_{descriptive}_{dedup_hash}.tex"
+        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
         with open(tmp_path, "w", encoding="utf-8") as f:
