@@ -2225,6 +2225,8 @@ class Commands:
         self.io.tool_output("  - Range:  1-5")
         self.io.tool_output("  - All:    all")
         self.io.tool_output("  - Create: c")
+        self.io.tool_output("  - Remove: r")
+        self.io.tool_output("  - Move:   m")
         self.io.tool_output("  - Cancel: q")
 
         selection = input("\nSelection: ")
@@ -2235,6 +2237,14 @@ class Commands:
         # ── Create section mode ──────────────────────────────
         if selection.lower() == "c":
             return self._create_section(abs_path, filename, lines, items)
+
+        # ── Remove section mode ─────────────────────────────
+        if selection.lower() == "r":
+            return self._remove_section(abs_path, filename, lines, items)
+
+        # ── Move section mode ───────────────────────────────
+        if selection.lower() == "m":
+            return self._move_section(abs_path, filename, lines, items)
 
         selected_indices = set()
         if selection.lower() == "all":
@@ -2298,16 +2308,10 @@ class Commands:
             return None
 
         # ── Step 3: Choose position ──────────────────────────
-        self.io.tool_output(
-            f"\nInsert \\{level_name}{{{title}}} at position:"
-        )
+        self.io.tool_output(f"\nInsert \\{level_name}{{{title}}} at position:")
         self.io.tool_output("  - Before section 1, after section N, etc.")
-        self.io.tool_output(
-            f"  - Enter 1–{len(items)} to insert before that section"
-        )
-        self.io.tool_output(
-            f"  - Enter {len(items) + 1} or larger to append at end"
-        )
+        self.io.tool_output(f"  - Enter 1–{len(items)} to insert before that section")
+        self.io.tool_output(f"  - Enter {len(items) + 1} or larger to append at end")
 
         pos_input = input(f"\nPosition [1-{len(items) + 1}]: ").strip()
         try:
@@ -2350,6 +2354,173 @@ class Commands:
         )
 
         # ── Step 7: Re-invoke the section picker ─────────────
+        return self._parse_and_select_sections(filename, action_verb="edit")
+
+    def _remove_section(self, abs_path, filename, lines, items):
+        """Interactive section removal with double confirmation.
+
+        Flow: select section → confirm → confirm again → delete → re-invoke picker.
+        """
+        self.io.tool_output(
+            "\n\u001b[1m\u001b[31mRemove section\u001b[0m — select section to delete"
+        )
+        for i, (sec_type, title, *_rest) in enumerate(items, 1):
+            self.io.tool_output(f"  {i}. \\{sec_type}{{{title}}}")
+
+        idx_input = input(f"\nSection to remove [1-{len(items)}]: ").strip()
+        try:
+            idx = int(idx_input) - 1
+            if not (0 <= idx < len(items)):
+                raise ValueError
+        except ValueError:
+            self.io.tool_error("Invalid selection.")
+            return None
+
+        sec_type, title, start, end, content = items[idx]
+
+        # First confirmation
+        self.io.tool_output(
+            f"\n\u001b[33m\u26a0 About to delete \\{sec_type}{{{title}}} "
+            f"(lines {start + 1}–{end + 1}, {end - start + 1} lines)\u001b[0m"
+        )
+        confirm1 = input("Type 'yes' to confirm: ").strip().lower()
+        if confirm1 != "yes":
+            self.io.tool_output("Cancelled.")
+            return self._parse_and_select_sections(filename, action_verb="edit")
+
+        # Second confirmation
+        self.io.tool_output(
+            "\n\u001b[31m\u26a0 FINAL WARNING: This cannot be undone.\u001b[0m"
+        )
+        self.io.tool_output(
+            f"  Deleting \\{sec_type}{{{title}}} permanently."
+        )
+        confirm2 = input("Type 'DELETE' to proceed: ").strip()
+        if confirm2 != "DELETE":
+            self.io.tool_output("Cancelled.")
+            return self._parse_and_select_sections(filename, action_verb="edit")
+
+        # Remove lines from file
+        # Also remove blank lines before the section (separator)
+        rm_start = start
+        while rm_start > 0 and not lines[rm_start - 1].strip():
+            rm_start -= 1
+        # And blank lines after
+        rm_end = end
+        while rm_end < len(lines) - 1 and not lines[rm_end + 1].strip():
+            rm_end += 1
+
+        del lines[rm_start : rm_end + 1]
+
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 Removed \\{sec_type}{{{title}}}\u001b[0m"
+        )
+
+        return self._parse_and_select_sections(filename, action_verb="edit")
+
+    def _move_section(self, abs_path, filename, lines, items):
+        """Interactive section reordering.
+
+        Flow: select section → choose target position → move → re-invoke picker.
+        """
+        self.io.tool_output(
+            "\n\u001b[1mMove section\u001b[0m — select section and target position"
+        )
+        for i, (sec_type, title, *_rest) in enumerate(items, 1):
+            self.io.tool_output(f"  {i}. \\{sec_type}{{{title}}}")
+
+        src_input = input(f"\nSection to move [1-{len(items)}]: ").strip()
+        try:
+            src_idx = int(src_input) - 1
+            if not (0 <= src_idx < len(items)):
+                raise ValueError
+        except ValueError:
+            self.io.tool_output("Invalid selection.")
+            return None
+
+        src_type, src_title, src_start, src_end, src_content = items[src_idx]
+
+        self.io.tool_output(
+            f"\nMove \\{src_type}{{{src_title}}} before which section?"
+        )
+        # Re-list with current positions (excluding the moving section)
+        display_idx = 0
+        target_map = {}  # display_idx → actual position in file
+        for i, (sec_type, title, *_rest) in enumerate(items):
+            if i == src_idx:
+                continue
+            display_idx += 1
+            target_map[display_idx] = i
+            self.io.tool_output(f"  {display_idx}. \\{sec_type}{{{title}}}")
+        # Option to append at end
+        display_idx += 1
+        target_map[display_idx] = len(items)  # sentinel: append
+        self.io.tool_output(f"  {display_idx}. (end of file)")
+
+        tgt_input = input(f"\nInsert before [1-{display_idx}]: ").strip()
+        try:
+            tgt_display = int(tgt_input)
+            if not (1 <= tgt_display <= display_idx):
+                raise ValueError
+        except ValueError:
+            self.io.tool_output("Invalid target.")
+            return None
+
+        # Determine actual target index in items[]
+        tgt_idx = target_map[tgt_display]
+
+        if tgt_idx == src_idx or (src_idx + 1 == tgt_idx):
+            # Moving to same position — no-op
+            self.io.tool_output("Already in that position.")
+            return self._parse_and_select_sections(filename, action_verb="edit")
+
+        # ── Perform the move on lines[] ─────────────────────
+        # Extract section block (with surrounding blank lines)
+        rm_start = src_start
+        while rm_start > 0 and not lines[rm_start - 1].strip():
+            rm_start -= 1
+        rm_end = src_end
+        while rm_end < len(lines) - 1 and not lines[rm_end + 1].strip():
+            rm_end += 1
+
+        block = lines[rm_start : rm_end + 1]
+        del lines[rm_start : rm_end + 1]
+
+        # Now line numbers have shifted — recalculate target position
+        # Build remaining items list (after removing src)
+        remaining = [it for j, it in enumerate(items) if j != src_idx]
+
+        if tgt_idx < len(remaining):
+            # Insert before remaining[tgt_idx]
+            # Search for the target heading in modified lines[]
+            tgt_item = remaining[tgt_idx]
+            target_heading = f"\\{tgt_item[0]}{{{tgt_item[1]}}}"
+            insert_at = None
+            for i, ln in enumerate(lines):
+                if target_heading in ln:
+                    insert_at = i
+                    break
+            if insert_at is None:
+                insert_at = len(lines)
+        else:
+            insert_at = len(lines)
+
+        # Add blank line before if needed
+        if insert_at > 0 and lines[insert_at - 1].strip():
+            block.insert(0, "")
+        block.append("")
+        lines[insert_at:insert_at] = block
+
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 Moved \\{src_type}{{{src_title}}} to new position\u001b[0m"
+        )
+
         return self._parse_and_select_sections(filename, action_verb="edit")
 
     @staticmethod
