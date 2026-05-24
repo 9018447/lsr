@@ -1145,30 +1145,77 @@ class Commands:
         else:
             self.io.tool_output("\n⏭️  已跳过，未添加到上下文。")
 
+    def _resolve_tex_file(self, args, engine_name):
+        """Resolve .tex file from args, or auto-sniff + interactive selection.
+
+        Returns the resolved file path, or None if cancelled / not found.
+        """
+        if args and args.strip():
+            tex_file = args.strip()
+            if not os.path.exists(tex_file):
+                self.io.tool_error(f"File not found: {tex_file}")
+                return None
+            return tex_file
+
+        # Auto-sniff .tex files (same logic as /edit)
+        candidates = self._find_tex_files()
+        if len(candidates) == 1:
+            self.io.tool_output(f"Auto-detected: {candidates[0]}")
+            return candidates[0]
+        elif len(candidates) > 1:
+            self.io.tool_output(
+                "\n\u001b[1m\u250c\u2500 .tex files \u2500\u2510\u001b[0m"
+            )
+            for i, f in enumerate(candidates, 1):
+                self.io.tool_output(f"  {i}. {f}")
+            self.io.tool_output("  q. Cancel")
+            sel = input("\nSelect file: ")
+            if not sel or sel.lower() == "q":
+                return None
+            try:
+                idx = int(sel) - 1
+                return candidates[idx]
+            except (ValueError, IndexError):
+                self.io.tool_error("Invalid selection.")
+                return None
+        else:
+            self.io.tool_error(
+                f"No .tex file found. Use: /{engine_name} <file.tex>"
+            )
+            return None
+
+    def _open_pdf(self, tex_file):
+        """Open compiled PDF with zathura if available."""
+        import subprocess
+        import shutil
+
+        pdf_file = os.path.splitext(tex_file)[0] + ".pdf"
+        if not os.path.exists(pdf_file):
+            return
+
+        if not shutil.which("zathura"):
+            self.io.tool_output(
+                "\n\u001b[33m\u2139 zathura not found. Install it to auto-open PDFs.\u001b[0m"
+            )
+            self.io.tool_output(f"  PDF: {pdf_file}")
+            return
+
+        try:
+            subprocess.Popen(
+                ["zathura", pdf_file],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.io.tool_output(f"\n📖 Opened {os.path.basename(pdf_file)} with zathura")
+        except Exception as e:
+            self.io.tool_error(f"Failed to open zathura: {e}")
+
     def _run_latex_compile(self, engine, args):
         """Helper function to run LaTeX compilation."""
         import subprocess
 
-        # Find .tex file to compile
-        tex_file = None
-        if args:
-            tex_file = args.strip()
-        else:
-            # Auto-detect main .tex file
-            for f in self.coder.abs_fnames:
-                if f.endswith(".tex"):
-                    tex_file = f
-                    break
-            if not tex_file:
-                # Look for .tex files in current directory
-                import glob
-
-                tex_files = glob.glob(os.path.join(self.coder.root or ".", "*.tex"))
-                if tex_files:
-                    tex_file = tex_files[0]
-
+        tex_file = self._resolve_tex_file(args, engine)
         if not tex_file:
-            self.io.tool_error("No .tex file found. Use: /xelatex <file.tex>")
             return
 
         if not os.path.exists(tex_file):
@@ -1207,6 +1254,9 @@ class Commands:
                         self.io.tool_output(f"  {w}")
                     if len(warnings) > 5:
                         self.io.tool_output(f"  ... and {len(warnings) - 5} more")
+
+                # Auto-open PDF with zathura
+                self._open_pdf(tex_file)
             else:
                 self.io.tool_output(
                     f"\n❌ Compilation failed (exit code {result.returncode})"
@@ -1249,27 +1299,9 @@ class Commands:
     def _run_latex_compile_with_bib(self, engine, args):
         """Helper function to run LaTeX compilation with bibliography."""
         import subprocess
-        import os
-        import glob
 
-        # Find .tex file to compile
-        tex_file = None
-        if args:
-            tex_file = args.strip()
-        else:
-            # Auto-detect main .tex file
-            for f in self.coder.abs_fnames:
-                if f.endswith(".tex"):
-                    tex_file = f
-                    break
-            if not tex_file:
-                # Look for .tex files in current directory
-                tex_files = glob.glob(os.path.join(self.coder.root or ".", "*.tex"))
-                if tex_files:
-                    tex_file = tex_files[0]
-
+        tex_file = self._resolve_tex_file(args, f"bib-{engine}")
         if not tex_file:
-            self.io.tool_error(f"No .tex file found. Use: /bib-{engine} <file.tex>")
             return
 
         if not os.path.exists(tex_file):
@@ -1370,6 +1402,9 @@ class Commands:
         log_file = os.path.splitext(tex_file)[0] + ".log"
         log_info = self._parse_latex_log(log_file)
         self._ask_add_log_to_context(tex_file, log_info)
+
+        # Auto-open PDF with zathura
+        self._open_pdf(tex_file)
 
     def cmd_bib_pdflatex(self, args=""):
         """Compile LaTeX file with pdflatex engine and bibliography (pdflatex -> bibtex -> pdflatex -> pdflatex)"""
@@ -1945,6 +1980,48 @@ class Commands:
     def completions_raw_save(self, document, complete_event):
         return self.completions_raw_read_only(document, complete_event)
 
+    # ── LaTeX compile command tab-completion (shared .tex filter) ─────
+
+    def _tex_file_completions(self, document, complete_event):
+        """Yield completions filtered to .tex files only."""
+        text = document.text_before_cursor
+        after_command = text.split()[-1] if text.split() else ""
+        new_document = Document(after_command, cursor_position=len(after_command))
+
+        def get_paths():
+            return [self.coder.root] if self.coder.root else None
+
+        path_completer = PathCompleter(
+            get_paths=get_paths,
+            only_directories=False,
+            expanduser=True,
+        )
+        adjusted_start = -len(after_command)
+
+        for completion in path_completer.get_completions(new_document, complete_event):
+            if not completion.text.endswith(".tex") and not completion.text.endswith("/"):
+                continue
+            quoted = self.quote_fname(after_command + completion.text)
+            yield Completion(
+                text=quoted,
+                start_position=adjusted_start,
+                display=completion.display,
+                style=completion.style,
+                selected_style=completion.selected_style,
+            )
+
+    def completions_raw_xelatex(self, document, complete_event):
+        return self._tex_file_completions(document, complete_event)
+
+    def completions_raw_pdflatex(self, document, complete_event):
+        return self._tex_file_completions(document, complete_event)
+
+    def completions_raw_bib_xelatex(self, document, complete_event):
+        return self._tex_file_completions(document, complete_event)
+
+    def completions_raw_bib_pdflatex(self, document, complete_event):
+        return self._tex_file_completions(document, complete_event)
+
     def cmd_save(self, args):
         "Save commands to a file that can reconstruct the current chat session's files"
         if not args.strip():
@@ -2392,9 +2469,7 @@ class Commands:
         self.io.tool_output(
             "\n\u001b[31m\u26a0 FINAL WARNING: This cannot be undone.\u001b[0m"
         )
-        self.io.tool_output(
-            f"  Deleting \\{sec_type}{{{title}}} permanently."
-        )
+        self.io.tool_output(f"  Deleting \\{sec_type}{{{title}}} permanently.")
         confirm2 = input("Type 'DELETE' to proceed: ").strip()
         if confirm2 != "DELETE":
             self.io.tool_output("Cancelled.")
@@ -2443,9 +2518,7 @@ class Commands:
 
         src_type, src_title, src_start, src_end, src_content = items[src_idx]
 
-        self.io.tool_output(
-            f"\nMove \\{src_type}{{{src_title}}} before which section?"
-        )
+        self.io.tool_output(f"\nMove \\{src_type}{{{src_title}}} before which section?")
         # Re-list with current positions (excluding the moving section)
         display_idx = 0
         target_map = {}  # display_idx → actual position in file
