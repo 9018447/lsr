@@ -238,11 +238,13 @@ def extract_text_environments(selected_items):
                     text = "\n".join(current_para)
                     text = _simplify_latex_commands(text)
                     if text.strip():
-                        paragraphs.append({
-                            "section": title,
-                            "para_id": para_id,
-                            "text": text,
-                        })
+                        paragraphs.append(
+                            {
+                                "section": title,
+                                "para_id": para_id,
+                                "text": text,
+                            }
+                        )
                         para_id += 1
                     current_para = []
                 continue
@@ -257,11 +259,14 @@ def extract_text_environments(selected_items):
                         # Convert collected table to HTML
                         table_html = _convert_tabular_to_html("\n".join(table_lines))
                         if table_html:
-                            paragraphs.append({
-                                "section": title,
-                                "para_id": para_id,
-                                "text": table_html,
-                            })
+                            paragraphs.append(
+                                {
+                                    "section": title,
+                                    "para_id": para_id,
+                                    "text": table_html,
+                                    "is_html": True,
+                                }
+                            )
                             para_id += 1
                         table_lines = []
                     continue
@@ -278,11 +283,13 @@ def extract_text_environments(selected_items):
                     text = "\n".join(current_para)
                     text = _simplify_latex_commands(text)
                     if text.strip():
-                        paragraphs.append({
-                            "section": title,
-                            "para_id": para_id,
-                            "text": text,
-                        })
+                        paragraphs.append(
+                            {
+                                "section": title,
+                                "para_id": para_id,
+                                "text": text,
+                            }
+                        )
                         para_id += 1
                     current_para = []
                 continue
@@ -294,11 +301,13 @@ def extract_text_environments(selected_items):
             text = "\n".join(current_para)
             text = _simplify_latex_commands(text)
             if text.strip():
-                paragraphs.append({
-                    "section": title,
-                    "para_id": para_id,
-                    "text": text,
-                })
+                paragraphs.append(
+                    {
+                        "section": title,
+                        "para_id": para_id,
+                        "text": text,
+                    }
+                )
 
     return paragraphs
 
@@ -379,16 +388,22 @@ def _convert_tabular_to_html(table_content):
         return None
 
     # Build HTML table
-    html_parts = ['<table style="border-collapse: collapse; width: 100%; margin: 12pt 0;">']
+    html_parts = [
+        '<table style="border-collapse: collapse; width: 100%; margin: 12pt 0;">'
+    ]
 
     if caption:
-        html_parts.append(f'<caption style="font-style: italic; margin-bottom: 6pt; color: #504e49;">{_simplify_latex_commands(caption)}</caption>')
+        html_parts.append(
+            f'<caption style="font-style: italic; margin-bottom: 6pt; color: #504e49;">{_simplify_latex_commands(caption)}</caption>'
+        )
 
     # First row as header
     html_parts.append("<thead><tr>")
     for cell in rows[0]:
         cell_html = _simplify_latex_commands(cell)
-        html_parts.append(f'<th style="border: 1px solid #e8e6dc; padding: 6pt 8pt; background: #f5f4ed; text-align: left;">{cell_html}</th>')
+        html_parts.append(
+            f'<th style="border: 1px solid #e8e6dc; padding: 6pt 8pt; background: #f5f4ed; text-align: left;">{cell_html}</th>'
+        )
     html_parts.append("</tr></thead>")
 
     # Remaining rows as body
@@ -397,7 +412,9 @@ def _convert_tabular_to_html(table_content):
         html_parts.append("<tr>")
         for cell in row:
             cell_html = _simplify_latex_commands(cell)
-            html_parts.append(f'<td style="border: 1px solid #e8e6dc; padding: 6pt 8pt;">{cell_html}</td>')
+            html_parts.append(
+                f'<td style="border: 1px solid #e8e6dc; padding: 6pt 8pt;">{cell_html}</td>'
+            )
         html_parts.append("</tr>")
     html_parts.append("</tbody>")
 

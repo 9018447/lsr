@@ -33,17 +33,25 @@ def generate_note_html(filename, paragraphs, port=0):
     for sec_name, paras in sections.items():
         paras_html = []
         for para in paras:
-            escaped = html.escape(para["text"])
-            # Restore HTML tags we created (bold, italic, underline)
-            escaped = escaped.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
-            escaped = escaped.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
-            escaped = escaped.replace("&lt;u&gt;", "<u>").replace("&lt;/u&gt;", "</u>")
-            # Preserve newlines as <br>
-            escaped = escaped.replace("\n", "<br>")
-            paras_html.append(
-                f'<p class="paragraph" data-section="{html.escape(sec_name)}" '
-                f'data-para-id="{para["para_id"]}">{escaped}</p>'
-            )
+            if para.get("is_html"):
+                # Raw HTML (e.g. converted tables) — skip escaping
+                paras_html.append(
+                    f'<div class="paragraph table-paragraph" '
+                    f'data-section="{html.escape(sec_name)}" '
+                    f'data-para-id="{para["para_id"]}">{para["text"]}</div>'
+                )
+            else:
+                escaped = html.escape(para["text"])
+                # Restore HTML tags we created (bold, italic, underline)
+                escaped = escaped.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+                escaped = escaped.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
+                escaped = escaped.replace("&lt;u&gt;", "<u>").replace("&lt;/u&gt;", "</u>")
+                # Preserve newlines as <br>
+                escaped = escaped.replace("\n", "<br>")
+                paras_html.append(
+                    f'<p class="paragraph" data-section="{html.escape(sec_name)}" '
+                    f'data-para-id="{para["para_id"]}">{escaped}</p>'
+                )
         sections_html.append(
             f'<div class="section" data-section="{html.escape(sec_name)}">'
             f'<h2 class="section-title">{html.escape(sec_name)}</h2>'
@@ -408,6 +416,40 @@ main {{
 
 #toggle-panel:hover {{
   background: var(--brand-light);
+}}
+
+/* Table rendering */
+.table-paragraph {{
+  padding: 0;
+  margin-bottom: 12pt;
+}}
+
+.table-paragraph table {{
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12pt 0;
+  font-family: var(--serif);
+  font-size: 10pt;
+}}
+
+.table-paragraph th,
+.table-paragraph td {{
+  border: 1px solid var(--border);
+  padding: 6pt 10pt;
+  text-align: left;
+  vertical-align: top;
+}}
+
+.table-paragraph th {{
+  background: var(--warm-sand);
+  font-weight: 600;
+}}
+
+.table-paragraph caption {{
+  font-style: italic;
+  margin-bottom: 6pt;
+  color: var(--olive);
+  text-align: left;
 }}
 </style>
 </head>
