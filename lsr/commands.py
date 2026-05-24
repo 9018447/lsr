@@ -3198,26 +3198,31 @@ class Commands:
 
         abs_path, filename, items, selected_items = result
 
-        # If abs_path points to a temp file, resolve to the original file
+        # If abs_path points to an existing temp file with a session,
+        # reuse it instead of creating a new temp file.
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         if abs_path.startswith(lsr_home):
-            # Check for existing session file with this temp file
             session_file = abs_path + ".session"
             if os.path.exists(session_file):
-                try:
-                    import json
+                # Build prompt from selected sections
+                combined_sections = []
+                for item_type, title, start, end, item_content in selected_items:
+                    combined_sections.append(
+                        f"% --- {item_type}: {title} (lines {start + 1}-{end + 1}) ---\n"
+                        f"{item_content}"
+                    )
+                combined_content = "\n\n".join(combined_sections)
+                user_msg = prompt_template.format(content=combined_content)
 
-                    with open(session_file, encoding="utf-8") as f:
-                        existing_session = json.load(f)
-                    real_original = existing_session.get("original_file")
-                    if real_original and os.path.exists(real_original):
-                        abs_path = real_original
-                        filename = os.path.basename(abs_path)
-                        self.io.tool_output(
-                            f"\n\u001b[2mResolved temp file to original: {filename}\u001b[0m"
-                        )
-                except Exception:
-                    pass
+                section_count = len(selected_items)
+                self.io.tool_output(
+                    f"\n\u001b[32m\u2714 {action_verb.capitalize()}ing {section_count} "
+                    f"section(s) on existing temp file...\u001b[0m"
+                )
+
+                return self._generic_chat_command_for_file(
+                    abs_path, user_msg, self.coder.main_model.edit_format
+                )
 
         # Build session data and temp file content
         session_data = {
@@ -3311,20 +3316,92 @@ class Commands:
             tmp_path, user_msg, self.coder.main_model.edit_format
         )
 
+    def _find_existing_temp_files(self):
+        """Find existing LSR temp files (with .session) in the current chat session.
+
+        Returns list of absolute paths, sorted newest first.
+        """
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        temp_files = []
+        for fpath in self.coder.abs_fnames:
+            if fpath.startswith(lsr_home) and fpath.endswith(".tex"):
+                session_file = fpath + ".session"
+                if os.path.exists(session_file):
+                    temp_files.append(fpath)
+        return sorted(temp_files, key=os.path.getmtime, reverse=True)
+
+    def _auto_select_or_edit(self, action_verb):
+        """Shared no-args handler for section commands (deai, expand, condense, translate).
+
+        - If exactly one temp file exists with a session → auto-use it.
+        - If multiple temp files exist → let user pick.
+        - If no temp files exist → auto-trigger /edit.
+
+        Returns (args, should_proceed) where:
+          - args: the resolved args string to pass to _run_section_command
+          - should_proceed: True if the command should continue, False if it
+            already handled everything (e.g., triggered /edit)
+        """
+        temp_files = self._find_existing_temp_files()
+
+        if len(temp_files) == 1:
+            # Auto-use the only existing temp file
+            tf = temp_files[0]
+            self.io.tool_output(
+                f"\n\u001b[2mUsing existing temp file: {os.path.basename(tf)}\u001b[0m"
+            )
+            return tf, True
+        elif len(temp_files) > 1:
+            # Multiple temp files — let user pick one
+            session_files = [tf + ".session" for tf in temp_files]
+            selected = self._select_session_interactive(session_files)
+            if selected:
+                tf = selected.replace(".session", "")
+                return tf, True
+            else:
+                return "", False
+        else:
+            # No temp files → auto-trigger /edit
+            self.io.tool_output(
+                "No temp file found. Starting /edit to select sections..."
+            )
+            self.cmd_edit("")
+            return "", False
+
     def cmd_deai(self, args=""):
         "Remove AI writing patterns from LaTeX sections (iterative self-audit)"
+        if not args.strip():
+            resolved, should_proceed = self._auto_select_or_edit("deai")
+            if not should_proceed:
+                return
+            args = resolved
         return self._run_section_command(args, "deai", prompts.deai_prompt)
 
     def cmd_expand(self, args=""):
         "Expand LaTeX sections with richer scientific detail"
+        if not args.strip():
+            resolved, should_proceed = self._auto_select_or_edit("expand")
+            if not should_proceed:
+                return
+            args = resolved
         return self._run_section_command(args, "expand", prompts.expand_prompt)
 
     def cmd_condense(self, args=""):
         "Condense LaTeX sections while preserving essential scientific content"
+        if not args.strip():
+            resolved, should_proceed = self._auto_select_or_edit("condense")
+            if not should_proceed:
+                return
+            args = resolved
         return self._run_section_command(args, "condense", prompts.condense_prompt)
 
     def cmd_translate(self, args=""):
         "Translate LaTeX sections from Chinese to English (academic style)"
+        if not args.strip():
+            resolved, should_proceed = self._auto_select_or_edit("translate")
+            if not should_proceed:
+                return
+            args = resolved
         return self._run_section_command(args, "translate", prompts.translate_prompt)
 
     def _extract_paragraphs_from_temp(self, content):

@@ -43,9 +43,15 @@ def generate_note_html(filename, paragraphs, port=0):
             else:
                 escaped = html.escape(para["text"])
                 # Restore HTML tags we created (bold, italic, underline)
-                escaped = escaped.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
-                escaped = escaped.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
-                escaped = escaped.replace("&lt;u&gt;", "<u>").replace("&lt;/u&gt;", "</u>")
+                escaped = escaped.replace("&lt;b&gt;", "<b>").replace(
+                    "&lt;/b&gt;", "</b>"
+                )
+                escaped = escaped.replace("&lt;i&gt;", "<i>").replace(
+                    "&lt;/i&gt;", "</i>"
+                )
+                escaped = escaped.replace("&lt;u&gt;", "<u>").replace(
+                    "&lt;/u&gt;", "</u>"
+                )
                 # Preserve newlines as <br>
                 escaped = escaped.replace("\n", "<br>")
                 paras_html.append(
@@ -55,7 +61,7 @@ def generate_note_html(filename, paragraphs, port=0):
         sections_html.append(
             f'<div class="section" data-section="{html.escape(sec_name)}">'
             f'<h2 class="section-title">{html.escape(sec_name)}</h2>'
-            f'{"".join(paras_html)}</div>'
+            f"{''.join(paras_html)}</div>"
         )
 
     body_html = "\n".join(sections_html)
@@ -677,6 +683,7 @@ renderComments();
 
     # Sanitize filename
     import re
+
     safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", os.path.splitext(filename)[0])
     tmp_path = os.path.join(lsr_home, f"lsr_note_{safe_name}.html")
 

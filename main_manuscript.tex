@@ -1,0 +1,327 @@
+\documentclass[AMA,LATO2COL]{WileyNJDv5} %STIX1COL,STIX2COL,STIXSMALL
+
+
+\articletype{RESEARCH ARTICLE}%
+
+\received{00}
+\revised{00}
+
+\journal{AIChE JOURNAL}
+\volume{00}
+\copyyear{2026}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{mhchem}
+
+\raggedbottom
+\startpage{1}
+
+
+\begin{document}
+
+\title{Deep Dehydration of CO₂ using Choline-based Deep Eutectic Solvents: Thermodynamic Modeling with Pitzer-Debye-Hückel Correction and Molecular Insights}
+
+\author[1]{Minghao Song}
+
+\author[2]{Ruisong Zhu}
+
+\author[1]{Fei Zhao}
+
+\author[1]{Zhigang Lei}
+
+\authormark{Song \textit{et al.}}
+
+\address[1]{\orgdiv{State Key Laboratory of Chemical Resource Engineering}, \orgname{ Beijing University of Chemical Technology}, \orgaddress{\state{Beijing }, \country{China}}}
+
+\address[2]{\orgdiv{Petrochemical Research Institute}, \orgname{PetroChina}, \orgaddress{\state{Beijing}, \country{China}}}
+
+% \titlemark{PLEASE INSERT YOUR ARTICLE TITLE HERE}
+
+\corres{Fei Zhao and Zhigang Lei, State Key Laboratory of Chemical Resource Engineering, Beijing University of Chemical Technology, Box 266, Beijing 100029, China Email: passer\_zf@163.com and leizhg@mail.buct.edu.cn }
+%\presentaddress{This is sample for present address text this is sample for present address text.}
+
+\fundingInfo{National Key R\&D Program of China (No. 2023YFB3813300), the Beijing Municipal Natural Science Foundation (No. 2252018), and the Innovation Consortium Program of PetroChina Petrochemical Research Institute and Beijing University of Chemical Technology. (No. PRIKY2025139).}
+%\JELinfo{ejlje}
+
+\abstract[Abstract]{This study systematically investigates the impact of molecular isomerism on CO$_2$ capture using hydrophobic deep eutectic solvents composed of DBU and four stereoisomeric terpenes: geraniol, nerol, linalool, and L-menthol. Experimental results demonstrate that the linear trans-configured geraniol-based DES exhibits superior performance (0.59 mol/mol) and favorable hydrodynamics due to lower viscosity, whereas sterically hindered isomers show reduced capacity. DFT calculations reveal a base-promoted concerted mechanism strictly governed by steric hindrance. Consequently, activation free energy barriers follow the order: Geraniol < Menthol < Nerol < Linalool. Furthermore, microwave-assisted regeneration achieved 86\% capacity recovery within 30 seconds, ensuring rapid cyclability. This work establishes a rigorous structure-activity relationship, highlighting the pivotal role of stereochemical topology in designing efficient, water-tolerant non-aqueous absorbents.}
+
+\keywords{carbon capture, deep eutectic solvents, DFT calculation, structure-activity relationship}
+
+
+\maketitle
+
+\section{Introduction}
+
+The continuous rise in atmospheric carbon dioxide concentration has become one of the most pressing environmental challenges of the 21st century, creating an urgent need to develop efficient and sustainable carbon dioxide capture technologies. Carbon dioxide capture and storage (CCS) for large point sources such as power plants is an effective strategy to mitigate anthropogenic CO₂ emissions. However, existing capture technologies can increase the overall energy consumption of the system by 25–40\%. In this context, the removal of water vapor from flue gas represents an unavoidable critical challenge regardless of the capture process employed. As CO₂ is a typical acidic gas, the coexistence of moisture during high-throughput continuous processing not only significantly competes for absorption sites in the capture agent and reduces the effective capture efficiency, but also substantially increases the regeneration energy consumption of the solvent and accelerates corrosion of core equipment. Therefore, the introduction of efficient gas drying technologies at the front end of CO₂ capture is a necessary prerequisite to ensure the long-term stable operation of the entire CCS system and break through its energy consumption bottleneck.
+
+At present, the commonly used industrial gas drying schemes mainly include adsorption and absorption methods, whose practical performance highly depends on the physicochemical properties of the drying agents. Traditional adsorption methods suffer from technical drawbacks such as easy deactivation of adsorbents and limited single-pass processing capacity. In contrast, conventional absorption processes represented by triethylene glycol dimethyl ether and concentrated calcium chloride solutions face problems including excessively high solvent regeneration energy consumption, severe equipment corrosion, and secondary environmental pollution caused by volatilization. To seek superior alternative candidates, ionic liquids (ILs), as a class of room-temperature molten salts, have attracted research attention. Their intricate internal hydrogen-bonding networks endow them with strong hygroscopicity. Combined with their non-volatile nature and structurally designable characteristics, they are theoretically ideal solvents for gas drying. Nevertheless, the high cost of raw materials, complex purification procedures, and the ready hydrolysis of some fluorine-containing ionic liquids upon contact with water have severely restricted their large-scale industrial application.
+
+To address the above limitations of ionic liquids, deep eutectic solvents (DESs) have emerged as a novel class of "designable" green solvent systems. DESs are typically formed by the self-assembly of hydrogen bond acceptors (HBAs, e.g., quaternary ammonium or phosphonium salts) and hydrogen bond donors (HBDs, e.g., amides, carboxylic acids, or alcohols) at specific molar ratios through hydrogen bonding, with a macroscopic eutectic point significantly lower than that of any individual precursor. Compared with traditional ionic liquids, DESs not only inherit the advantages of low saturated vapor pressure and high structural tunability, but also exhibit remarkable potential in terms of cost efficiency, facile synthesis, biodegradability, and low toxicity. In particular, choline-based DESs, constructed using choline (a low-cost, renewable, and environmentally benign quaternary ammonium salt) as the HBA and HBDs such as urea, glycerol, or ethylene glycol, demonstrate strong hygroscopicity while possessing extremely low volatility and excellent economic viability. This makes choline-based DESs promising next-generation gas drying agents with strong industrial potential.
+
+Despite the outstanding drying performance of choline-based DESs, their translation from laboratory research to industrial application relies on accurate thermodynamic models for process simulation and scale-up design. Given the virtually unlimited designability of DES component combinations, it is impractical to obtain fundamental thermodynamic parameters for all potential solvent systems through exhaustive experimental testing. Consequently, the development of molecular thermodynamic models with high predictive power is key to overcoming this engineering bottleneck. Currently, quantum chemistry-based COSMO-RS and COSMO-SAC models are widely used in the early screening of DESs due to their ability to perform a priori predictions without relying on experimental data. Nevertheless, numerous experiments have confirmed that conventional COSMO models often exhibit non-negligible deviations when predicting DES systems. The underlying reason is that DESs are not simple physical mixtures at the microscopic level, especially at high concentrations, where abundant complex complexes formed between organic salts and HBDs exist in the system. More importantly, conventional COSMO models fail to adequately describe the long-range electrostatic interactions ubiquitous in such quasi-electrolyte systems. In addition, although the perturbed-chain statistical associating fluid theory equation of state (PC-SAFT EOS) achieves high accuracy in describing systems containing DESs, it is essentially a semi-empirical model that heavily depends on preliminary experimental data to regress adjustable parameters, thereby weakening its universality as a purely predictive model.
+
+To remedy the theoretical deficiencies of existing thermodynamic models in handling long-range interactions, the conventional strategy for highly concentrated electrolyte solutions is to incorporate the Pitzer–Debye–Hückel (PDH) theory to explicitly account for the contributions of long-range electrostatic forces. For instance, the e-NRTL and ePC-SAFT models have greatly improved the description accuracy of electrolyte systems and gained widespread application by adopting this approach. Following this line of thinking, a PDH-coupled COSMO-RS model (i.e., COSMO-RS PDH) has recently been proposed. However, most existing validation studies are limited to conventional aqueous electrolyte systems, and its applicability to non-ideal DES systems with more complex microenvironments remains unexplored. Motivated by the above theoretical bottlenecks and practical demands, this study systematically investigates and compares, for the first time, the thermodynamic prediction accuracy of three COSMO models and their long-range interaction-corrected variants (including the basic COSMO-RS model, the COSMO-RS PDH model, and the COSMO-SAC DHB PDH model incorporating hydrogen-bonding corrections) in CO₂/water/choline-based DES systems. The aim is to provide a reliable theoretical framework for the industrial design and rational screening of novel high-efficiency drying agents.
+
+\section{Calculation Section}
+
+\subsection{COSMO-RS PDH Model}
+
+In this work, thermodynamic properties were predicted using the COSMO-RS model, employing the original formulation and parameter set proposed by Klamt. The COSMO-RS approach is based on quantum chemical calculations of individual molecules embedded in a virtual conductor environment, from which the three-dimensional surface polarization charge density $\sigma$ is derived. These $\sigma$-profiles serve as fundamental descriptors of molecular surface polarity, enabling the statistical thermodynamic treatment of intermolecular interactions through pairwise surface segment contacts.
+
+However, the standard COSMO-RS framework primarily captures short-range and medium-range molecular interactions, including hydrogen bonding, van der Waals forces, and electrostatic misfit interactions. For deep eutectic solvents (DESs), which typically comprise ionic or highly polar hydrogen-bond donor and acceptor species, the long-range electrostatic contributions arising from charge--charge and charge--dipole interactions become particularly significant. To explicitly account for the contribution of these long-range electrostatic interactions, a Pitzer--Debye--H\"{u}ckel (PDH) correction term was incorporated into the basic COSMO-RS framework. The total activity coefficient of component \(i\) is calculated as follows:
+
+\[
+\ln \gamma_i = \ln \gamma_i^\text{COSMO-RS} + \ln \gamma_i^\text{PDH}
+\]
+
+where \(\ln \gamma_i^\text{COSMO-RS}\) denotes the contribution to the activity coefficient arising from the original COSMO-RS model, which encompasses hydrogen-bonding interactions, van der Waals forces, and electrostatic misfit energies between molecular surface segments. The term \(\ln \gamma_i^\text{PDH}\) represents the long-range electrostatic correction based on the Pitzer--Debye--H\"{u}ckel theory, which becomes indispensable for accurately describing thermodynamic behavior in systems with substantial ionic character. The contribution of the PDH term to the activity coefficient of component \(i\) is expressed as:
+
+\begin{equation}
+\label{eq:pdh}
+\begin{aligned}
+\ln \gamma_i^\text{PDH}
+&= \left( \frac{\partial (G^\text{PDH}/RT)}{\partial n_i} \right)_{T,P} \\
+&= -4 \sqrt{\frac{1000}{M}} \frac{a_x I_x}{\rho} \bigg\{
+\ln\!\big(1+\rho\sqrt{I_x}\big)
+\left( \frac{M - m_i}{2M} + \frac{z_i^2}{2I_x} \right)
++ \frac{1}{2}\!\left(1 - \frac{d}{d_i}\right) \\
+&\quad + \frac{3N}{2d_i \sum_j (n_j m_j/d_j)}
+\!\left(1 - \frac{\varepsilon_i}{\varepsilon_\text{sys}}\right)
+- \frac{N}{\rho} \frac{\partial \rho}{\partial n_i}
+\bigg\} \\
+&\quad + \frac{1}{1+\rho\sqrt{I_x}}
+\bigg\{
+\frac{\rho\sqrt{I_x}}{2N}\left( \frac{z_i^2}{2I_x} - 1 \right)
++ \sqrt{I_x} \frac{\partial \rho}{\partial n_i}
+\bigg\}
+\end{aligned}
+\end{equation}
+
+Equation~\eqref{eq:pdh} constitutes the partial molar derivative of the PDH excess Gibbs free energy with respect to the mole number of component $i$. The first term on the right-hand side, involving $\ln(1+\rho\sqrt{I_x})$, captures the primary Debye--H\"{u}ckel limiting-law behavior modified by the closest-contact parameter $\rho$; this term accounts for the screening of electrostatic interactions by the ionic atmosphere surrounding each charged species. The second term, proportional to $(1 - d/d_i)$, corrects for the finite ionic size relative to the solvent density. The third term introduces the dielectric mismatch between the local environment of species $i$ and the bulk mixture, while the final derivative terms ensure proper thermodynamic consistency of the partial molar quantity. The definitions of key parameters in the above equations are summarized in Table~\ref{tab:pdh_params}. In these expressions, $d$ denotes the solvent density.
+
+\begin{table*}[!htbp]
+  \centering
+  \caption{Definitions of key parameters in the PDH correction model}
+  \label{tab:pdh_params}
+  \begin{tabular}{ll}
+    \hline
+    Formula & Description \\
+    \hline
+    $\dfrac{G^\text{PDH}}{RT} = -4\sqrt{\dfrac{1000}{M}} \dfrac{N a_x I_x}{\rho} \ln\!\big(1+\rho\sqrt{I_x}\big)$
+    & PDH excess Gibbs free energy (long-range electrostatic correction) \\
+    $I_x = \dfrac{1}{2}\dfrac{\sum_j n_j z_j^2}{\sum_j n_j}$
+    & Ionic strength from mole amounts \(n_j\) and charges \(z_j\) \\
+    $a_x = \dfrac{1}{3}
+    \dfrac{\sqrt{2\pi N_A d e^6}}{\big(4\pi\varepsilon_0 \varepsilon_\text{sys} kT\big)^{3/2}}$
+    & Debye–Hückel constant \\
+    & ($e$: elementary charge, $N_A$: Avogadro number, $k$: Boltzmann constant, $\varepsilon_0$: vacuum permittivity) \\
+    $\rho = 2150\sqrt{\dfrac{d}{\varepsilon_\text{sys} T}}$
+    & Closest-contact parameter \\
+    \hline
+  \end{tabular}
+\end{table*}
+
+Since the PDH theory is conventionally formulated for pure solvents, its direct application to multicomponent DES mixtures necessitates the adoption of appropriate mixing rules. In this study, mole fractions were employed as the principal compositional variables throughout all thermodynamic calculations. The mixing rules implicitly govern how the average molar mass $M$, the closest-contact parameter $\rho$, and the bulk dielectric constant $\varepsilon_\text{sys}$ evolve with mixture composition, thereby ensuring a consistent transition from pure-component limits to the multicomponent regime. Here, \(n_i\) is the mole number of component \(i\),
+\(N = \sum_j n_j\) the total mole number,
+\(M\) the average molar mass of the mixture,
+\(m_i\) the molar mass of component \(i\),
+\(z_i\) its charge number,
+\(d_i\) its effective ionic diameter,
+\(\varepsilon_i\) its pure-component dielectric constant,
+and \(\varepsilon_\text{sys}\) the effective dielectric constant of the bulk system, typically evaluated through a volume-fraction or mole-fraction mixing rule depending on the specific implementation.
+
+In addition to the COSMO-RS-PDH approach, the predictive performance of the COSMO-SAC-DHB-PDH model was systematically evaluated in this study. The COSMO-SAC (Segment Activity Coefficient) framework differs from COSMO-RS primarily in its expression for the combinatorial contribution and its utilization of the $a_{\text{eff}}$ parameter for effective surface area normalization. The DHB-Chen parameter set was specifically employed within the COSMO-SAC framework to refine the description of hydrogen-bonding interactions, which are particularly prevalent in DES systems comprising amide or hydroxyl functional groups. Similar to the COSMO-RS-PDH implementation, this model was likewise augmented with the PDH correction term to account for long-range electrostatic effects, thereby enabling a direct and consistent comparison of the two thermodynamic frameworks under identical electrostatic treatment.
+
+\subsection{DFT Calculation}
+All geometry optimizations and electronic structure calculations of individual deep eutectic solvent (DES) components (choline cation, chloride anion, and various hydrogen bond donors) were performed in Gaussian 16. Calculations used the B3LYP hybrid functional with D3(BJ) empirical dispersion correction and the 6–311++G(d,p) basis set, a combination validated in prior work to yield accurate geometric and electronic structure outputs for small hydrogen-bonded organic systems. All optimizations were run in the gas phase, followed by frequency analysis at 298.15 K to confirm all optimized structures correspond to true energy minima with no imaginary frequencies.
+
+σ-Profile data for COSMO-RS calculations were generated in the SCM AMS package (ADF module) at the BP/TZP level of theory. Wavefunction analyses were performed in Multiwfn, including charge density distribution calculations, electrostatic potential mapping, and independent gradient model (IGM) evaluations. These analyses identify hydrogen bond interaction sites and interaction strengths between DES components, supporting interaction energy decomposition in subsequent COSMO-RS calculations. Electrostatic potential-derived RESP charges for molecular dynamics simulations were generated using Sobtop based on the DFT-optimized wavefunctions. All wavefunction analysis results were visualized using xyzrender.
+
+\subsection{Molecular Dynamics Simulations}
+Molecular dynamics (MD) simulations were performed using the GROMACS 2025 package. All components were parameterized with the GAFF force field, which has been proven to accurately describe the structural and dynamic properties of deep eutectic solvent systems. Atomic charges were assigned from the electrostatic potential distribution of DFT optimized structures via the RESP method, ensuring consistency between electronic structure calculations and MD simulations. Initial simulation boxes containing 500 pairs of choline chloride molecules and the corresponding hydrogen-bond donor (HBD) molecules (molar ratio 1:2, and 1:1 for the malonic acid system) were constructed using Packmol, with an initial box side length of approximately 6 nm.
+
+Before the formal production simulation, the reliability of the force field and parameter combination was first verified: the density and viscosity of pure DES systems calculated from the pre-simulation were compared with published experimental values, and the relative deviation was controlled below 5\%, confirming the applicability of the parameter system for this study. The systems were successively subjected to steepest descent energy minimization to eliminate unreasonable atomic contacts, 1 ns equilibration in the NVT ensemble to stabilize the system temperature, and 5 ns equilibration in the NPT ensemble to adjust the system density. The equilibration state was determined by the criterion that the system energy and density fluctuated by less than 1\% for 1 consecutive ns. A 50 ns production MD run with a time step of 1 fs was subsequently conducted for data collection. The van der Waals interaction was truncated at 1.2 nm, and the long-range electrostatic interaction was treated using the Particle Mesh Ewald (PME) algorithm with a Fourier spacing of 0.12 nm. The Nosé–Hoover thermostat with a time constant of 0.1 ps and Parrinello–Rahman barostat with a time constant of 2 ps were adopted for temperature and pressure control, respectively.
+
+After obtaining the equilibrated pure DES boxes, each box was expanded to 12 nm along the z-axis, and 3000 \ce{CO2} molecules and 100 \ce{H2O} molecules were randomly inserted into the expanded region to construct \ce{CO2}/water/DESs ternary absorption systems. Subsequently, 5 ns NPT simulations and 20 ns NVT simulations were performed under the same parameter settings as pure DES systems to achieve full equilibrium of the ternary system. All simulations were conducted at 300 K and 1 atm, consistent with the experimental conditions of \ce{CO2} absorption.
+
+The collected MD trajectories were analyzed using the MDAnalysis and TRAVIS packages. Key structural and dynamic parameters including radial distribution function, coordination number, hydrogen bond lifetime, mean square displacement, and free volume distribution were calculated to elucidate the microscopic dissolution mechanism of \ce{CO2} in DES systems, the interaction between water molecules and DES components, and the regulatory effect of water on \ce{CO2} absorption performance. All simulation snapshots and visualization results were accomplished with VMD.
+
+\section{Results and Discussion}
+
+\subsection{$\sigma$-profile Analysis}
+
+$\sigma$-profile analysis is a core method for characterizing molecular surface charge distribution, which can intuitively judge the hydrogen bond donor and acceptor capabilities of different components, and provide a qualitative basis for analyzing the interaction mechanism in the DES/CO₂/H₂O system. In the theoretical framework of COSMO-RS, the $\sigma$-profile describes the distribution of screening charge density on the molecular van der Waals surface, and serves as the core input parameter for calculating the infinite dilution activity coefficient of each component in the mixture. Figure \ref{sigma-profile} (a) shows the $\sigma$-profile distributions of [Ch]⁺[Cl]⁻, CO₂, and water.First, the surface charge density of CO₂ molecules is entirely concentrated in the range of -0.01~0.01 e/Å², which is consistent with its extremely small dipole moment. The σ-profile of pure water exhibits a broad-range and low-intensity distribution characteristic, which is attributed to its dual role as both a hydrogen bond donor (HBD) and a hydrogen bond acceptor (HBA). In contrast, [Ch]⁺, which contains hydroxyl groups and carries a positive charge, has its shielded charge distribution concentrated in the hydrogen bond donor region; while [Cl]⁻, with highly concentrated lone pairs of electrons on its surface, acts as a typical hydrogen bond acceptor (HBA) and exhibits a sharp characteristic peak in the hydrogen bond acceptor region.
+
+Figure \ref{sigma-profile} (b) presents the σ-profiles of four different hydrogen bond donors (HBDs), and these HBDs exhibit highly similar trends in their σ-profiles. Both Glycerol and ethylene glycol contain multiple hydroxyl groups, so they can act as both hydrogen bond donors (HBDs) and hydrogen bond acceptors (HBAs). Malic acid contains two carboxyl groups, and compared with other HBDs, its characteristic peak in the hydrogen bond acceptor region is sharper and more prominent. Due to its symmetric structure and amino (-NH₂) characteristics, the σ-profile of Urea presents an almost symmetric distribution in both the hydrogen bond acceptor (HBA) and hydrogen bond donor (HBD) regions.
+
+Preliminary qualitative judgment on the interaction behavior of H₂O can be made through these σ-profiles. Under ambient temperature and pressure (25 ℃, 101.325 kPa), due to its extremely low polarity and small molecular size, CO₂ molecules are not expected to have strong interactions with DESs and can be regarded as typical Henry's law gases. As a polar molecule with both hydrogen bond donor and acceptor properties, water molecules can effectively participate in the complex hydrogen bond network formed between ChCl (choline chloride) and HBDs. They interact with the hydroxyl groups of [Ch]⁺, the lone pairs of electrons of [Cl]⁻, and the active groups of HBDs through hydrogen bonding, thereby affecting the microstructures and macro properties of the entire DESs/CO₂/H₂O system. And  [Cl]⁻ has highly concentrated lone pairs of electrons on its surface and strong hydrogen bond acceptor (HBA) properties, playing a crucial role in the construction and stabilization of the hydrogen bond network, and serving as an important bridge connecting ChCl, HBDs, and water molecules. As a characterization method based on the distribution of molecular surface charge density, the σ-profile can only reflect the characteristics of electrostatic interactions between molecules, but ignores important factors such as molecular steric hindrance effect and dynamic interaction process. It only provides a qualitative judgment basis for system interactions and cannot achieve quantitative description and accurate analysis.
+
+\begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure1.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*}
+
+
+\subsection{Excess properties}
+Excess enthalpy ($H^\mathrm{E}$) is a core thermodynamic parameter that characterizes the deviation of mixing enthalpy from ideal solution behavior. Positive $H^\mathrm{E}$ values correspond to endothermic mixing, typically caused by weak intermolecular interactions or structural mismatch between components, while negative $H^\mathrm{E}$ values indicate exothermic mixing driven by strong favorable intercomponent interactions. Phase equilibrium measurements are limited to characterizing bulk solubility boundaries, whereas $H^\mathrm{E}$ delivers direct, quantitative insight into energy changes associated with molecular-scale interactions during mixing. $H^\mathrm{E}$ values for DES–water mixtures, calculated using the COSMO-RS PDH model across the full water mole fraction range of 0 to 1 at 298.15 K, are presented in \figurename~\ref{fig:excess_enthalpy}. Analysis of these $H^\mathrm{E}$ profiles directly resolves microscopic interaction mechanisms in DES–water ternary systems, particularly the magnitude of hydrogen bonding between DES constituents and water molecules. The values also enable quantitative characterization of mixing non-ideality, providing a rigorous thermodynamic foundation for interpreting observed variations in phase stability of hydrous DES systems.
+
+\figurename~\ref{fig:excess_enthalpy} contains four subplots showing the excess enthalpy of four DES–water systems: (a) ChCl/glycerol/water, (b) ChCl/ethylene glycol/water, (c) ChCl/malic acid/water, and (d) ChCl/urea/water. The x-axis represents the mole fraction of hydrogen bond acceptor ($X_{\text{HBA}}$), the y-axis represents the mole fraction of hydrogen bond donor ($X_{\text{HBD}}$), and the mole fraction of water is defined as $X_{\text{water}} = 1 - X_{\text{HBA}} - X_{\text{HBD}}$. Thermodynamic analysis of excess enthalpy $H^\mathrm{E}$ contour plots for choline chloride (ChCl)-based ternary systems shows all investigated systems, formed by mixing ChCl with glycerol, ethylene glycol, malic acid, and urea respectively, exhibit significantly negative $H^\mathrm{E}$ values ($H^\mathrm{E} < 0$). This observation indicates strongly exothermic mixing and pronounced non-ideal thermodynamic behavior, driven primarily by the formation of strong intercomponent hydrogen bond networks and electrostatic interactions. Hydrogen bond donor identity imposes distinct effects on system interaction strength, with the magnitude of exothermicity quantified as $|H^\mathrm{E}|$ following a strict descending order: malic acid > glycerol > ethylene glycol $\gg$ urea. The malic acid system exhibits the most negative $H^\mathrm{E}$ extremum of approximately $-2.8\ \mathrm{kJ\cdot mol^{-1}}$, attributed to the abundant carboxyl and hydroxyl sites in malic acid molecules that form dense, highly stable multidentate hydrogen bond networks with chloride anions and choline cations. Glycerol, which contains three hydroxyl groups, shows stronger hydrogen bonding association capacity than ethylene glycol with two hydroxyl groups. In contrast, the urea system has the least negative $H^\mathrm{E}$ values and relatively flat contour profiles, indicating behavior closer to ideal mixing. This effect likely arises from the strong self-associating hydrogen bond network present in pure urea, which limits enthalpy changes associated with structural rearrangement during mixing. The weak acidity and polarity of urea also lead to substantially weaker interactions with halide anions compared to carboxylic acid-based hydrogen bond donors.
+
+Analysis of contour topology and extremum distribution shows the degree of non-ideality and microstructural rearrangement of the systems are highly dependent on component composition. Contours for the three strongly exothermic systems show significant curvature, indicating minor compositional adjustments can induce drastic microstructural rearrangement and strong synergistic interactions. The minimum $H^\mathrm{E}$ regions for these three systems all consistently fall within the intermediate ChCl mole fraction range $X_{\text{ChCl}} \approx 0.3$--$0.5$. This observation confirms an optimal hydrogen bond stoichiometry exists for deep eutectic solvent formation. At this intermediate composition, ionic hydrogen bond acceptors and donors achieve optimal matching, forming the most complete and stable network structure. Deviation from this range typically leads to insufficient hydrogen bond acceptors or excessive ion aggregation. Additionally, all systems show steep enthalpy gradients in the boundary region where $X_{\text{ChCl}} \to 0$, confirming that even trace amounts of ChCl can strongly disrupt the native network of pure hydrogen bond donors and induce formation of new ion–molecule composite structures. This behavior highlights the core role of ChCl as a structure-inducing component. The strength of microscopic interactions, quantified as $|H^\mathrm{E}|$ and determined jointly by hydrogen bond donor structure and system composition, not only governs the thermodynamic non-ideality of the systems, but also provides a critical thermodynamic basis for predicting their macroscopic physical properties including high viscosity typically associated with strong hydrogen bond networks.
+
+\begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure2.eps}
+	\caption{Excess enthalpy ($H^\mathrm{E}$) of DES–water mixtures as a function of choline chloride (hydrogen bond acceptor) and hydrogen bond donor mole fractions, calculated using the COSMO-RS PDH model at 298.15 K and atmospheric pressure. Error bars indicate standard deviations of three independent calculation replicates for each composition.}
+	\label{fig:excess_enthalpy}
+\end{figure*}
+
+\subsection{CO$_2$ Solubility}
+
+Figure \ref{Carbon dioxide solubility} illustrates the solubility of carbon dioxide ($\mathrm{CO}_2$) in four distinct deep eutectic solvents (DESs) as a function of pressure ($1.0\text{--}5.0\,\mathrm{bar}$) and temperature ($298.15\text{--}338.15\,\mathrm{K}$), which was calculated by the COSMO-RS model (scatter points) and the COSMO-RS model integrated with the Pitzer-Debye-Hückel (PDH) correction term (solid lines). The four DESs under investigation are as follows: (a) Ethline, (b) Glyceline, (c) Reline, and (d) Maline.
+
+Firstly, from the perspective of thermodynamic trends, all four DESs exhibit typical physical absorption characteristics. The solubility of $\mathrm{CO}_2$ is significantly positively correlated with the system pressure, and approximately conforms to Henry's Law within the low-pressure range of $1.0$ to $5.0\,\mathrm{bar}$. Meanwhile, the solubility decreases with the increase of temperature, indicating that the dissolution process of $\mathrm{CO}_2$ in these DESs is exothermic, and low-temperature conditions are more favorable for gas dissolution. Secondly, by comparing the results of the two calculation models, it can be found that the COSMO-RS pure component model and the COSMO-RS model with the correction of long-range electrostatic interactions have a high degree of consistency in their prediction results. The solid lines closely pass through or are adjacent to the scatter points, which suggests that within the low-pressure range and the studied concentration scope, the contribution of long-range ionic interactions in DESs to $\mathrm{CO}_2$ solubility is relatively minor, or the short-range interactions described by the COSMO-RS model are sufficient to accurately capture the affinity between the solute and the solvent. This result verifies the reliability of the COSMO-RS model in predicting the gas-liquid equilibrium of DESs.
+
+Finally, there are significant differences in the $\mathrm{CO}_2$ solubility capacities among different DESs, which are mainly attributed to the differences in the properties of hydrogen bond donors (HBDs). Based on the maximum solubility values at $298.15\,\mathrm{K}$ and $5.0\,\mathrm{bar}$, the order of $\mathrm{CO}_2$ absorption capacities of the four DESs is $\mathrm{Maline} > \mathrm{Glyceline} > \mathrm{Ethline} > \mathrm{Reline}$. Maline (d) exhibits the highest solubility (approximately $8.5\,\mathrm{mol}\,\%$), which may be ascribed to the strong interactions or better compatibility between the carboxyl functional groups in malic acid molecules and $\mathrm{CO}_2$. Glyceline (b) ranks second (approximately $5.2\,\mathrm{mol}\,\%$), as the polyhydroxyl structure of glycerol provides a moderate dissolution environment. Ethline (a) and Reline (c) show relatively low solubility (approximately $3.5\,\mathrm{mol}\,\%$ and $2.2\,\mathrm{mol}\,\%$, respectively). In particular, although urea contains amino groups, the physical solubility of $\mathrm{CO}_2$ in Reline is weaker than that in the other three DESs under the studied calculation conditions. In summary, the calculation results demonstrate that the COSMO-RS model can effectively predict the dissolution behavior of $\mathrm{CO}_2$ in DESs under low pressure.
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.8\linewidth]{figure3.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{Carbon dioxide solubility}
+\end{figure*}
+
+\subsection{Vapor-Liquid Equilibrium}
+
+\ref{VLE Data} systematically presents the experimentally measured saturated vapor pressure ($P$) of aqueous mixtures of four deep eutectic solvents (DESs) with ethylene glycol (EG), urea, glycerol (Gly), and malonic acid (Maline) as hydrogen bond acceptors, at temperatures ranging from $303.15\;\mathrm{K}$ to $343.15\;\mathrm{K}$. The experimental data are compared with the predicted values from three thermodynamic models: COSMO-RS, COSMO-RS-PDH, and COSMO-SAC-DHB-PDH. Experimental observations reveal that the saturated vapor pressure of each system exhibits a strong temperature dependence, increasing nonlinearly with rising temperature, in accordance with the classical Clausius-Clapeyron relation. Furthermore, under isothermal conditions, the saturated vapor pressure of the system follows a specific evolution pattern with increasing mole fraction of DES ($x_1$), reflecting the significant influence of solute-solvent interactions on the fugacity of water molecules at different concentration gradients.
+
+Regarding the evaluation of thermodynamic models, distinct differences are observed in the sensitivity of various models to concentration variations. In the dilute concentration region (e.g., $x_1 < 0.15$), all three models achieve excellent prediction accuracy, with calculated curves closely matching the experimental data points. This indicates that the fundamental COSMO-type models are sufficient to describe the vapor-liquid equilibrium (VLE) behavior of the systems in dilute aqueous solutions. However, as the DES concentration further increases, the original COSMO-RS model significantly overestimates the vapor pressure across all systems. In contrast, the COSMO-RS-PDH and COSMO-SAC-DHB-PDH models, which incorporate the Pitzer-Debye-Huckel (PDH) correction term, remarkably eliminate the positive deviation in the high-concentration region, and their predicted curves accurately follow the trend of the experimental data. This comparative finding strongly demonstrates that long-range electrostatic interactions make a non-negligible contribution to the non-ideality of concentrated aqueous DES systems. The conventional COSMO-RS model, relying solely on the continuum medium assumption, cannot fully capture such complex ionic and hydrogen-bonding network effects, whereas the modified models coupled with PDH theory effectively compensate for this limitation.
+
+Further comparison among different hydrogen bond acceptor systems shows that the EG and urea systems yield the best model fitting performance at extremely high concentrations ($x_1 \approx 0.45$), fully validating the universality of the modified models. For the Maline system at the high-concentration end ($x_1 = 0.3717$), the experimentally measured vapor pressure is relatively lower, which may imply the presence of stronger hydrogen-bonding association or electrostatic restriction between solute and solvent molecules within this system. Overall, the thermodynamic models coupled with the PDH term exhibit superior predictive performance over the entire concentration range and can serve as reliable theoretical tools for investigating and predicting the phase equilibrium behavior of complex aqueous DES systems.
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure4.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{VLE Data}
+\end{figure*}
+
+\subsection{ESP analysis}
+
+Molecular surface electrostatic potential (ESP) is a key microscopic physical parameter used to resolve intercomponent association mechanisms within solvents and interactions between solvents and exogenous molecules. ESP directly maps electron-rich and electron-deficient regions on molecular surfaces. Intermolecular interactions universally follow the polarity complementarity principle, so precise analysis of ESP distribution features not only enables accurate localization of hydrogen bonding sites within deep eutectic solvent (DES) systems, but also supports quantitative evaluation of interaction strength and selectivity between DES and target separation molecules. This analysis, rooted in microscopic electronic structure, provides a theoretical basis for understanding DES formation driving forces, thermodynamic non-ideality, and gas dehydration separation performance.
+
+In choline chloride (ChCl)-based DES systems, chloride anions ($\text{Cl}^-$) are surrounded by distinct, strongly negative electrostatic potential regions, confirming their role as core hydrogen bond acceptors. When ethylene glycol, malic acid, and glycerol are used as hydrogen bond donors (HBDs), the acidic or hydroxyl protons of these three HBDs undergo strong association driven by the high electronegativity of $\text{Cl}^-$. This association gives the DES an overall strongly electronegative character, with most of the surface covered by negative ESP regions, and only the head group of the choline cation exposing discrete positive ESP sites. Further comparison shows malic acid exhibits the strongest local polarization and charge separation due to synergistic effects of its carboxyl and hydroxyl groups; glycerol forms a multi-centered, high-density continuous hydrogen bond network via its abundant hydroxyl groups; while ethylene glycol shows slightly weaker polarization. In contrast, the urea-based (reline) system shows significantly reduced overall polarity and more uniform ESP distribution, as the rigid structure of urea molecules and additional association between urea carbonyl groups and choline cation hydroxyl groups consume most free polar sites. These differences in microscopic polarization characteristics directly translate to macroscopic thermodynamic properties: strong electrostatic complementarity in the malic acid, glycerol, and ethylene glycol systems releases substantial energy during mixing, leading to strongly negative excess enthalpy ($H^\mathrm{E}$) and pronounced non-ideality; the urea system shows behavior closer to ideal mixing due to limited electrostatic driving forces.
+
+For CO₂ dehydration applications, the polarity complementarity mechanism revealed by ESP is the core microscopic determinant of solvent selective water absorption and dehydration capacity. Water molecules have an extremely high dipole moment, while CO₂ has a quadrupole moment but very low overall polarity. The large areas of strong negative ESP covering the surface of ethylene glycol, malic acid, and glycerol-based DES generate strong electrostatic attraction to the positively charged hydrogen atoms of water molecules; simultaneously, the positive ESP sites exposed by choline cations bind tightly to the oxygen atoms of water molecules. This multi-dimensional strong electrostatic complementarity gives DES far higher affinity for H₂O than for CO₂, leading to excellent dehydration selectivity. The malic acid and glycerol systems in particular, with their strong local polarization and charge delocalization effects, not only provide abundant binding sites for water, but also immobilize water molecules within the solvent via hydrogen bond network rearrangement after water absorption, enabling deep drying of CO₂. The urea system, by contrast, shows weaker electrostatic capture capacity for water molecules due to its low overall polarity and limited charge separation, leading to notably restricted dehydration capacity and depth.
+
+Overall, the microscopic ESP characteristics of DES establish an associative logical chain linking electronic structure, intermolecular interactions, macroscopic thermodynamic properties, and separation performance. The smooth charge transitions observed in ESP maps reveal pronounced charge delocalization effects, explaining the physicochemical mechanism of reduced DES melting point at the electronic structure level. Meanwhile, interaction strength quantified via ESP characterization enables prediction of system macroscopic physicochemical properties: strong polarization and dense hydrogen bond networks give the system higher bulk viscosity and lower ionic mobility, but this same strong polarity complementarity and hydrogen bond rearrangement capacity also deliver favorable water absorption capacity and deep dehydration performance in CO₂ dehydration processes. Clear ESP distribution characteristics not only explain thermodynamic phenomena including excess enthalpy, but also provide a theoretical reference for the design and regulation of DES applications in carbon capture and gas drying engineering.
+
+
+\begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.7\linewidth]{figure5.eps}
+	\caption{Electrostatic potential (ESP) distribution of the DES system.}
+	\label{ESP}
+\end{figure*} 
+
+\subsection{test}
+% TODO: Write subsection content here
+
+\subsection{NCI Analysis}
+
+To elucidate the microscopic interaction mechanism between deep eutectic solvents (DESs) and water, we performed noncovalent interaction (NCI) analysis on cluster systems. In the NCI isosurfaces, green regions denote noncovalent interactions dominated by van der Waals forces and weak electrostatic interactions, whereas blue regions correspond to stronger electrostatic attraction and hydrogen bonding. The analysis reveals extensive van der Waals interactions (primarily dispersion) between the cholinium cation (Ch$^+$) and the hydrogen bond donor (HBD); these nonspecific interactions provide the necessary basis for the macroscopic stability of the liquid phase. On this foundation, Cl$^-$ simultaneously bridges Ch$^+$ and HBD molecules through strong electrostatic interactions, thereby constructing an ordered internal hydrogen-bond network in the DES. Notably, all cluster conformations were systematically searched and optimized using the Molclus program at the GFN2-xTB level to ensure that each examined conformation corresponds to an energy minimum on the potential energy surface, eliminating the influence of initial structural bias on the analysis.
+
+Comparison of the interaction modes of different DESs with water reveals significant differences. Ethaline forms the most stable hydrogen-bond configuration with water, primarily because the small molecular size and favorable backbone flexibility of ethylene glycol allow water to simultaneously establish effective hydrogen bonds with Ch$^+$ and the hydroxyl groups of ethylene glycol, yielding a cooperatively stabilized structure. In contrast, the NCI isosurface between Reline (urea-based DES) and water is noticeably smaller, and its hydrogen-bond strength is weaker than that of the Ethaline system. This phenomenon likely originates from the strong self-associated network already present in Reline, which water molecules can hardly disrupt or insert into; this inference is consistent with our previous analysis. In the Maline system, under the limited number of water molecules examined, water primarily engages in electrostatic interactions between Ch$^+$ and malic acid. However, due to the lack of sufficient solvation-shell information in the current model, the hydration microstructure of such systems remains unclear, and further investigation using methods such as molecular dynamics simulations is warranted in the future. When glycerol serves as the HBD, its multiple hydroxyl groups can participate in abundant electrostatic and hydrogen-bonding interactions with water. At a ChCl:glycerol molar ratio of 1:2, the DES components are already highly associated; water molecules cannot readily penetrate this stable association network but are preferentially captured and stabilized by peripheral glycerol molecules through hydrogen bonding. These results highlight the significant regulatory role of the inherent stability of the DES microstructure on its interaction mode with water.
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.7\linewidth]{figure6.eps}
+	\caption{Noncovalent interaction (NCI) isosurfaces of DES-water cluster systems.}
+	\label{NCI}
+\end{figure*} 
+
+\subsection{Hydrogen-bond number distribution}
+
+
+鉴于基于密度泛函理论（DFT）计算的波函数分析仅能反映气相环境下的分子间相互作用特征，为深入阐明溶剂水平下深共晶溶剂（DESs）的本征物理化学性质及其与水分子的相互作用机制，本研究进一步引入分子动力学（MD）模拟提取液相微观结构信息。图~\ref{The hydrogen-bond distribution}展示了四种DES体系的模拟快照；在经历50\,ns的充分平衡后，提取最后1\,ns的运动轨迹构建了$xy$平面上的二维氢键密度映射图。该分析采用了CHARMM等主流程序中广泛使用的氢键几何判据（角度$>120^{\circ}$且距离截断$<3.5$\,\AA），并明确将氯离子（Cl$^{-}$）纳入氢键受体范畴，以精准描绘体系内的氢键缔合模式。
+
+二维氢键密度图直观地揭示了不同DES体系内部氢键网络的拓扑差异与缔合规律。在四种体系中，Ethaline（乙二醇体系）展现出乙二醇与Cl$^{-}$之间最密集且分布最均匀的氢键网络，表明其形成了均一且稳定的本征骨架结构。相比之下，Glyceline（甘油体系）则呈现出极为密集的氢键供体（HBD）自缔合分布，这主要归因于甘油分子丰富的羟基结构：正如前文非共价相互作用（NCI）分析所述，即便甘油分子已与氯离子形成氢键，其表面仍保留充足的氢键位点以维持广泛的分子间自缔合，从而构筑出致密的三维氢键骨架。值得注意的是，Maline（苹果酸体系）表现出相对较弱的羧基自缔合现象；这一看似反直觉的结果实际上是因为体系中大量的苹果酸分子优先与Cl$^{-}$发生强缔合，从而在空间上破坏或削弱了羧基-羧基间的氢键网络，形成了以阴离子配位为主导的高极性局域微环境。而在Reline（尿素体系）中，Cl$^{-}$与尿素的缔合数量最少，取而代之的是广泛的尿素-尿素自缔合行为，这得益于尿素分子兼具氢键供体与受体的双重特性，使其更倾向于形成由HBD自聚集主导的动态网络。
+
+进一步的结构剖析表明，在所有四种DES体系中，相当比例的胆碱阳离子（Ch$^{+}$）和Cl$^{-}$并未呈现完全的游离态，而是以未解离的离子对或离子簇形式存在。因此，从分子模拟的视角可以得出明确结论：DES的内部组分既未发生完全解离，也未形成理想化的均匀缔合；这种由阴离子配位、HBD自聚集以及离子缔合多重博弈所导致的固有微观异质性（Inherent heterogeneity），不仅使得分子水平的精确数学建模面临巨大挑战，更从根本上决定了体系的宏观物理化学行为。
+
+这种显著的固有异质性对CO₂脱水（干燥）过程的微环境构建具有决定性的理论启示。它表明水分子在DES中的吸收并非传统认知中的“均匀溶解”，而是受控于本征网络拓扑的“选择性局域水化（Selective Localized Hydration）”过程。具体而言，DES的微观结构直接映射了其宏观干燥性能中的权衡效应（Trade-off effect）：Ethaline均一且相对开放的网络有利于水分子的快速渗透与扩散，赋予其优异的吸水动力学性能，但可能面临高含水负荷下结构稳定性不足的问题；Glyceline致密的三维骨架能够有效“锁住”水分子，形成稳定的水化网络，极具深度脱水潜力，但其本征高黏度将不可避免地导致传质速率下降；Maline中由强HBD-Cl$^{-}$相互作用主导的高极性局域环境，虽能提供极高的理论吸水容量，但水分子进入后易受限于局域强束缚效应，甚至引发后续HBD-H$_{2}$O-HBD“水桥”交联结构的形成，从而大幅增加解吸与循环再生的能耗；而Reline广泛的HBD自缔合动态网络，则有望在吸水容量、传质速率及结构可逆性之间实现良好的综合平衡。
+
+综上所述，不同DES因HBD分子结构的差异，演化出具有显著空间异质性的本征氢键网络。HBD-Cl$^{-}$相互作用与HBD-HBD自缔合行为的竞争与协同，共同主导了DES骨架的稳定性、致密性与微观相态分布。这种非均一的本征微观结构特征，预期将深刻影响后续CO₂脱水过程中的水分子摄取机制、传递行为以及溶剂的再生性能。这一从本征液相结构到传质与吸附微环境的逻辑推演，不仅打破了将DES视为均相溶剂的传统假设，更为定向设计和筛选高效、低能耗的CO₂干燥用DES溶剂提供了坚实且极具前瞻性的理论依据。
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure7.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{The hydrogen-bond distribution}
+\end{figure*} 
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure8.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*} 
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.9\linewidth]{figure9.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*} 
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.8\linewidth]{figure10.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*} 
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.7\linewidth]{figure11.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*} 
+
+ \begin{figure*}[htbp]
+	\centering
+	\includegraphics[width=0.7\linewidth]{figure12.eps}
+	\caption{The apparatus of measuring carbon dioxide solubility.}
+	\label{sigma-profile}
+\end{figure*} 
+
+
+\section{Conclusion}
+
+\bmsection*{Acknowledgments}
+
+This work was supported by the National Key R\&D Program of China (No. 2023YFB3813300), the Beijing Municipal Natural Science Foundation (No. 2252018), and the Innovation Consortium Program of PetroChina Petrochemical Research Institute and Beijing University of Chemical Technology. (No. PRIKY2025139).
+
+\bmsection*{Author contributions}
+
+Minghao Song: Conceptualization (lead); data curation (lead); formal analysis (lead); investigation (lead); methodology (lead); software (lead); visualization (equal); writing-original draft (lead). Ruisong Zhu: Data curation (equal); Fei Zhao: resources (equal); supervision (equal); writing-review and editing (equal). Zhigang Lei: funding acquisition (lead); project administration (lead); resources (equal); supervision (lead); writing-review and editing (lead).
+
+\bmsection*{DATA AVAILABILITY STATEMENT}
+
+The data that supports the findings of this study are available in the supplementary materials of this article. The complete original data of Figure \ref{ESP} and \ref{NCI} are presented in Table S1-S3. Additionally, the computational procedure for gas solubility determination is described in Appendix A1, including the theoretical framework based on the Lee-Kesler generalized correlation and the material balance principle. Figure S1 illustrates the schematic diagram and logical flow of the solubility calculation program. Figure S2 displays the mass loss analysis of geraniol-based DESs during the recovery and recycling process. Figure S3 presents the AIM topological analysis and bond path of menthol and linalool. Figure S4 shows the NBO analysis and electronic interaction snapshots of menthol and linalool based DESs.
+
+\bmsection*{Conflict of interest}
+
+The authors declare no potential conflict of interests.
+
+\bibliography{wileyNJD-AMA}
+
+
+\bmsection*{Supporting information}
+
+Additional supporting information can be found online in the Supporting Information section at the end of this article.
+
+\end{document}
