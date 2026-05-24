@@ -3206,6 +3206,7 @@ class Commands:
             if os.path.exists(session_file):
                 try:
                     import json
+
                     with open(session_file, encoding="utf-8") as f:
                         existing_session = json.load(f)
                     real_original = existing_session.get("original_file")
