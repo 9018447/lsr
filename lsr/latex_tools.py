@@ -228,8 +228,8 @@ def extract_text_environments(selected_items):
             if in_skip_env:
                 continue
 
-            # Track table environments
-            if re.search(r"\\begin\{table\}", stripped):
+            # Track table environments (table, table*, table[h!], etc.)
+            if re.search(r"\\begin\{table[*\[]?[^}]*\}", stripped):
                 in_table = True
                 table_lines = []
                 table_depth = 1
@@ -248,9 +248,9 @@ def extract_text_environments(selected_items):
                 continue
 
             if in_table:
-                if re.search(r"\\begin\{table\}", stripped):
+                if re.search(r"\\begin\{table[*\[]?[^}]*\}", stripped):
                     table_depth += 1
-                if re.search(r"\\end\{table\}", stripped):
+                if re.search(r"\\end\{table[*\[]?[^}]*\}", stripped):
                     table_depth -= 1
                     if table_depth <= 0:
                         in_table = False
@@ -334,19 +334,27 @@ def _simplify_latex_commands(text):
 def _convert_tabular_to_html(table_content):
     """Convert LaTeX tabular environment to HTML table.
 
-    Handles basic \\begin{tabular}{...} ... \\end{tabular} syntax.
+    Handles \\begin{tabular}, \\begin{tabular*}, \\begin{tabularx}, etc.
     """
-    # Extract tabular content
+    # Try tabular*/tabularx first (two args: {width}{col_spec})
     tabular_match = re.search(
-        r"\\begin\{tabular\}\{([^}]*)\}(.*?)\\end\{tabular\}",
+        r"\\begin\{(tabular\*|tabularx)\}\{[^}]*\}\{([^}]*)\}(.*?)\\end\{\1\}",
         table_content,
-        re.DOTALL
+        re.DOTALL,
     )
+    # Fallback to basic tabular (one arg: {col_spec})
+    if not tabular_match:
+        tabular_match = re.search(
+            r"\\begin\{(tabular)\}\{([^}]*)\}(.*?)\\end\{\1\}",
+            table_content,
+            re.DOTALL,
+        )
     if not tabular_match:
         return None
 
-    col_spec = tabular_match.group(1)
-    body = tabular_match.group(2).strip()
+    env_name = tabular_match.group(1)
+    col_spec = tabular_match.group(2)
+    body = tabular_match.group(3).strip()
 
     # Extract caption if present
     caption_match = re.search(r"\\caption\{([^}]*)\}", table_content)
