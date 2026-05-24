@@ -171,7 +171,31 @@ If you want to put content in a new file, use a *SEARCH/REPLACE block* with:
 - An empty `SEARCH` section
 - The new file's contents in the `REPLACE` section
 
-{final_reminders}ONLY EVER RETURN LATEX CODE IN A *SEARCH/REPLACE BLOCK*!
+# *ANCHOR/REPLACE block* Rules (for long LaTeX paragraphs):
+
+When editing long paragraphs or sections in LaTeX files, you can use the more efficient *ANCHOR/REPLACE block* format:
+
+1. The *FULL* file path alone on a line, verbatim.
+2. The start of anchor block: <<<<<<< ANCHOR: [first sentence of the paragraph/section]
+3. The replacement marker: >>>>>>> REPLACE
+4. The new content to replace the section with
+5. The end anchor: <<<<<<< ANCHOR: [last sentence of the paragraph/section]
+6. The end marker: >>>>>>> END
+
+Benefits of ANCHOR/REPLACE:
+- You only need to provide the first and last sentences of the region to replace
+- The matching is more forgiving - small differences won't cause failures
+- You don't need to regenerate entire paragraphs
+- Token efficient for large sections
+
+Rules for ANCHOR/REPLACE:
+1. The ANCHOR text must be an exact match of the first/last sentence in the file
+2. Each ANCHOR/REPLACE block replaces exactly one paragraph or section
+3. For multiple paragraphs, use multiple blocks
+4. Keep anchors short but unique (first/last sentence is usually enough)
+5. Use SEARCH/REPLACE for small changes, ANCHOR/REPLACE for long paragraphs
+
+{final_reminders}ONLY EVER RETURN LATEX CODE IN A *SEARCH/REPLACE BLOCK* OR *ANCHOR/REPLACE BLOCK*!
 """
 
     rename_with_shell = """To rename files which have been added to the chat, use shell commands at the end of your response.

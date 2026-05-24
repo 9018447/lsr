@@ -2280,16 +2280,12 @@ class Commands:
         red = "\u001b[31m"
 
         bar = "\u2500" * 42
-        self.io.tool_output(
-            f"\n{bold}\u250c{bar}\u2510{rst}"
-        )
+        self.io.tool_output(f"\n{bold}\u250c{bar}\u2510{rst}")
         self.io.tool_output(
             f"{bold}\u2502{rst}  {filename}{rst}"
             f"{' ' * max(1, 40 - len(filename))}{bold}\u2502{rst}"
         )
-        self.io.tool_output(
-            f"{bold}\u251c{bar}\u2524{rst}"
-        )
+        self.io.tool_output(f"{bold}\u251c{bar}\u2524{rst}")
         for idx, (item_type, title, start, end, _) in enumerate(items, 1):
             is_last = idx == len(items)
             branch = "\u2514\u2500" if is_last else "\u251c\u2500"
@@ -2313,9 +2309,7 @@ class Commands:
                 f"{title}{mark}"
                 f"{dim} L{start + 1}\u2013{end + 1}{rst}{count_tag}"
             )
-        self.io.tool_output(
-            f"{bold}\u2514{bar}\u2518{rst}"
-        )
+        self.io.tool_output(f"{bold}\u2514{bar}\u2518{rst}")
 
         # Selection menu ──────────────────────────────────────────
         self.io.tool_output(
@@ -2388,9 +2382,7 @@ class Commands:
         }
 
         # ── Step 1: Choose level ──────────────────────
-        self.io.tool_output(
-            f"\n  {bold}\u250c\u2500 Create section \u2500\u2510{rst}"
-        )
+        self.io.tool_output(f"\n  {bold}\u250c\u2500 Create section \u2500\u2510{rst}")
         self.io.tool_output(
             f"  {cyan}\u2502{rst} 1 {cyan}\u2502{rst} section"
             f"     2 {cyan}\u2502{rst} subsection"
@@ -2511,7 +2503,9 @@ class Commands:
         self.io.tool_output(
             f"    {dim}{line_count} lines (L{start + 1}\u2013{end + 1}){rst}"
         )
-        confirm1 = input(f"  {yellow}\u276f{rst} Type 'yes' to confirm: ").strip().lower()
+        confirm1 = (
+            input(f"  {yellow}\u276f{rst} Type 'yes' to confirm: ").strip().lower()
+        )
         if confirm1 != "yes":
             self.io.tool_output(f"  {dim}Cancelled.{rst}")
             return self._parse_and_select_sections(filename, action_verb="edit")
@@ -2538,9 +2532,7 @@ class Commands:
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-        self.io.tool_output(
-            f"\n  {green}\u2714 Removed \\{sec_type}{{{title}}}{rst}"
-        )
+        self.io.tool_output(f"\n  {green}\u2714 Removed \\{sec_type}{{{title}}}{rst}")
 
         return self._parse_and_select_sections(filename, action_verb="edit")
 
@@ -2843,7 +2835,7 @@ class Commands:
         yellow = "\u001b[33m"
 
         bar = "\u2500" * 42
-        self.io.tool_output(f"\n\u001b[32m\u001b[1m  \u2714 Ready to edit\u001b[0m")
+        self.io.tool_output("\n\u001b[32m\u001b[1m  \u2714 Ready to edit\u001b[0m")
         for _, title, _, _, _ in selected_items:
             c = file_counts.get(title, 0)
             c_tag = f" \u001b[33m\u00d7{c}\u001b[0m" if c > 0 else ""
@@ -2851,7 +2843,39 @@ class Commands:
         self.io.tool_output(f"  \u001b[2m{bar}\u001b[0m")
         self.io.tool_output(f"  \u001b[2mEdit:\u001b[0m  {tmp_path}")
         self.io.tool_output(f"  \u001b[2mFrom:\u001b[0m  {filename}")
-        self.io.tool_output(f"\n  \u001b[2mAsk LLM to edit, then run\u001b[0m \u001b[1m/edit-done\u001b[0m")
+        self.io.tool_output(
+            "\n  \u001b[2mAsk LLM to edit, then run\u001b[0m \u001b[1m/edit-done\u001b[0m"
+        )
+
+    def _cleanup_stale_sessions(self, original_file, current_session_file=None):
+        """Remove stale session and temp files for the same original file.
+
+        Prevents conflicts from multiple sessions targeting the same .tex file.
+        If current_session_file is provided, keeps that one and removes all others.
+        """
+        import glob
+
+        lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
+        # Match all lsr session files (edit, deai, expand, condense, translate)
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.tex.session"))
+
+        removed_count = 0
+        for sf in session_files:
+            if sf == current_session_file:
+                continue
+            try:
+                with open(sf, encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("original_file") == original_file:
+                    tmp_file = sf.replace(".session", "")
+                    if os.path.exists(tmp_file):
+                        os.remove(tmp_file)
+                    os.remove(sf)
+                    removed_count += 1
+            except Exception:
+                pass
+
+        return removed_count
 
     def _merge_sections_from_session(self, session_file):
         """Merge sections from a session file back to the original file.
@@ -2934,6 +2958,9 @@ class Commands:
         if tmp_file in self.coder.abs_fnames:
             self.coder.abs_fnames.remove(tmp_file)
 
+        # Cleanup all stale sessions for the same original file
+        stale_count = self._cleanup_stale_sessions(original_file)
+
         action = session.get("action", "edit")
         green = "\u001b[32m"
         rst = "\u001b[0m"
@@ -2943,6 +2970,10 @@ class Commands:
             f"\n  \u001b[32m\u001b[1m\u2714 Merged {replaced_count} section(s)\u001b[0m"
         )
         self.io.tool_output(f"    \u001b[2m\u2192\u001b[0m {original_file}")
+        if stale_count > 0:
+            self.io.tool_output(
+                f"    {dim}Cleaned up {stale_count} stale session(s){rst}"
+            )
 
     def _done_command(self, action_verb):
         """Shared merge-back logic for /{action}-done commands."""
@@ -2966,10 +2997,11 @@ class Commands:
         import glob
 
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        session_files = glob.glob(os.path.join(lsr_home, "lsr_edit_*.tex.session"))
+        # Match all lsr session files (edit, deai, expand, condense, translate)
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.tex.session"))
 
         if not session_files:
-            self.io.tool_error("No edit session found. Use /edit first.")
+            self.io.tool_error("No edit session found. Use /edit or /deai first.")
             return
 
         session_file = max(session_files, key=os.path.getmtime)
@@ -3214,9 +3246,17 @@ class Commands:
         # Write temp file to ~/.lsr/tmp/
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
+        tmp_filename = f"lsr_{action_verb}_{descriptive}_{dedup_hash}.tex"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
+
+        # Cleanup stale sessions for the same original file before creating new one
+        stale_count = self._cleanup_stale_sessions(abs_path)
+        if stale_count > 0:
+            self.io.tool_output(
+                f"\n\u001b[2mCleaned up {stale_count} stale session(s) for {filename}\u001b[0m"
+            )
+
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write("\n".join(tmp_content))
 

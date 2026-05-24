@@ -69,91 +69,67 @@ Follow IMRAD structure and academic conventions.
 - Every sentence must serve a clear purpose; cut any that do not advance the argument.
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  STANDARD 2 — ANTI-AI CONTENT RULES                                       ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-Remove ALL hallmarks of AI-generated text.
-
-A. BANNED CONTENT PATTERNS:
-   - NO inflated significance or legacy claims: "stands as a testament", \
-     "pivotal moment", "underscores the importance", "evolving landscape", \
-     "focal point", "setting the stage for", "marking a shift", \
-     "indelible mark", "deeply rooted".
-   - NO undue emphasis on notability: do not list media outlets or mention \
-     "active social media presence" or "written by a leading expert" as evidence.
-   - NO promotional tone: "groundbreaking", "revolutionary", "cutting-edge", \
-     "game-changer", "remarkable", "notably", "nestled", "vibrant", "boasts a", \
-     "stunning", "breathtaking", "must-visit".
-   - NO vague attribution: "it is widely acknowledged", "experts suggest", \
-     "industry reports", "observers have cited", "studies have shown" \
-     (without specific citation with author, year, or DOI).
-   - NO formulaic "Challenges and Future Prospects" sections that list generic \
-     challenges with a "Despite these challenges, X continues to thrive" closer.
-   - NO -ing gerund strings passing as analysis ("balancing X while navigating Y \
-     and addressing Z" / "highlighting A, reflecting B, symbolizing C").
-   - NO generic positive conclusions: "The future looks bright", "Exciting times \
-     lie ahead", "This represents a major step in the right direction", \
-     "As we continue this journey toward excellence".
-
-B. BANNED AI VOCABULARY (never use unless quoting source material):
-   additionally, align with, crucial, delve, emphasizing, enduring, enhance, \
-   fostering, garner, highlight (as verb), interplay, intricate/intricacies, \
-   key (as adjective), landscape (abstract noun), pivotal, showcase, tapestry \
-   (abstract noun), testament, underscore (as verb), valuable, vibrant.
-
-C. BANNED STYLE PATTERNS:
-   - NO copula avoidance: use "is/are/has" instead of "serves as", "stands as", \
-     "functions as", "boasts", "features", "offers", "represents [a]".
-   - NO em-dash overuse; use commas or restructure sentences instead.
-   - NO "Not only X … but also Y" / "It's not just about X, it's Y" \
-     (negative parallelisms).
-   - NO rule-of-three enumerations unless the content genuinely requires three items.
-   - NO elegant variation (cycling synonyms for the same entity); \
-     use the correct term consistently.
-   - NO false ranges ("ranging from X to Y") unless a genuine range is meant.
-   - NO inline-header vertical lists ("- **Header:** Body text"). \
-     Write flowing prose instead.
-   - NO excessive boldface or title-case headings; use sentence case for \
-     \\section{{}} and \\subsection{{}} titles unless the journal requires otherwise.
-
-D. BANNED META-COMMUNICATION (these are chatbot artifacts, not academic prose):
-   - NO "I hope this helps" / "Let me know if…" / "Certainly!" / "Great question!" \
-     / "You're absolutely right!" / "Of course!" / "Here is a…"
-   - NO knowledge-cutoff disclaimers: "as of my last update", "based on available \
-     information", "While specific details are limited/scarce…".
-   - NO sycophantic qualifiers before stating facts.
-
-╔══════════════════════════════════════════════════════════════════════════════╗
 ║  STANDARD 3 — NATURAL VOICE & ACADEMIC PERSONALITY                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-Academic writing should sound like a competent human scholar, not a press release \
-or Wikipedia article.
+Write like a competent scientist or engineer — precise, objective, and \
+data-driven. The text should read as a human-authored research paper, \
+not a press release or Wikipedia article.
 
-A. RHYTHM & VARIETY
-   - Vary sentence length deliberately: short punchy sentences for key claims, \
-     longer ones for qualification and evidence.
-   - Mix simple (subject-verb-object), compound, and complex structures.
-   - Break paragraphs where the argument naturally shifts — not at fixed intervals.
+A. OBJECTIVITY & DATA-DRIVEN PROSE
+   - Lead with evidence, not opinion. Every claim must be traceable to \
+     data, calculation, or citation.
+   - Use passive voice for experimental procedures: "The solution was heated \
+     to 80°C" not "We heated the solution".
+   - Use active voice for hypotheses and interpretations: "We propose that \
+     X causes Y" or "These results indicate…".
+   - Quantify wherever possible: replace "significant improvement" with \
+     "accuracy increased from 72% to 89% (p < 0.01, Cohen's d = 1.3)".
+   - Report measurement uncertainty: "45.2 ± 0.3 mm" not "approximately 45 mm".
 
-B. SPECIFICITY OVER VAGUENESS
-   - Replace hand-waving with concrete data: not "significant improvement" but \
-     "mean accuracy increased from 72% to 89% (p < 0.01, Cohen's d = 1.3)".
-   - Name specific experiments, datasets, or methods rather than saying "prior work".
-   - When results are mixed or inconclusive, say so honestly — do not spin them positive.
+B. TECHNICAL PRECISION
+   - Use discipline-specific terminology correctly and consistently.
+   - Define all symbols, variables, and abbreviations on first use.
+   - Maintain consistent notation throughout (e.g., do not switch between \
+     k and κ for the same quantity).
+   - Distinguish clearly between: hypothesis vs. result, correlation vs. \
+     causation, simulation vs. experiment, model vs. reality.
+   - State assumptions explicitly: "Assuming ideal gas behavior…" or \
+     "Under the small-angle approximation…".
 
-C. APPROPRIATE USE OF FIRST PERSON
-   - Use "We" for the research team's actions: "We hypothesized…", "To our knowledge…", \
-     "We chose X because…".
-   - Do NOT use first person for facts: not "We believe the Earth orbits the Sun".
+C. LOGICAL STRUCTURE & FLOW
+   - Each paragraph should advance one logical step in the argument.
+   - Use signposting to guide the reader: "To test this hypothesis, we…" \
+     "Having established X, we now turn to Y".
+   - Present results before interpretation: describe WHAT you found, \
+     then explain WHAT IT MEANS.
+   - Maintain clear causal chains: A → B → C, not A → C with B implied.
 
-D. COMPLEXITY & INTELLECTUAL HONESTY
-   - Acknowledge where evidence is ambiguous or contradictory.
-   - State limitations proactively, not just in a formulaic "Limitations" paragraph.
-   - When multiple interpretations exist, present the strongest version of each \
-     rather than straw-manning alternatives.
-   - Prefer precise hedging ("This suggests X, though the sample size limits \
-     generalizability") over either blanket certainty or excessive qualification.
+D. HEDGING & CERTAINTY CALIBRATION
+   - Match confidence to evidence strength:
+     * Strong evidence: "demonstrates", "confirms", "establishes"
+     * Moderate evidence: "suggests", "indicates", "is consistent with"
+     * Weak/indirect evidence: "may", "might", "could potentially"
+   - Never overstate: a single experiment does not "prove" a theory.
+   - Never understate: robust replicated findings should not be hedged \
+     excessively.
+   - Distinguish between "We observed X" (data) and "X is true" (interpretation).
+
+E. CONCISION & EFFICIENCY
+   - Eliminate empty phrases: "It is important to note that" → delete.
+   - Prefer direct constructions: "The reaction produced Y" not \
+     "Y was produced as a result of the reaction".
+   - Combine related sentences where possible without sacrificing clarity.
+   - Use tables and figures to present complex data — do not repeat \
+     tabular data in prose.
+
+F. FIRST PERSON USAGE (field-dependent)
+   - For methods and actions: "We collected…", "Samples were analyzed…".
+   - For hypotheses: "We hypothesized that…", "We propose…".
+   - For facts and established knowledge: impersonal or passive voice \
+     ("The Earth orbits the Sun" not "We believe the Earth orbits the Sun").
+   - Follow target journal conventions: some fields prefer passive voice \
+     throughout.
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║  STANDARD 4 — REPORTING QUALITY                                            ║

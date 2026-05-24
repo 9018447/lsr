@@ -31,10 +31,45 @@ class EditBlockCoder(Coder):
             )
         )
 
-        self.shell_commands += [edit[1] for edit in edits if edit[0] is None]
-        edits = [edit for edit in edits if edit[0] is not None]
+        # Separate shell commands and file edits
+        shell_edits = []
+        file_edits = []
+        anchor_edits = []
 
-        return edits
+        for edit in edits:
+            if edit[0] is None:
+                shell_edits.append(edit)
+            elif len(edit) == 5 and edit[1] == "ANCHOR":
+                # Anchor-based edit: (filename, 'ANCHOR', head_anchor, tail_anchor, updated_text)
+                anchor_edits.append(edit)
+            else:
+                file_edits.append(edit)
+
+        self.shell_commands += [edit[1] for edit in shell_edits]
+
+        # Process anchor edits - convert them to standard format
+        for anchor_edit in anchor_edits:
+            filename, _, head_anchor, tail_anchor, updated_text = anchor_edit
+            full_path = self.abs_root_path(filename)
+
+            if Path(full_path).exists():
+                content = self.io.read_text(full_path)
+                # Use anchor replacement
+                from .anchor_replace import anchor_replace
+
+                new_content = anchor_replace(
+                    content, head_anchor, tail_anchor, updated_text
+                )
+                if new_content:
+                    # Write the result directly
+                    if True:  # not dry_run
+                        self.io.write_text(full_path, new_content)
+                    # Add to passed list for reporting
+                    file_edits.append(
+                        (filename, head_anchor[:50] + "...", updated_text[:50] + "...")
+                    )
+
+        return file_edits
 
     def apply_edits_dry_run(self, edits):
         return self.apply_edits(edits, dry_run=True)
@@ -45,6 +80,15 @@ class EditBlockCoder(Coder):
         updated_edits = []
 
         for edit in edits:
+            # Check if this is an anchor-based edit
+            if len(edit) == 3 and edit[1].startswith("ANCHOR:"):
+                # Anchor-based edit: (filename, "ANCHOR: head_anchor...", "tail_anchor...")
+                path, head_info, tail_info = edit
+                # These are already processed in get_edits, just add to passed
+                passed.append(edit)
+                updated_edits.append(edit)
+                continue
+
             path, original, updated = edit
             full_path = self.abs_root_path(path)
             new_content = None
@@ -742,7 +786,20 @@ HEAD_ERR = "<<<<<<< SEARCH"
 DIVIDER_ERR = "======="
 UPDATED_ERR = ">>>>>>> REPLACE"
 
-separators = "|".join([HEAD, DIVIDER, UPDATED])
+# Anchor-based replace patterns
+ANCHOR_HEAD = r"^<{5,9}\s*ANCHOR:\s*(.+)$"
+ANCHOR_REPLACE = r"^>{5,9}\s*REPLACE\s*$"
+ANCHOR_TAIL = r"^<{5,9}\s*ANCHOR:\s*(.+)$"
+ANCHOR_END = r"^>{5,9}\s*END\s*$"
+
+ANCHOR_HEAD_ERR = "<<<<<<< ANCHOR: ..."
+ANCHOR_REPLACE_ERR = ">>>>>>> REPLACE"
+ANCHOR_TAIL_ERR = "<<<<<<< ANCHOR: ..."
+ANCHOR_END_ERR = ">>>>>>> END"
+
+separators = "|".join(
+    [HEAD, DIVIDER, UPDATED, ANCHOR_HEAD, ANCHOR_REPLACE, ANCHOR_TAIL, ANCHOR_END]
+)
 
 split_re = re.compile(r"^((?:" + separators + r")[ ]*\n)", re.MULTILINE | re.DOTALL)
 
@@ -795,6 +852,10 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
     head_pattern = re.compile(HEAD)
     divider_pattern = re.compile(DIVIDER)
     updated_pattern = re.compile(UPDATED)
+    anchor_head_pattern = re.compile(ANCHOR_HEAD)
+    anchor_replace_pattern = re.compile(ANCHOR_REPLACE)
+    anchor_tail_pattern = re.compile(ANCHOR_TAIL)
+    anchor_end_pattern = re.compile(ANCHOR_END)
 
     while i < len(lines):
         line = lines[i]
@@ -823,9 +884,18 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
             and head_pattern.match(lines[i + 2].strip())
         )
 
+        # Also check for anchor blocks
+        next_is_anchor = (
+            i + 1 < len(lines)
+            and anchor_head_pattern.match(lines[i + 1].strip())
+            or i + 2 < len(lines)
+            and anchor_head_pattern.match(lines[i + 2].strip())
+        )
+
         if (
             any(line.strip().startswith(start) for start in shell_starts)
             and not next_is_editblock
+            and not next_is_anchor
         ):
             shell_content = []
             i += 1
@@ -837,6 +907,65 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
 
             yield None, "".join(shell_content)
             continue
+
+        # Check for ANCHOR/REPLACE blocks
+        anchor_head_match = anchor_head_pattern.match(line.strip())
+        if anchor_head_match:
+            try:
+                head_anchor = anchor_head_match.group(1).strip()
+                filename = find_filename(lines[max(0, i - 3) : i], fence, valid_fnames)
+
+                if not filename:
+                    if current_filename:
+                        filename = current_filename
+                    else:
+                        raise ValueError(missing_filename_err.format(fence=fence))
+
+                current_filename = filename
+
+                # Expect REPLACE marker
+                i += 1
+                if i >= len(lines) or not anchor_replace_pattern.match(
+                    lines[i].strip()
+                ):
+                    raise ValueError(f"Expected `{ANCHOR_REPLACE_ERR}`")
+
+                # Collect replacement content
+                updated_text = []
+                i += 1
+                while i < len(lines) and not anchor_tail_pattern.match(
+                    lines[i].strip()
+                ):
+                    updated_text.append(lines[i])
+                    i += 1
+
+                # Expect tail anchor
+                if i >= len(lines) or not anchor_tail_pattern.match(lines[i].strip()):
+                    raise ValueError(f"Expected `{ANCHOR_TAIL_ERR}`")
+
+                tail_anchor = (
+                    anchor_tail_pattern.match(lines[i].strip()).group(1).strip()
+                )
+
+                # Expect END marker
+                i += 1
+                if i >= len(lines) or not anchor_end_pattern.match(lines[i].strip()):
+                    raise ValueError(f"Expected `{ANCHOR_END_ERR}`")
+
+                # Yield anchor-based edit with special format
+                # We use a special tuple format: (filename, 'ANCHOR', head_anchor, tail_anchor, updated_text)
+                yield (
+                    filename,
+                    "ANCHOR",
+                    head_anchor,
+                    tail_anchor,
+                    "".join(updated_text),
+                )
+
+            except ValueError as e:
+                processed = "".join(lines[: i + 1])
+                err = e.args[0]
+                raise ValueError(f"{processed}\n^^^ {err}")
 
         # Check for SEARCH/REPLACE blocks
         if head_pattern.match(line.strip()):
