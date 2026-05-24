@@ -2224,12 +2224,17 @@ class Commands:
         self.io.tool_output("  - Single: 1,3,5")
         self.io.tool_output("  - Range:  1-5")
         self.io.tool_output("  - All:    all")
+        self.io.tool_output("  - Create: c")
         self.io.tool_output("  - Cancel: q")
 
         selection = input("\nSelection: ")
 
         if not selection or selection.lower() == "q":
             return None
+
+        # ── Create section mode ──────────────────────────────
+        if selection.lower() == "c":
+            return self._create_section(abs_path, filename, lines, items)
 
         selected_indices = set()
         if selection.lower() == "all":
@@ -2259,6 +2264,93 @@ class Commands:
 
         selected_items = [items[i] for i in sorted(selected_indices)]
         return (abs_path, filename, items, selected_items)
+
+    def _create_section(self, abs_path, filename, lines, items):
+        """Interactive section/subsection/subsubsection creation.
+
+        Flow: level → title → position → insert into file → re-invoke picker.
+        """
+        level_names = {
+            "1": "section",
+            "2": "subsection",
+            "3": "subsubsection",
+            "4": "paragraph",
+        }
+
+        # ── Step 1: Choose level ─────────────────────────────
+        self.io.tool_output("\n\u001b[1mCreate new section\u001b[0m")
+        self.io.tool_output("  1. section")
+        self.io.tool_output("  2. subsection")
+        self.io.tool_output("  3. subsubsection")
+        self.io.tool_output("  4. paragraph")
+
+        level_choice = input("\nLevel [1-4]: ").strip()
+        if level_choice not in level_names:
+            self.io.tool_error("Invalid level.")
+            return None
+        level_name = level_names[level_choice]
+        latex_cmd = "\\" + level_name
+
+        # ── Step 2: Enter title ──────────────────────────────
+        title = input("Title: ").strip()
+        if not title:
+            self.io.tool_error("Empty title, cancelled.")
+            return None
+
+        # ── Step 3: Choose position ──────────────────────────
+        self.io.tool_output(
+            f"\nInsert \\{level_name}{{{title}}} at position:"
+        )
+        self.io.tool_output("  - Before section 1, after section N, etc.")
+        self.io.tool_output(
+            f"  - Enter 1–{len(items)} to insert before that section"
+        )
+        self.io.tool_output(
+            f"  - Enter {len(items) + 1} or larger to append at end"
+        )
+
+        pos_input = input(f"\nPosition [1-{len(items) + 1}]: ").strip()
+        try:
+            pos = int(pos_input)
+        except ValueError:
+            self.io.tool_error("Invalid position.")
+            return None
+
+        # Clamp to valid range
+        pos = max(1, min(pos, len(items) + 1))
+
+        # ── Step 4: Build the new section text ───────────────
+        new_text = f"{latex_cmd}{{{title}}}"
+        # Add a TODO placeholder body
+        new_text += f"\n% TODO: Write {level_name} content here"
+
+        # ── Step 5: Determine insertion line ──────────────────
+        if pos <= len(items):
+            # Insert before section at index (pos-1)
+            insert_line = items[pos - 1][2]  # start_line of target
+        else:
+            # Append at end of file
+            insert_line = len(lines)
+
+        # ── Step 6: Insert into file ─────────────────────────
+        new_lines = new_text.split("\n")
+        # Add blank line separator before new section (unless at start)
+        if insert_line > 0 and lines[insert_line - 1].strip():
+            new_lines.insert(0, "")
+        # Add blank line after
+        new_lines.append("")
+
+        lines[insert_line:insert_line] = new_lines
+
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        self.io.tool_output(
+            f"\n\u001b[32m\u2714 Created \\{level_name}{{{title}}} at position {pos}\u001b[0m"
+        )
+
+        # ── Step 7: Re-invoke the section picker ─────────────
+        return self._parse_and_select_sections(filename, action_verb="edit")
 
     @staticmethod
     def _sanitize_filename(title):
