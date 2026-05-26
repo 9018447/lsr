@@ -10,9 +10,13 @@ import webbrowser
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from rich.console import Console
 
 from lsr import urls
 from lsr.io import InputOutput
+from lsr.theme import CatppuccinMocha as Mocha
+
+console = Console()
 
 
 def check_openrouter_tier(api_key):
@@ -35,7 +39,9 @@ def check_openrouter_tier(api_key):
         response.raise_for_status()
         data = response.json()
         # According to the documentation, 'is_free_tier' will be true if the user has never paid
-        return data.get("data", {}).get("is_free_tier", True)  # Default to True if not found
+        return data.get("data", {}).get(
+            "is_free_tier", True
+        )  # Default to True if not found
     except Exception:
         # If there's any error, we'll default to assuming free tier
         return True
@@ -160,7 +166,9 @@ def generate_pkce_codes():
     code_verifier = secrets.token_urlsafe(64)
     hasher = hashlib.sha256()
     hasher.update(code_verifier.encode("utf-8"))
-    code_challenge = base64.urlsafe_b64encode(hasher.digest()).rstrip(b"=").decode("utf-8")
+    code_challenge = (
+        base64.urlsafe_b64encode(hasher.digest()).rstrip(b"=").decode("utf-8")
+    )
     return code_verifier, code_challenge
 
 
@@ -210,7 +218,9 @@ def start_openrouter_oauth_flow(io):
     port = find_available_port()
     if not port:
         io.tool_error("Could not find an available port between 8484 and 8584.")
-        io.tool_error("Please ensure a port in this range is free, or configure manually.")
+        io.tool_error(
+            "Please ensure a port in this range is free, or configure manually."
+        )
         return None
 
     callback_url = f"http://localhost:{port}/callback/lsr"
@@ -259,8 +269,12 @@ def start_openrouter_oauth_flow(io):
     def run_server():
         nonlocal server_error
         try:
-            with socketserver.TCPServer(("localhost", port), OAuthCallbackHandler) as httpd:
-                io.tool_output(f"Temporary server listening on {callback_url}", log_only=True)
+            with socketserver.TCPServer(
+                ("localhost", port), OAuthCallbackHandler
+            ) as httpd:
+                io.tool_output(
+                    f"Temporary server listening on {callback_url}", log_only=True
+                )
                 server_started.set()  # Signal that the server is ready
                 # Wait until shutdown is requested or timeout occurs (handled by main thread)
                 while not shutdown_server.is_set():
@@ -301,12 +315,16 @@ def start_openrouter_oauth_flow(io):
     }
     auth_url = f"{auth_url_base}?{'&'.join(f'{k}={v}' for k, v in auth_params.items())}"
 
-    io.tool_output("\nPlease open this URL in your browser to connect Aider with OpenRouter:")
+    io.tool_output(
+        "\nPlease open this URL in your browser to connect Aider with OpenRouter:"
+    )
     io.tool_output()
     print(auth_url)
 
     MINUTES = 5
-    io.tool_output(f"\nWaiting up to {MINUTES} minutes for you to finish in the browser...")
+    io.tool_output(
+        f"\nWaiting up to {MINUTES} minutes for you to finish in the browser..."
+    )
     io.tool_output("Use Control-C to interrupt.")
 
     try:
@@ -355,13 +373,19 @@ def start_openrouter_oauth_flow(io):
             with open(key_file, "a", encoding="utf-8") as f:
                 f.write(f'OPENROUTER_API_KEY="{api_key}"\n')
 
-            io.tool_warning("Aider will load the OpenRouter key automatically in future sessions.")
+            io.tool_warning(
+                "Aider will load the OpenRouter key automatically in future sessions."
+            )
             io.tool_output()
 
             return api_key
         except Exception as e:
-            io.tool_error(f"Successfully obtained key, but failed to save it to file: {e}")
-            io.tool_warning("Set OPENROUTER_API_KEY environment variable for this session only.")
+            io.tool_error(
+                f"Successfully obtained key, but failed to save it to file: {e}"
+            )
+            io.tool_warning(
+                "Set OPENROUTER_API_KEY environment variable for this session only."
+            )
             # Still return the key for the current session even if saving failed
             return api_key
     else:
@@ -379,8 +403,8 @@ def main():
         yes=False,
         input_history_file=None,
         chat_history_file=None,
-        tool_output_color="BLUE",
-        tool_error_color="RED",
+        tool_output_color=Mocha.BLUE,
+        tool_error_color=Mocha.RED,
     )
 
     # Ensure OPENROUTER_API_KEY is not set, to trigger the flow naturally

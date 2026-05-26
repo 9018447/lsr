@@ -5,7 +5,6 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections import OrderedDict
 from os.path import expanduser
 from pathlib import Path
 
@@ -13,11 +12,12 @@ import pyperclip
 from PIL import Image, ImageGrab
 from prompt_toolkit.completion import Completion, PathCompleter
 from prompt_toolkit.document import Document
+from rich.text import Text as RichText
 
 from lsr import models, prompts
 from lsr.editor import pipe_editor
+from lsr.theme import CatppuccinMocha as Mocha
 
-from lsr.format_settings import format_settings
 from lsr.help import Help, install_help_extra
 from lsr.io import CommandCompletionException
 from lsr.llm import litellm
@@ -27,10 +27,12 @@ from lsr.utils import is_image_file
 
 from .dump import dump  # noqa: F401
 
+
 class SwitchCoder(Exception):
     def __init__(self, placeholder=None, **kwargs):
         self.kwargs = kwargs
         self.placeholder = placeholder
+
 
 class Commands:
     def clone(self):
@@ -383,10 +385,24 @@ class Commands:
             cost = tk * (self.coder.main_model.info.get("input_cost_per_token") or 0)
             total_cost += cost
             msg = msg.ljust(col_width)
-            self.io.tool_output(f"${cost:7.4f} {fmt(tk)} {msg} {tip}")  # noqa: E231
+            # Use Rich Text with Mocha colors for token display
+            line = RichText()
+            line.append(f"${cost:7.4f} ", style=Mocha.TEAL)
+            line.append(f"{fmt(tk)} ", style=Mocha.SKY)
+            line.append(f"{msg} ", style=Mocha.TEXT)
+            line.append(tip, style=Mocha.OVERLAY1)
+            self.io.tool_output(line)  # noqa: E231
 
-        self.io.tool_output("=" * (width + cost_width + 1))
-        self.io.tool_output(f"${total_cost:7.4f} {fmt(total)} tokens total")  # noqa: E231
+        # Separator line
+        sep = RichText("=" * (width + cost_width + 1), style=Mocha.SURFACE2)
+        self.io.tool_output(sep)
+
+        # Total line
+        total_line = RichText()
+        total_line.append(f"${total_cost:7.4f} ", style=Mocha.GREEN)
+        total_line.append(f"{fmt(total)} ", style=Mocha.GREEN)
+        total_line.append("tokens total")
+        self.io.tool_output(total_line)  # noqa: E231
 
         limit = self.coder.main_model.info.get("max_input_tokens") or 0
         if not limit:
@@ -394,20 +410,33 @@ class Commands:
 
         remaining = limit - total
         if remaining > 1024:
-            self.io.tool_output(
-                f"{cost_pad}{fmt(remaining)} tokens remaining in context window"
-            )
+            msg = RichText()
+            msg.append(cost_pad)
+            msg.append(fmt(remaining), style=Mocha.TEAL)
+            msg.append(" tokens remaining in context window")
+            self.io.tool_output(msg)
         elif remaining > 0:
-            self.io.tool_error(
-                f"{cost_pad}{fmt(remaining)} tokens remaining in context window (use /drop or"
-                " /clear to make space)"
+            msg = RichText()
+            msg.append(cost_pad)
+            msg.append(fmt(remaining), style=Mocha.YELLOW)
+            msg.append(
+                " tokens remaining in context window (use /drop or /clear to make space)"
             )
+            self.io.tool_output(msg)
         else:
-            self.io.tool_error(
-                f"{cost_pad}{fmt(remaining)} tokens remaining, window exhausted (use /drop or"
-                " /clear to make space)"
+            msg = RichText()
+            msg.append(cost_pad)
+            msg.append(fmt(remaining), style=Mocha.RED)
+            msg.append(
+                " tokens remaining, window exhausted (use /drop or /clear to make space)"
             )
-        self.io.tool_output(f"{cost_pad}{fmt(limit)} tokens max context window size")
+            self.io.tool_output(msg)
+
+        limit_msg = RichText()
+        limit_msg.append(cost_pad)
+        limit_msg.append(fmt(limit), style=Mocha.OVERLAY2)
+        limit_msg.append(" tokens max context window size")
+        self.io.tool_output(limit_msg)
 
     def cmd_undo(self, args):
         "Undo the last git commit if it was done by lsr"
@@ -4128,6 +4157,7 @@ Text content here.
         except Exception as e:
             self.io.tool_error(f"Error parsing template: {e}")
 
+
 def expand_subdir(file_path):
     if file_path.is_file():
         yield file_path
@@ -4138,18 +4168,22 @@ def expand_subdir(file_path):
             if file.is_file():
                 yield file
 
+
 def parse_quoted_filenames(args):
     filenames = re.findall(r"\"(.+?)\"|(\S+)", args)
     filenames = [name for sublist in filenames for name in sublist if name]
     return filenames
 
+
 def get_help_md():
     md = Commands(None, None).get_help_md()
     return md
 
+
 def main():
     md = get_help_md()
     print(md)
+
 
 if __name__ == "__main__":
     status = main()

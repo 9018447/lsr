@@ -10,6 +10,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from lsr.dump import dump  # noqa: F401
+from lsr.theme import CatppuccinMocha as Mocha
 
 _text_prefix = """
 # Header
@@ -49,7 +50,7 @@ The end.
 
 class NoInsetCodeBlock(CodeBlock):
     """A code block with syntax highlighting and no padding.
-    Uses monokai theme with default terminal background."""
+    Uses monokai theme with Catppuccin Mocha background."""
 
     def __rich_console__(self, console, options):
         code = str(self.text).rstrip()
@@ -59,28 +60,30 @@ class NoInsetCodeBlock(CodeBlock):
             theme="monokai",
             word_wrap=True,
             padding=(1, 0),
-            background_color="default",
+            background_color=Mocha.BASE,
         )
         yield syntax
 
 
 class LeftHeading(Heading):
-    """A heading class that renders left-justified with subtle styling."""
+    """A heading class that renders left-justified with Catppuccin Mocha styling."""
 
     def __rich_console__(self, console, options):
         text = self.text
         text.justify = "left"
         if self.tag == "h1":
-            # Simple bold text with a subtle underline separator
-            text.stylize("bold")
+            # Use Lavender for h1 headings with subtle underline separator
+            text.stylize(f"bold {Mocha.LAVENDER}")
             yield text
-            yield Text("\u2500" * min(console.width or 80, 80))
+            yield Text("─" * min(console.width or 80, 80), style=Mocha.SURFACE2)
         elif self.tag == "h2":
-            text.stylize("bold")
+            # Use Mauve for h2 headings
+            text.stylize(f"bold {Mocha.MAUVE}")
             yield Text("")  # blank line before h2
             yield text
         else:
-            text.stylize("bold")
+            # Use Sapphire for other headings
+            text.stylize(f"bold {Mocha.SAPPHIRE}")
             yield text
 
 

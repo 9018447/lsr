@@ -479,26 +479,26 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         models.request_timeout = args.timeout
 
     if args.dark_mode:
-        args.user_input_color = "#32FF32"
-        args.tool_error_color = "#FF3333"
-        args.tool_warning_color = "#FFFF00"
-        args.assistant_output_color = "#00FFFF"
+        args.user_input_color = "#89b4fa"
+        args.tool_error_color = "#f38ba8"
+        args.tool_warning_color = "#fab387"
+        args.assistant_output_color = "#b4befe"
         args.code_theme = "monokai"
-        args.completion_menu_color = "#e0e0e0"
-        args.completion_menu_bg_color = "#3a3a3a"
-        args.completion_menu_current_color = "#00e5ff"
-        args.completion_menu_current_bg_color = "#2a2a2a"
+        args.completion_menu_color = "#cdd6f4"
+        args.completion_menu_bg_color = "#313244"
+        args.completion_menu_current_color = "#1e1e2e"
+        args.completion_menu_current_bg_color = "#cba6f7"
 
     if args.light_mode:
-        args.user_input_color = "green"
-        args.tool_error_color = "red"
-        args.tool_warning_color = "#FFA500"
-        args.assistant_output_color = "blue"
+        args.user_input_color = "#1e66f5"
+        args.tool_error_color = "#d20f39"
+        args.tool_warning_color = "#fe640b"
+        args.assistant_output_color = "#7287fd"
         args.code_theme = "default"
-        args.completion_menu_color = "#1a1a1a"
-        args.completion_menu_bg_color = "#c8c8c8"
-        args.completion_menu_current_color = "#005577"
-        args.completion_menu_current_bg_color = "#a0a0a0"
+        args.completion_menu_color = "#4c4f69"
+        args.completion_menu_bg_color = "#ccd0da"
+        args.completion_menu_current_color = "#dce0e8"
+        args.completion_menu_current_bg_color = "#8839ef"
 
     if return_coder and args.yes_always is None:
         args.yes_always = True

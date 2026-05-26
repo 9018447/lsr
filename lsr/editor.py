@@ -16,6 +16,7 @@ import tempfile
 from rich.console import Console
 
 from lsr.dump import dump  # noqa
+from lsr.theme import CatppuccinMocha as Mocha
 
 DEFAULT_EDITOR_NIX = "vi"
 DEFAULT_EDITOR_OS_X = "vim"
@@ -30,10 +31,10 @@ def print_status_message(success, message, style=None):
 
     :param success: Whether the operation was successful
     :param message: The message to display
-    :param style: Optional style override. If None, uses green for success and red for failure
+    :param style: Optional style override. If None, uses Mocha theme colors
     """
     if style is None:
-        style = "bold green" if success else "bold red"
+        style = f"bold {Mocha.GREEN}" if success else f"bold {Mocha.RED}"
     console.print(message, style=style)
     print("")
 

@@ -34,6 +34,8 @@ from rich.style import Style as RichStyle
 from rich.text import Text
 
 from lsr.mdstream import MarkdownStream
+from lsr.theme import MOCHA_THEME, THEME
+from lsr.theme import CatppuccinMocha as Mocha
 
 from .dump import dump  # noqa: F401
 from .editor import pipe_editor
@@ -254,16 +256,16 @@ class InputOutput:
         chat_history_file=None,
         input=None,
         output=None,
-        user_input_color="blue",
-        tool_output_color=None,
-        tool_error_color="red",
-        tool_warning_color="#FFA500",
-        assistant_output_color="blue",
-        completion_menu_color=None,
-        completion_menu_bg_color=None,
-        completion_menu_current_color=None,
-        completion_menu_current_bg_color=None,
-        code_theme="default",
+        user_input_color=THEME["user_input_color"],
+        tool_output_color=THEME["tool_output_color"],
+        tool_error_color=THEME["tool_error_color"],
+        tool_warning_color=THEME["tool_warning_color"],
+        assistant_output_color=THEME["assistant_output_color"],
+        completion_menu_color=THEME["completion_menu_color"],
+        completion_menu_bg_color=THEME["completion_menu_bg_color"],
+        completion_menu_current_color=THEME["completion_menu_current_color"],
+        completion_menu_current_bg_color=THEME["completion_menu_current_bg_color"],
+        code_theme=THEME["code_theme"],
         encoding="utf-8",
         line_endings="platform",
         dry_run=False,
@@ -379,7 +381,9 @@ class InputOutput:
                 session_kwargs["history"] = FileHistory(self.input_history_file)
             try:
                 self.prompt_session = PromptSession(**session_kwargs)
-                self.console = Console()  # pretty console
+                self.console = Console(
+                    theme=MOCHA_THEME
+                )  # pretty console with Mocha theme
             except Exception as err:
                 self.console = Console(force_terminal=False, no_color=True)
                 self.tool_error(f"Can't initialize prompt toolkit: {err}")  # non-pretty
@@ -392,6 +396,11 @@ class InputOutput:
 
         self.file_watcher = file_watcher
         self.root = root
+
+        # Initialize status bar
+        from lsr.status_bar import StatusBar
+
+        self.status_bar = StatusBar(self)
 
         # Validate color settings after console is initialized
         self._validate_color_settings()
@@ -444,7 +453,7 @@ class InputOutput:
         style_dict["completion-menu"] = (
             " ".join(completion_menu_style)
             if completion_menu_style
-            else "bg:#3a3a3a #e0e0e0"
+            else "bg:#313244 #cdd6f4"
         )
 
         # Current completion item: bright accent color on dark background
@@ -458,7 +467,7 @@ class InputOutput:
         style_dict["completion-menu.completion.current"] = (
             " ".join(completion_menu_current_style)
             if completion_menu_current_style
-            else "bg:#2a2a2a #00e5ff"
+            else "bg:#cba6f7 #1e1e2e"
         )
 
         return Style.from_dict(style_dict)
@@ -1052,10 +1061,10 @@ class InputOutput:
             if self.tool_output_color:
                 style["color"] = ensure_hash_prefix(self.tool_output_color)
             if bold:
-                # Use a subtle dark background instead of reverse (which is a white block)
-                style["bgcolor"] = "#3a3a3a"
+                # Use Mocha Surface0 as background for bold text
+                style["bgcolor"] = Mocha.SURFACE0
                 if "color" not in style:
-                    style["color"] = "#e0e0e0"
+                    style["color"] = Mocha.TEXT
                 style["bold"] = True
 
         style = RichStyle(**style)

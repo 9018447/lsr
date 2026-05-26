@@ -942,6 +942,27 @@ class Coder:
         edit_format = (
             "" if self.edit_format == self.main_model.edit_format else self.edit_format
         )
+
+        # Show status bar before input
+        if hasattr(self.io, 'status_bar') and self.io.status_bar:
+            # Get git branch if available
+            git_branch = None
+            if self.repo and hasattr(self.repo, 'repo'):
+                try:
+                    git_branch = str(self.repo.repo.active_branch)
+                except Exception:
+                    pass
+            
+            # Build context for status bar
+            status_context = {
+                'model': self.main_model.name if self.main_model else 'unknown',
+                'files': list(self.abs_fnames),
+                'tokens': self.total_tokens_sent + self.total_tokens_received,
+                'edit_format': edit_format or self.edit_format or 'ask',
+                'git_branch': git_branch,
+            }
+            self.io.status_bar.render(status_context)
+
         return self.io.get_input(
             self.root,
             all_files,
@@ -1506,7 +1527,9 @@ class Coder:
     def check_tokens(self, messages):
         """Check if the messages will fit within the model's token limits."""
         input_tokens = self.main_model.token_count(messages)
-        self._cached_prompt_tokens = input_tokens  # Cache for calculate_and_show_tokens_and_cost
+        self._cached_prompt_tokens = (
+            input_tokens  # Cache for calculate_and_show_tokens_and_cost
+        )
         max_input_tokens = self.main_model.info.get("max_input_tokens") or 0
 
         if max_input_tokens and input_tokens >= max_input_tokens:
@@ -2160,7 +2183,10 @@ class Coder:
 
         else:
             # Use cached token count from check_tokens if available
-            if hasattr(self, '_cached_prompt_tokens') and self._cached_prompt_tokens is not None:
+            if (
+                hasattr(self, "_cached_prompt_tokens")
+                and self._cached_prompt_tokens is not None
+            ):
                 prompt_tokens = self._cached_prompt_tokens
                 self._cached_prompt_tokens = None
             else:

@@ -330,8 +330,8 @@ def get_parser(default_config_files, git_root):
     )
     group.add_argument(
         "--user-input-color",
-        default="#00cc00",
-        help="Set the color for user input (default: #00cc00)",
+        default="#89b4fa",
+        help="Set the color for user input (default: #89b4fa — Mocha Blue)",
     )
     group.add_argument(
         "--tool-output-color",
@@ -340,50 +340,50 @@ def get_parser(default_config_files, git_root):
     )
     group.add_argument(
         "--tool-error-color",
-        default="#FF2222",
-        help="Set the color for tool error messages (default: #FF2222)",
+        default="#f38ba8",
+        help="Set the color for tool error messages (default: #f38ba8 — Mocha Red)",
     )
     group.add_argument(
         "--tool-warning-color",
-        default="#FFA500",
-        help="Set the color for tool warning messages (default: #FFA500)",
+        default="#fab387",
+        help="Set the color for tool warning messages (default: #fab387 — Mocha Peach)",
     )
     group.add_argument(
         "--assistant-output-color",
-        default="#0088ff",
-        help="Set the color for assistant output (default: #0088ff)",
+        default="#b4befe",
+        help="Set the color for assistant output (default: #b4befe — Mocha Lavender)",
     )
     group.add_argument(
         "--completion-menu-color",
         metavar="COLOR",
-        default="#e0e0e0",
-        help="Set the color for the completion menu (default: #e0e0e0)",
+        default="#cdd6f4",
+        help="Set the color for the completion menu (default: #cdd6f4 — Mocha Text)",
     )
     group.add_argument(
         "--completion-menu-bg-color",
         metavar="COLOR",
-        default="#3a3a3a",
+        default="#313244",
         help=(
-            "Set the background color for the completion menu (default: #3a3a3a"
-            " — dark gray background)"
+            "Set the background color for the completion menu (default: #313244"
+            " — Mocha Surface0)"
         ),
     )
     group.add_argument(
         "--completion-menu-current-color",
         metavar="COLOR",
-        default="#00e5ff",
+        default="#1e1e2e",
         help=(
             "Set the color for the current item in the completion menu (default:"
-            " #00e5ff — bright cyan)"
+            " #1e1e2e — Mocha Base)"
         ),
     )
     group.add_argument(
         "--completion-menu-current-bg-color",
         metavar="COLOR",
-        default="#2a2a2a",
+        default="#cba6f7",
         help=(
             "Set the background color for the current item in the completion menu (default:"
-            " #2a2a2a — darker gray)"
+            " #cba6f7 — Mocha Mauve)"
         ),
     )
     group.add_argument(
