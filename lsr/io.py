@@ -338,6 +338,7 @@ class InputOutput:
         else:
             self.chat_history_file = None
 
+        self._chat_dir_created = False
         self.encoding = encoding
         valid_line_endings = {"platform", "lf", "crlf"}
         if line_endings not in valid_line_endings:
@@ -1175,7 +1176,9 @@ class InputOutput:
             text += "\n"
         if self.chat_history_file is not None:
             try:
-                self.chat_history_file.parent.mkdir(parents=True, exist_ok=True)
+                if not self._chat_dir_created:
+                    self.chat_history_file.parent.mkdir(parents=True, exist_ok=True)
+                    self._chat_dir_created = True
                 with self.chat_history_file.open(
                     "a", encoding=self.encoding, errors="ignore"
                 ) as f:

@@ -6,7 +6,10 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from grep_ast import TreeContext
+try:
+    from grep_ast import TreeContext
+except ImportError:
+    TreeContext = None
 
 from lsr.dump import dump  # noqa: F401
 from lsr.run_cmd import run_cmd_subprocess  # noqa: F401
@@ -219,7 +222,7 @@ class LintResult:
 
 
 def tree_context(fname, code, lines):
-    if not lines:
+    if not lines or TreeContext is None:
         return ""
 
     try:

@@ -67,18 +67,18 @@ def run_cmd_subprocess(command, verbose=False, cwd=None, encoding=sys.stdout.enc
             shell=True,
             encoding=encoding,
             errors="replace",
-            bufsize=0,  # Set bufsize to 0 for unbuffered output
+            bufsize=1,  # Line buffering
             universal_newlines=True,
             cwd=cwd,
         )
 
         output = []
         while True:
-            chunk = process.stdout.read(1)
-            if not chunk:
+            line = process.stdout.readline()
+            if not line:
                 break
-            print(chunk, end="", flush=True)  # Print the chunk in real-time
-            output.append(chunk)  # Store the chunk for later use
+            print(line, end="", flush=True)
+            output.append(line)
 
         process.wait()
         return process.returncode, "".join(output)

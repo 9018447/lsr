@@ -43,7 +43,12 @@ from lsr.reasoning_tags import (
     replace_reasoning_tags,
 )
 from lsr.repo import ANY_GIT_ERROR, GitRepo
-from lsr.repomap import RepoMap
+
+try:
+    from lsr.repomap import RepoMap
+except ImportError:
+    RepoMap = None
+
 from lsr.run_cmd import run_cmd
 from lsr.utils import format_content, format_messages, format_tokens, is_image_file
 from lsr.waiting import WaitingSpinner
@@ -348,7 +353,6 @@ class Coder:
         total_tokens_sent=0,
         total_tokens_received=0,
         file_watcher=None,
-        auto_copy_context=False,
         auto_accept_architect=True,
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
         current_plan=None,
@@ -361,7 +365,6 @@ class Coder:
         self.rejected_urls = set()
         self.abs_root_path_cache = {}
 
-        self.auto_copy_context = auto_copy_context
         self.auto_accept_architect = auto_accept_architect
         self.use_cwd = use_cwd  # 新增属性：是否使用当前工作目录作为路径参考点
 
@@ -516,7 +519,7 @@ class Coder:
             hasattr(self, "gpt_prompts") and self.gpt_prompts.repo_content_prefix
         )
 
-        if use_repo_map and self.repo and has_map_prompt:
+        if use_repo_map and self.repo and has_map_prompt and RepoMap is not None:
             self.repo_map = RepoMap(
                 map_tokens,
                 self.root,
@@ -922,8 +925,6 @@ class Coder:
                 return self.partial_response_content
             while True:
                 try:
-                    if not self.io.placeholder:
-                        self.copy_context()
                     user_message = self.get_input()
                     self.run_one(user_message, preproc)
                     self.show_undo_hint()
@@ -931,10 +932,6 @@ class Coder:
                     self.keyboard_interrupt()
         except EOFError:
             return
-
-    def copy_context(self):
-        if self.auto_copy_context:
-            self.commands.cmd_copy_context()
 
     def get_input(self):
         inchat_files = self.get_inchat_relative_files()
@@ -1509,6 +1506,7 @@ class Coder:
     def check_tokens(self, messages):
         """Check if the messages will fit within the model's token limits."""
         input_tokens = self.main_model.token_count(messages)
+        self._cached_prompt_tokens = input_tokens  # Cache for calculate_and_show_tokens_and_cost
         max_input_tokens = self.main_model.info.get("max_input_tokens") or 0
 
         if max_input_tokens and input_tokens >= max_input_tokens:
@@ -2161,7 +2159,12 @@ class Coder:
                 self.message_tokens_sent += prompt_tokens
 
         else:
-            prompt_tokens = self.main_model.token_count(messages)
+            # Use cached token count from check_tokens if available
+            if hasattr(self, '_cached_prompt_tokens') and self._cached_prompt_tokens is not None:
+                prompt_tokens = self._cached_prompt_tokens
+                self._cached_prompt_tokens = None
+            else:
+                prompt_tokens = self.main_model.token_count(messages)
             completion_tokens = self.main_model.token_count(
                 self.partial_response_content
             )

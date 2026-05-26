@@ -1010,9 +1010,6 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             "Cost estimates may be inaccurate when using streaming and caching."
         )
 
-    if args.load:
-        commands.cmd_load(args.load)
-
     if args.message:
         io.add_to_input_history(args.message)
         io.tool_output()

@@ -14,7 +14,6 @@ from typing import Optional, Union
 
 import json5
 import yaml
-from PIL import Image
 
 from lsr import __version__
 from lsr.dump import dump  # noqa: F401
@@ -143,12 +142,37 @@ class ModelSettings:
     accepts_settings: Optional[list] = None
 
 
-# Load model settings from package resource
-MODEL_SETTINGS = []
-with importlib.resources.open_text("lsr.resources", "model-settings.yml") as f:
-    model_settings_list = yaml.safe_load(f)
-    for model_settings_dict in model_settings_list:
-        MODEL_SETTINGS.append(ModelSettings(**model_settings_dict))
+# Lazy-loaded model settings
+_MODEL_SETTINGS = None
+
+def get_model_settings():
+    """Get model settings, loading from YAML on first access."""
+    global _MODEL_SETTINGS
+    if _MODEL_SETTINGS is None:
+        _MODEL_SETTINGS = []
+        with importlib.resources.open_text("lsr.resources", "model-settings.yml") as f:
+            model_settings_list = yaml.safe_load(f)
+            for model_settings_dict in model_settings_list:
+                _MODEL_SETTINGS.append(ModelSettings(**model_settings_dict))
+    return _MODEL_SETTINGS
+
+# Backward compatible alias
+class _ModelSettingsProxy:
+    """Proxy that defers loading until first access."""
+    def __getattr__(self, name):
+        return getattr(get_model_settings(), name)
+    def __iter__(self):
+        return iter(get_model_settings())
+    def __len__(self):
+        return len(get_model_settings())
+    def __getitem__(self, key):
+        return get_model_settings()[key]
+    def __setitem__(self, key, value):
+        get_model_settings()[key] = value
+    def append(self, value):
+        get_model_settings().append(value)
+
+MODEL_SETTINGS = _ModelSettingsProxy()
 
 
 class ModelInfoManager:
@@ -720,6 +744,7 @@ class Model(ModelSettings):
         :param fname: The filename of the image.
         :return: A tuple (width, height) representing the image size in pixels.
         """
+        from PIL import Image
         with Image.open(fname) as img:
             return img.size
 

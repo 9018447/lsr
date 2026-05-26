@@ -27,12 +27,10 @@ from lsr.utils import is_image_file
 
 from .dump import dump  # noqa: F401
 
-
 class SwitchCoder(Exception):
     def __init__(self, placeholder=None, **kwargs):
         self.kwargs = kwargs
         self.placeholder = placeholder
-
 
 class Commands:
     def clone(self):
@@ -102,89 +100,9 @@ class Commands:
 
         raise SwitchCoder(main_model=model, edit_format=new_edit_format)
 
-    def cmd_chat_mode(self, args):
-        "Switch to a new chat mode"
-
-        from lsr import coders
-
-        ef = args.strip()
-        valid_formats = OrderedDict(
-            sorted(
-                (
-                    coder.edit_format,
-                    coder.__doc__.strip().split("\n")[0]
-                    if coder.__doc__
-                    else "No description",
-                )
-                for coder in coders.__all__
-                if getattr(coder, "edit_format", None)
-            )
-        )
-
-        show_formats = OrderedDict(
-            [
-                ("help", "Get help about using lsr (usage, config, troubleshoot)."),
-                (
-                    "ask",
-                    "Ask questions about your LaTeX documents without making any changes.",
-                ),
-                (
-                    "plan",
-                    "Create a structured writing plan for your research paper.",
-                ),
-                (
-                    "code",
-                    "Ask for changes to your LaTeX documents (using the best edit format).",
-                ),
-            ]
-        )
-
-        if ef not in valid_formats and ef not in show_formats:
-            if ef:
-                self.io.tool_error(f'Chat mode "{ef}" should be one of these:\n')
-            else:
-                self.io.tool_output("Chat mode should be one of these:\n")
-
-            max_format_length = max(len(format) for format in valid_formats.keys())
-            for format, description in show_formats.items():
-                self.io.tool_output(f"- {format:<{max_format_length}} : {description}")
-
-            self.io.tool_output("\nOr a valid edit format:\n")
-            for format, description in valid_formats.items():
-                if format not in show_formats:
-                    self.io.tool_output(
-                        f"- {format:<{max_format_length}} : {description}"
-                    )
-
-            return
-
-        summarize_from_coder = True
-        edit_format = ef
-
-        if ef == "code":
-            edit_format = self.coder.main_model.edit_format
-            summarize_from_coder = False
-        elif ef in ("ask", "plan"):
-            summarize_from_coder = False
-
-        raise SwitchCoder(
-            edit_format=edit_format,
-            summarize_from_coder=summarize_from_coder,
-        )
-
     def completions_model(self):
         models = litellm.model_cost.keys()
         return models
-
-    def cmd_models(self, args):
-        "Search the list of available models"
-
-        args = args.strip()
-
-        if args:
-            models.print_matching_models(self.io, args)
-        else:
-            self.io.tool_output("Please provide a partial model name to search for.")
 
     def is_command(self, inp):
         return inp[0] in "/!"
@@ -1467,10 +1385,6 @@ class Commands:
         "Exit the application"
         sys.exit()
 
-    def cmd_quit(self, args):
-        "Exit the application"
-        self.cmd_exit(args)
-
     def cmd_ls(self, args):
         "List all known files and indicate which are included in the chat session"
 
@@ -1594,71 +1508,6 @@ class Commands:
         """Ask questions about the code base without editing any files. If no prompt provided, switches to ask mode."""  # noqa
         return self._generic_chat_command(args, "ask")
 
-    def cmd_plan(self, args):
-        """Create a structured plan before coding. Subcommands: list, show, use, delete."""  # noqa
-        from lsr.plan_manager import (
-            delete_plan,
-            find_plan_by_id_or_latest,
-            list_plans,
-            load_plan,
-        )
-
-        tokens = args.strip().split(None, 1)
-        subcommand = tokens[0].lower() if tokens else ""
-
-        # Subcommand routing
-        if subcommand == "list":
-            plans = list_plans(self.coder.root)
-            if not plans:
-                self.io.tool_output("No plans found.")
-                return
-            self.io.tool_output("Saved plans:")
-            self.io.tool_output(f"  {'ID':<10s}  {'Status':<10s}  Title")
-            self.io.tool_output(f"  {'-' * 10}  {'-' * 10}  {'-' * 40}")
-            for p in plans:
-                self.io.tool_output(f"  {p.short_id:<10s}  {p.status:<10s}  {p.title}")
-            return
-
-        if subcommand == "show":
-            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
-            plan = find_plan_by_id_or_latest(plan_id or None, self.coder.root)
-            if not plan:
-                self.io.tool_error(f"Plan not found: {plan_id or '(latest)'}")
-                return
-            self.io.tool_output(
-                f"Plan: {plan.title}  (id={plan.short_id}, status={plan.status})"
-            )
-            self.io.tool_output("")
-            self.io.tool_output(plan.content)
-            return
-
-        if subcommand == "use":
-            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
-            plan = load_plan(plan_id, self.coder.root) if plan_id else None
-            if not plan:
-                self.io.tool_error(f"Plan not found: {plan_id}")
-                return
-            self.coder.current_plan = plan.content
-            self.io.tool_output(
-                f"Loaded plan '{plan.title}' ({plan.short_id}) into context."
-            )
-            self.io.tool_output("Type `/code` to execute it.")
-            return
-
-        if subcommand == "delete":
-            plan_id = tokens[1].strip() if len(tokens) > 1 else ""
-            if not plan_id:
-                self.io.tool_error("Usage: /plan delete <id>")
-                return
-            if delete_plan(plan_id, self.coder.root):
-                self.io.tool_output(f"Deleted plan {plan_id}.")
-            else:
-                self.io.tool_error(f"Plan not found: {plan_id}")
-            return
-
-        # No subcommand → generate a new plan via LLM
-        return self._generic_chat_command(args, "plan")
-
     def cmd_code(self, args):
         """Ask for changes to your code. If no prompt provided, switches to code mode."""  # noqa
         # Inject stored plan into the user message when executing in code mode
@@ -1672,18 +1521,10 @@ class Commands:
             )
         return self._generic_chat_command(args, self.coder.main_model.edit_format)
 
-    def cmd_ok(self, args):
-        "Alias for `/code Ok, please go ahead and make those changes.` (any args are appended)"
-        msg = "Ok, please go ahead and make those changes."
-        extra = (args or "").strip()
-        if extra:
-            msg = f"{msg} {extra}"
-        return self.cmd_code(msg)
-
     def _generic_chat_command(self, args, edit_format, placeholder=None):
         if not args.strip():
-            # Switch to the corresponding chat mode if no args provided
-            return self.cmd_chat_mode(edit_format)
+            self.io.tool_output("Please provide a prompt or question.")
+            return
 
         from lsr.coders.base_coder import Coder
 
@@ -1905,77 +1746,8 @@ class Commands:
         else:
             self.io.tool_output(f"No new files added from directory {original_name}.")
 
-    def cmd_map(self, args):
-        "Print out the current repository map"
-        repo_map = self.coder.get_repo_map()
-        if repo_map:
-            self.io.tool_output(repo_map)
-        else:
-            self.io.tool_output("No repository map available.")
-
-    def cmd_settings(self, args):
-        "Print out the current settings"
-        settings = format_settings(self.parser, self.args)
-        announcements = "\n".join(self.coder.get_announcements())
-
-        # Build metadata for the active models (main, editor, weak)
-        model_sections = []
-        active_models = [
-            ("Main model", self.coder.main_model),
-            ("Editor model", getattr(self.coder.main_model, "editor_model", None)),
-            ("Weak model", getattr(self.coder.main_model, "weak_model", None)),
-        ]
-        for label, model in active_models:
-            if not model:
-                continue
-            info = getattr(model, "info", {}) or {}
-            if not info:
-                continue
-            model_sections.append(f"{label} ({model.name}):")
-            for k, v in sorted(info.items()):
-                model_sections.append(f"  {k}: {v}")
-            model_sections.append("")  # blank line between models
-
-        model_metadata = "\n".join(model_sections)
-
-        output = f"{announcements}\n{settings}"
-        if model_metadata:
-            output += "\n" + model_metadata
-        self.io.tool_output(output)
-
     def completions_raw_load(self, document, complete_event):
         return self.completions_raw_read_only(document, complete_event)
-
-    def cmd_load(self, args):
-        "Load and execute commands from a file"
-        if not args.strip():
-            self.io.tool_error("Please provide a filename containing commands to load.")
-            return
-
-        try:
-            with open(
-                args.strip(), "r", encoding=self.io.encoding, errors="replace"
-            ) as f:
-                commands = f.readlines()
-        except FileNotFoundError:
-            self.io.tool_error(f"File not found: {args}")
-            return
-        except Exception as e:
-            self.io.tool_error(f"Error reading file: {e}")
-            return
-
-        for cmd in commands:
-            cmd = cmd.strip()
-            if not cmd or cmd.startswith("#"):
-                continue
-
-            self.io.tool_output(f"\nExecuting: {cmd}")
-            try:
-                self.run(cmd)
-            except SwitchCoder:
-                self.io.tool_error(
-                    f"Command '{cmd}' is only supported in interactive mode, skipping."
-                )
 
     def completions_raw_save(self, document, complete_event):
         return self.completions_raw_read_only(document, complete_event)
@@ -2024,37 +1796,6 @@ class Commands:
     def completions_raw_bib_pdflatex(self, document, complete_event):
         return self._tex_file_completions(document, complete_event)
 
-    def cmd_save(self, args):
-        "Save commands to a file that can reconstruct the current chat session's files"
-        if not args.strip():
-            self.io.tool_error("Please provide a filename to save the commands to.")
-            return
-
-        try:
-            with open(args.strip(), "w", encoding=self.io.encoding) as f:
-                f.write("/drop\n")
-                # Write commands to add editable files
-                for fname in sorted(self.coder.abs_fnames):
-                    rel_fname = self.coder.get_rel_fname(fname)
-                    f.write(f"/add       {rel_fname}\n")
-
-                # Write commands to add read-only files
-                for fname in sorted(self.coder.abs_read_only_fnames):
-                    # Use absolute path for files outside repo root, relative path for files inside
-                    if Path(fname).is_relative_to(self.coder.root):
-                        rel_fname = self.coder.get_rel_fname(fname)
-                        f.write(f"/read-only {rel_fname}\n")
-                    else:
-                        f.write(f"/read-only {fname}\n")
-
-            self.io.tool_output(f"Saved commands to {args.strip()}")
-        except Exception as e:
-            self.io.tool_error(f"Error saving commands to file: {e}")
-
-    def cmd_multiline_mode(self, args):
-        "Toggle multiline mode (swaps behavior of Enter and Meta+Enter)"
-        self.io.toggle_multiline_mode()
-
     def cmd_copy(self, args):
         "Copy the last assistant message to the clipboard"
         all_messages = self.coder.done_messages + self.coder.cur_messages
@@ -2087,20 +1828,6 @@ class Commands:
             self.io.tool_error(
                 f"An unexpected error occurred while copying to clipboard: {str(e)}"
             )
-
-    def cmd_report(self, args):
-        "Report a problem by opening a GitHub Issue"
-        from lsr.report import report_github_issue
-
-        announcements = "\n".join(self.coder.get_announcements())
-        issue_text = announcements
-
-        if args.strip():
-            title = args.strip()
-        else:
-            title = None
-
-        report_github_issue(issue_text, title=title, confirm=False)
 
     def cmd_editor(self, initial_content=""):
         "Open an editor to write a prompt"
@@ -3007,43 +2734,6 @@ class Commands:
         session_file = max(session_files, key=os.path.getmtime)
         self._merge_sections_from_session(session_file)
 
-    def cmd_expand_done(self, args=""):
-        "Deprecated: use /edit-done instead."
-        self.io.tool_output(
-            "\033[33m/expand-done is deprecated. Use /edit-done instead.\033[0m"
-        )
-        return self.cmd_edit_done(args)
-
-    def cmd_translate_done(self, args=""):
-        "Deprecated: use /edit-done instead."
-        self.io.tool_output(
-            "\033[33m/translate-done is deprecated. Use /edit-done instead.\033[0m"
-        )
-        return self.cmd_edit_done(args)
-
-    def cmd_condense_done(self, args=""):
-        "Deprecated: use /edit-done instead."
-        self.io.tool_output(
-            "\033[33m/condense-done is deprecated. Use /edit-done instead.\033[0m"
-        )
-        return self.cmd_edit_done(args)
-
-    def cmd_note_done(self, args=""):
-        "Deprecated: use /edit-done instead."
-        self.io.tool_output(
-            "\u001b[33m/note-done is deprecated. Use /edit-done instead.\u001b[0m"
-        )
-        return self.cmd_edit_done(args)
-
-    def cmd_renote(self, args=""):
-        """Deprecated: use /note instead. /note now handles both new and existing sessions."""
-        self.io.tool_output(
-            "\u001b[33m/renote is deprecated. Use /note instead.\u001b[0m"
-            "\n  /note          — list existing sessions and render in browser"
-            "\n  /note <file>   — select sections from a .tex file to review"
-        )
-        return self.cmd_note(args)
-
     def cmd_mark(self, args=""):
         """Mark LaTeX sections as completed (persisted across sessions).
 
@@ -3818,110 +3508,6 @@ class Commands:
         all_files = [self.quote_fname(fn) for fn in all_files]
         return all_files
 
-    def cmd_think_tokens(self, args):
-        """Set the thinking token budget, eg: 8096, 8k, 10.5k, 0.5M, or 0 to disable."""
-        model = self.coder.main_model
-
-        if not args.strip():
-            # Display current value if no args are provided
-            formatted_budget = model.get_thinking_tokens()
-            if formatted_budget is None:
-                self.io.tool_output("Thinking tokens are not currently set.")
-            else:
-                budget = model.get_raw_thinking_tokens()
-                self.io.tool_output(
-                    f"Current thinking token budget: {budget:,} tokens ({formatted_budget})."
-                )
-            return
-
-        value = args.strip()
-        model.set_thinking_tokens(value)
-
-        # Handle the special case of 0 to disable thinking tokens
-        if value == "0":
-            self.io.tool_output("Thinking tokens disabled.")
-        else:
-            formatted_budget = model.get_thinking_tokens()
-            budget = model.get_raw_thinking_tokens()
-            self.io.tool_output(
-                f"Set thinking token budget to {budget:,} tokens ({formatted_budget})."
-            )
-
-        self.io.tool_output()
-
-        # Output announcements
-        announcements = "\n".join(self.coder.get_announcements())
-        self.io.tool_output(announcements)
-
-    def cmd_reasoning_effort(self, args):
-        "Set the reasoning effort level (values: number or low/medium/high depending on model)"
-        model = self.coder.main_model
-
-        if not args.strip():
-            # Display current value if no args are provided
-            reasoning_value = model.get_reasoning_effort()
-            if reasoning_value is None:
-                self.io.tool_output("Reasoning effort is not currently set.")
-            else:
-                self.io.tool_output(f"Current reasoning effort: {reasoning_value}")
-            return
-
-        value = args.strip()
-        model.set_reasoning_effort(value)
-        reasoning_value = model.get_reasoning_effort()
-        self.io.tool_output(f"Set reasoning effort to {reasoning_value}")
-        self.io.tool_output()
-
-        # Output announcements
-        announcements = "\n".join(self.coder.get_announcements())
-        self.io.tool_output(announcements)
-
-    def cmd_copy_context(self, args=None):
-        """Copy the current chat context as markdown, suitable to paste into a web UI"""
-
-        chunks = self.coder.format_chat_chunks()
-
-        markdown = ""
-
-        # Only include specified chunks in order
-        for messages in [chunks.repo, chunks.readonly_files, chunks.chat_files]:
-            for msg in messages:
-                # Only include user messages
-                if msg["role"] != "user":
-                    continue
-
-                content = msg["content"]
-
-                # Handle image/multipart content
-                if isinstance(content, list):
-                    for part in content:
-                        if part.get("type") == "text":
-                            markdown += part["text"] + "\n\n"
-                else:
-                    markdown += content + "\n\n"
-
-        args = args or ""
-        markdown += f"""
-Just tell me how to edit the files to make the changes.
-Don't give me back entire files.
-Just show me the edits I need to make.
-
-{args}
-"""
-
-        try:
-            pyperclip.copy(markdown)
-            self.io.tool_output("Copied code context to clipboard.")
-        except pyperclip.PyperclipException as e:
-            self.io.tool_error(f"Failed to copy to clipboard: {str(e)}")
-            self.io.tool_output(
-                "You may need to install xclip or xsel on Linux, or pbcopy on macOS."
-            )
-        except Exception as e:
-            self.io.tool_error(
-                f"An unexpected error occurred while copying to clipboard: {str(e)}"
-            )
-
     def cmd_preview(self, args):
         "Open the compiled PDF for preview"
         import subprocess
@@ -4542,7 +4128,6 @@ Text content here.
         except Exception as e:
             self.io.tool_error(f"Error parsing template: {e}")
 
-
 def expand_subdir(file_path):
     if file_path.is_file():
         yield file_path
@@ -4553,22 +4138,18 @@ def expand_subdir(file_path):
             if file.is_file():
                 yield file
 
-
 def parse_quoted_filenames(args):
     filenames = re.findall(r"\"(.+?)\"|(\S+)", args)
     filenames = [name for sublist in filenames for name in sublist if name]
     return filenames
 
-
 def get_help_md():
     md = Commands(None, None).get_help_md()
     return md
 
-
 def main():
     md = get_help_md()
     print(md)
-
 
 if __name__ == "__main__":
     status = main()
