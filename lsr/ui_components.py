@@ -6,7 +6,12 @@ Provides:
 - Enhanced diff display
 - Styled confirmation dialogs
 - Progress indicators
+- Message separators and borders
+- Tool output with status icons
+- Loading widget with color cycling
 """
+
+import time
 
 from rich.console import Console
 from rich.panel import Panel
@@ -14,6 +19,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.text import Text
 
+from lsr.theme import MOCHA_GRADIENT, SYMBOLS
 from lsr.theme import CatppuccinMocha as Mocha
 
 
@@ -251,6 +257,186 @@ def render_command_help(command: str, description: str, usage: str = "") -> Pane
     )
 
 
+# ---------------------------------------------------------------------------
+# New visual-polish helpers
+# ---------------------------------------------------------------------------
+
+
+def render_separator(console: Console | None = None, char: str = "─") -> None:
+    """Render a full-width horizontal separator line.
+
+    Args:
+        console: Rich Console instance
+        char: Character to use for the line
+    """
+    if console is None:
+        console = Console()
+    width = max(1, console.width)
+    console.print(Text(char * width, style=Mocha.SURFACE2))
+
+
+def render_tool_output(
+    message: str,
+    status: str = "info",
+    console: Console | None = None,
+) -> None:
+    """Render a tool output line with a status icon prefix.
+
+    Args:
+        message: The message to display
+        status: One of 'success', 'error', 'warning', 'info'
+        console: Rich Console instance
+    """
+    if console is None:
+        console = Console()
+
+    icon = SYMBOLS.get(status, SYMBOLS["info"])
+    color = {
+        "success": Mocha.GREEN,
+        "error": Mocha.RED,
+        "warning": Mocha.YELLOW,
+        "info": Mocha.SKY,
+    }.get(status, Mocha.TEXT)
+
+    console.print(f"[{color}]{icon}[/{color}] {message}")
+
+
+def render_assistant_output(
+    message: str,
+    console: Console | None = None,
+    border_color: str = Mocha.LAVENDER,
+) -> None:
+    """Render assistant output with a left border decoration.
+
+    Args:
+        message: The message to display
+        console: Rich Console instance
+        border_color: Color for the left border line
+    """
+    if console is None:
+        console = Console()
+
+    lines = message.splitlines()
+    for line in lines:
+        decorated = Text()
+        decorated.append(f"{SYMBOLS['separator']} ", style=border_color)
+        decorated.append(line, style=Mocha.TEXT)
+        console.print(decorated)
+
+
+def render_user_message(
+    message: str,
+    console: Console | None = None,
+) -> None:
+    """Render a user message with a blue left border.
+
+    Args:
+        message: The message to display
+        console: Rich Console instance
+    """
+    if console is None:
+        console = Console()
+
+    lines = message.splitlines()
+    for line in lines:
+        decorated = Text()
+        decorated.append(f"{SYMBOLS['separator']} ", style=Mocha.BLUE)
+        decorated.append(line, style=Mocha.TEXT)
+        console.print(decorated)
+
+
+class LoadingWidget:
+    """Loading indicator with color-cycling text and elapsed time.
+
+    Usage:
+        widget = LoadingWidget("Generating...", console)
+        widget.start()
+        ...
+        widget.update_text("Applying edits...")
+        ...
+        widget.stop(success=True)
+    """
+
+    def __init__(
+        self,
+        text: str,
+        console: Console | None = None,
+        colors: list[str] | None = None,
+        show_elapsed: bool = True,
+        show_interrupt_hint: bool = True,
+    ):
+        self.text = text
+        self.console = console or Console()
+        self.colors = colors or MOCHA_GRADIENT
+        self.show_elapsed = show_elapsed
+        self.show_interrupt_hint = show_interrupt_hint
+        self.start_time = time.time()
+        self._running = False
+        self._color_idx = 0
+
+    def _format_elapsed(self) -> str:
+        elapsed = time.time() - self.start_time
+        if elapsed < 60:
+            return f"{int(elapsed)}s"
+        elif elapsed < 3600:
+            minutes = int(elapsed // 60)
+            seconds = int(elapsed % 60)
+            return f"{minutes}m{seconds:02d}s"
+        else:
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            return f"{hours}h{minutes:02d}m"
+
+    def _cyclic_color_text(self, text: str) -> Text:
+        """Apply a moving gradient color to the text characters."""
+        result = Text()
+        for i, ch in enumerate(text):
+            color = self.colors[(self._color_idx + i) % len(self.colors)]
+            result.append(ch, style=color)
+        self._color_idx = (self._color_idx + 1) % len(self.colors)
+        return result
+
+    def start(self) -> None:
+        """Print the initial loading line."""
+        self._running = True
+        self.start_time = time.time()
+        self._render()
+
+    def update_text(self, text: str) -> None:
+        """Update the loading message text."""
+        self.text = text
+        if self._running:
+            self._render(clear_previous=True)
+
+    def _render(self, clear_previous: bool = False) -> None:
+        prefix = f"{SYMBOLS['spinner'][0]} "
+        elapsed = f" ({self._format_elapsed()})" if self.show_elapsed else ""
+        hint = "  [dim]Ctrl-C: interrupt[/dim]" if self.show_interrupt_hint else ""
+
+        line = Text(prefix)
+        line.append(self._cyclic_color_text(self.text))
+        line.append(elapsed, style=Mocha.OVERLAY1)
+        line.append(hint)
+
+        if clear_previous:
+            self.console.print("\r\x1b[K", end="")
+        self.console.print(line)
+
+    def stop(self, success: bool = True, final_text: str | None = None) -> None:
+        """Stop the loading widget and print a final status line.
+
+        Args:
+            success: True for success icon, False for failure
+            final_text: Optional final message (defaults to current text)
+        """
+        self._running = False
+        text = final_text if final_text is not None else self.text
+        icon = SYMBOLS["spinner_success"] if success else SYMBOLS["spinner_failure"]
+        color = Mocha.GREEN if success else Mocha.RED
+        elapsed = f" ({self._format_elapsed()})" if self.show_elapsed else ""
+        self.console.print(f"[{color}]{icon}[/{color}] {text}{elapsed}")
+
+
 if __name__ == "__main__":
     # Demo the UI components
     console = Console()
@@ -271,16 +457,40 @@ if __name__ == "__main__":
         render_command_help("add", "Add files to the chat", "/add <file1> <file2>")
     )
 
-    # Confirmation dialog
-    console.print("\n[bold]Confirmation Demo:[/bold]")
-    # result = styled_confirm("Continue with this change?", default=True, console=console)
+    # Separator
+    console.print("\n[bold]Separator Demo:[/bold]")
+    render_separator(console)
+
+    # Tool outputs with icons
+    console.print("\n[bold]Tool Output Icons Demo:[/bold]")
+    render_tool_output("Files added successfully", status="success", console=console)
+    render_tool_output("Connection timeout", status="error", console=console)
+    render_tool_output("Large file detected", status="warning", console=console)
+    render_tool_output("Processing request", status="info", console=console)
+
+    # Assistant output with border
+    console.print("\n[bold]Assistant Output Border Demo:[/bold]")
+    render_assistant_output("This is a response from the assistant.\nIt can span multiple lines.", console=console)
+
+    # User message with border
+    console.print("\n[bold]User Message Border Demo:[/bold]")
+    render_user_message("Please refactor this function to use async.", console=console)
+
+    # Loading widget
+    console.print("\n[bold]Loading Widget Demo:[/bold]")
+    import time
+
+    widget = LoadingWidget("Generating response...", console=console)
+    widget.start()
+    time.sleep(1.0)
+    widget.update_text("Applying edits...")
+    time.sleep(1.0)
+    widget.stop(success=True, final_text="Done")
 
     # Progress indicator
     console.print("\n[bold]Progress Demo:[/bold]")
     with StyledProgress(console) as progress:
         task = progress.add_task("Processing...", total=100)
-        import time
-
         for i in range(100):
             time.sleep(0.02)
             progress.update(task, advance=1)

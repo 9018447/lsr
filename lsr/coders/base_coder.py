@@ -27,6 +27,9 @@ from pathlib import Path
 from typing import List
 
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from lsr.theme import CatppuccinMocha as Mocha
 
 from lsr import __version__, models, prompts, urls, utils
 from lsr.commands import Commands
@@ -573,10 +576,37 @@ class Coder:
             self.linter.set_linter(lang, cmd)
 
     def show_announcements(self):
-        bold = True
-        for line in self.get_announcements():
-            self.io.tool_output(line, bold=bold)
-            bold = False
+        lines = self.get_announcements()
+        content = Text()
+        for i, line in enumerate(lines):
+            if i == 0:
+                content.append(line, style=f"bold {Mocha.LAVENDER}")
+            elif line.startswith("Model") or line.startswith("Main model") or line.startswith("Editor model") or line.startswith("Weak model"):
+                content.append(line, style=Mocha.MAUVE)
+            elif line.startswith("Git repo"):
+                content.append(line, style=Mocha.GREEN)
+            elif line.startswith("Repo-map"):
+                content.append(line, style=Mocha.SKY)
+            elif line.startswith("Added"):
+                content.append(line, style=Mocha.YELLOW)
+            elif line.startswith("Warning"):
+                content.append(line, style=f"bold {Mocha.YELLOW}")
+            elif line.startswith("Restored") or line.startswith("Multiline"):
+                content.append(line, style=Mocha.OVERLAY1)
+            else:
+                content.append(line, style=Mocha.TEXT)
+            if i < len(lines) - 1:
+                content.append("\n")
+
+        panel = Panel(
+            content,
+            title=f"[bold {Mocha.MAUVE}]Session[/bold {Mocha.MAUVE}]",
+            border_style=Mocha.SURFACE2,
+            style=f"on {Mocha.BASE}",
+            padding=(1, 2),
+        )
+        self.io.console.print(panel)
+
 
     def add_rel_fname(self, rel_fname):
         self.abs_fnames.add(self.abs_root_path(rel_fname))
@@ -622,7 +652,7 @@ class Coder:
         spinner = getattr(self, "waiting_spinner", None)
         if spinner:
             try:
-                spinner.stop()
+                spinner.stop(success=True)
             finally:
                 self.waiting_spinner = None
 
@@ -954,10 +984,14 @@ class Coder:
                     pass
             
             # Build context for status bar
+            max_tokens = 0
+            if self.main_model and self.main_model.info:
+                max_tokens = self.main_model.info.get("max_input_tokens") or 0
             status_context = {
                 'model': self.main_model.name if self.main_model else 'unknown',
                 'files': list(self.abs_fnames),
                 'tokens': self.total_tokens_sent + self.total_tokens_received,
+                'max_tokens': max_tokens,
                 'edit_format': edit_format or self.edit_format or 'ask',
                 'git_branch': git_branch,
             }
@@ -2045,13 +2079,15 @@ class Coder:
 
         show_resp = self.render_incremental_response(True)
 
-        if reasoning_content:
+        if reasoning_content and self.io.show_thinking:
             formatted_reasoning = format_reasoning_content(
                 reasoning_content, self.reasoning_tag_name
             )
             show_resp = formatted_reasoning + show_resp
 
-        show_resp = replace_reasoning_tags(show_resp, self.reasoning_tag_name)
+        show_resp = replace_reasoning_tags(
+            show_resp, self.reasoning_tag_name, show=self.io.show_thinking
+        )
 
         self.io.assistant_output(show_resp, pretty=self.show_pretty())
 
@@ -2123,7 +2159,9 @@ class Coder:
                 self.live_incremental_response(False)
             elif text:
                 # Apply reasoning tag formatting
-                text = replace_reasoning_tags(text, self.reasoning_tag_name)
+                text = replace_reasoning_tags(
+                    text, self.reasoning_tag_name, show=self.io.show_thinking
+                )
                 try:
                     sys.stdout.write(text)
                 except UnicodeEncodeError:
@@ -2134,7 +2172,6 @@ class Coder:
                     sys.stdout.write(safe_text)
                 sys.stdout.flush()
                 yield text
-
         if not received_content:
             self.io.tool_warning(
                 "Empty response received from LLM. Check your provider account?"
@@ -2143,7 +2180,9 @@ class Coder:
     def live_incremental_response(self, final):
         show_resp = self.render_incremental_response(final)
         # Apply any reasoning tag formatting
-        show_resp = replace_reasoning_tags(show_resp, self.reasoning_tag_name)
+        show_resp = replace_reasoning_tags(
+            show_resp, self.reasoning_tag_name, show=self.io.show_thinking
+        )
         self.mdstream.update(show_resp, final=final)
 
     def render_incremental_response(self, final):

@@ -148,8 +148,21 @@ THEME = {
     "prompt_continuation_color": CatppuccinMocha.OVERLAY1,
 }
 
+# Animation frame sets for spinners
+BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+PULSE_FRAMES = ["●", "○"]
+DOTS_FRAMES = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
 
-# Symbols for UI elements (Unicode)
+# Gradient color sequence for cycling animations (Mocha palette)
+MOCHA_GRADIENT = [
+    CatppuccinMocha.MAUVE,
+    CatppuccinMocha.BLUE,
+    CatppuccinMocha.TEAL,
+    CatppuccinMocha.GREEN,
+    CatppuccinMocha.MAUVE,
+]
+
+# Symbols for UI elements (Unicode, no emoji)
 SYMBOLS = {
     "success": "✓",
     "error": "✗",
@@ -169,7 +182,28 @@ SYMBOLS = {
     "line": "─",
     "line_double": "═",
     "spinner": "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
+    # Status icons
+    "spinner_success": "✓",
+    "spinner_failure": "✗",
+    "spinner_warning": "⚠",
+    # File / folder
+    "folder": "",
+    "file": "",
+    "git_branch": "",
+    "model": "",
+    "tokens": "",
+    # Prompt
+    "prompt": "❯",
+    "prompt_alt": "›",
+    # Progress
+    "progress_empty": "░",
+    "progress_full": "█",
+    "progress_half": "▓",
+    "progress_quarter": "▒",
 }
+
+# Default spinner frame set (Braille is most visually distinctive)
+DEFAULT_SPINNER_FRAMES = BRAILLE_FRAMES
 
 
 def get_prompt_prefix(edit_format: str | None = None) -> str:

@@ -16,7 +16,7 @@ from rich.text import Text as RichText
 
 from lsr import models, prompts
 from lsr.editor import pipe_editor
-from lsr.theme import CatppuccinMocha as Mocha
+from lsr.theme import SYMBOLS, CatppuccinMocha as Mocha
 
 from lsr.help import Help, install_help_extra
 from lsr.io import CommandCompletionException
@@ -1056,7 +1056,7 @@ class Commands:
         self.io.tool_output(f"  - 缺失文件: {stats['missing_files']}")
 
         if stats["errors"] == 0 and stats["warnings"] == 0:
-            self.io.tool_output("\n✅ 没有发现错误或警告，无需添加到上下文。")
+            self.io.tool_output(f"\n{SYMBOLS['success']} 没有发现错误或警告，无需添加到上下文。")
             return
 
         # Ask user confirmation
@@ -1087,10 +1087,10 @@ class Commands:
                 ),
             ]
 
-            self.io.tool_output("\n✅ 已将日志分析结果添加到 LLM 上下文。")
+            self.io.tool_output(f"\n{SYMBOLS['success']} 已将日志分析结果添加到 LLM 上下文。")
             self.io.tool_output("你可以在下一条消息中询问 LLM 如何修复这些问题。")
         else:
-            self.io.tool_output("\n⏭️  已跳过，未添加到上下文。")
+            self.io.tool_output(f"\n{SYMBOLS['arrow_right']}  已跳过，未添加到上下文。")
 
     def _resolve_tex_file(self, args, engine_name):
         """Resolve .tex file from args, or auto-sniff + interactive selection.
@@ -1192,11 +1192,11 @@ class Commands:
             output = result.stdout + result.stderr
 
             if result.returncode == 0:
-                self.io.tool_output("\n✅ Compilation successful!")
+                self.io.tool_output(f"\n{SYMBOLS['success']} Compilation successful!")
                 # Show warnings if any
                 warnings = [line for line in output.split("\n") if "Warning" in line]
                 if warnings:
-                    self.io.tool_output(f"\n⚠️  Warnings ({len(warnings)}):")
+                    self.io.tool_output(f"\n{SYMBOLS['warning']}  Warnings ({len(warnings)}):")
                     for w in warnings[:5]:
                         self.io.tool_output(f"  {w}")
                     if len(warnings) > 5:
@@ -1206,7 +1206,7 @@ class Commands:
                 self._open_pdf(tex_file)
             else:
                 self.io.tool_output(
-                    f"\n❌ Compilation failed (exit code {result.returncode})"
+                    f"\n{SYMBOLS['error']} Compilation failed (exit code {result.returncode})"
                 )
                 # Extract error lines
                 error_lines = []
@@ -1300,7 +1300,7 @@ class Commands:
 
                 if result.returncode != 0:
                     self.io.tool_output(
-                        f"\n❌ {step_name} failed (exit code {result.returncode})"
+                        f"\n{SYMBOLS['error']} {step_name} failed (exit code {result.returncode})"
                     )
                     # Extract error lines
                     error_lines = []
@@ -1318,7 +1318,7 @@ class Commands:
                     self._ask_add_log_to_context(tex_file, log_info)
                     return output
                 else:
-                    self.io.tool_output(f"  ✅ {step_name} completed")
+                    self.io.tool_output(f"  {SYMBOLS['success']} {step_name} completed")
 
             except FileNotFoundError:
                 self.io.tool_error(
@@ -1333,13 +1333,13 @@ class Commands:
                 return
 
         self.io.tool_output("\n" + "=" * 50)
-        self.io.tool_output("✅ Full compilation with bibliography successful!")
+        self.io.tool_output(f"{SYMBOLS['success']} Full compilation with bibliography successful!")
 
         # Show warnings from final compilation
         if final_output:
             warnings = [line for line in final_output.split("\n") if "Warning" in line]
             if warnings:
-                self.io.tool_output(f"\n⚠️  Warnings ({len(warnings)}):")
+                self.io.tool_output(f"\n{SYMBOLS['warning']}  Warnings ({len(warnings)}):")
                 for w in warnings[:5]:
                     self.io.tool_output(f"  {w}")
                 if len(warnings) > 5:
@@ -4148,7 +4148,7 @@ Text content here.
                 output_path = self.coder.abs_root_path(output_file)
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(prompt_template)
-                self.io.tool_output(f"\n✅ Prompt template saved to: {output_file}")
+                self.io.tool_output(f"\n{SYMBOLS['success']} Prompt template saved to: {output_file}")
             else:
                 self.io.tool_output(
                     f"\nTip: /add-template {filename} output.md  # Save to file"

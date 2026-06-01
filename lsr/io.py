@@ -34,7 +34,7 @@ from rich.style import Style as RichStyle
 from rich.text import Text
 
 from lsr.mdstream import MarkdownStream
-from lsr.theme import MOCHA_THEME, THEME
+from lsr.theme import MOCHA_THEME, SYMBOLS, THEME
 from lsr.theme import CatppuccinMocha as Mocha
 
 from .dump import dump  # noqa: F401
@@ -289,6 +289,7 @@ class InputOutput:
             self.notifications_command = self.get_default_notification_command()
         else:
             self.notifications_command = notifications_command
+        self.show_thinking = True
 
         no_color = os.environ.get("NO_COLOR")
         if no_color is not None and no_color != "":
@@ -638,6 +639,15 @@ class InputOutput:
             "Navigate forward through history"
             event.current_buffer.history_forward()
 
+        @kb.add("c-o")
+        def _(event):
+            "Toggle display of thinking/reasoning content"
+            self.show_thinking = not self.show_thinking
+            status = "shown" if self.show_thinking else "hidden"
+            self.console.print(
+                f"[{Mocha.OVERLAY1}](Thinking content {status} — press Ctrl-O to toggle)[/{Mocha.OVERLAY1}]"
+            )
+
         @kb.add("c-x", "c-e")
         def _(event):
             "Edit current input in external editor (like Bash)"
@@ -814,11 +824,18 @@ class InputOutput:
 
     def display_user_input(self, inp):
         if self.pretty and self.user_input_color:
-            style = dict(style=self.user_input_color)
+            color = ensure_hash_prefix(self.user_input_color)
         else:
-            style = dict()
+            color = Mocha.BLUE
 
-        self.console.print(Text(inp), **style)
+        lines = inp.splitlines()
+        text = Text()
+        for i, line in enumerate(lines):
+            text.append(f"{SYMBOLS['separator']} ", style=color)
+            text.append(line, style=color)
+            if i < len(lines) - 1:
+                text.append("\n")
+        self.console.print(text)
 
     def user_input(self, inp, log_only=True):
         if not log_only:
@@ -1030,6 +1047,26 @@ class InputOutput:
             message = Text(message)
         color = ensure_hash_prefix(color) if color else None
         style = dict(style=color) if self.pretty and color else dict()
+
+        # Add left border for error/warning messages
+        if (
+            self.pretty
+            and color
+            and color in (self.tool_error_color, self.tool_warning_color)
+        ):
+            border_color = (
+                Mocha.RED if color == self.tool_error_color else Mocha.YELLOW
+            )
+            lines = message.plain.splitlines()
+            bordered = Text()
+            for i, line in enumerate(lines):
+                bordered.append(f"{SYMBOLS['separator']} ", style=border_color)
+                bordered.append(line, style=color)
+                if i < len(lines) - 1:
+                    bordered.append("\n")
+            message = bordered
+            style = dict()
+
         try:
             self.console.print(message, **style)
         except UnicodeEncodeError:
@@ -1041,9 +1078,13 @@ class InputOutput:
 
     def tool_error(self, message="", strip=True):
         self.num_error_outputs += 1
+        if message and self.pretty:
+            message = f"{SYMBOLS['error']} {message}"
         self._tool_message(message, strip, self.tool_error_color)
 
     def tool_warning(self, message="", strip=True):
+        if message and self.pretty:
+            message = f"{SYMBOLS['warning']} {message}"
         self._tool_message(message, strip, self.tool_warning_color)
 
     def tool_output(self, *messages, log_only=False, bold=False):
@@ -1092,6 +1133,10 @@ class InputOutput:
             pretty = self.pretty
 
         if pretty:
+            # Visual separator before assistant output
+            from lsr.ui_components import render_separator
+
+            render_separator(self.console)
             show_resp = Markdown(message, code_theme="monokai")
         else:
             show_resp = Text(message or "(empty response)")
@@ -1230,7 +1275,7 @@ class InputOutput:
                     Text(abs_path if len(abs_path) < len(rel_path) else rel_path)
                 )
 
-            files_with_label = [Text("Readonly:")] + ro_paths
+            files_with_label = [Text(f"{SYMBOLS['file']} Readonly:", style=Mocha.SKY)] + ro_paths
             read_only_output = StringIO()
             Console(file=read_only_output, force_terminal=False).print(
                 Columns(files_with_label)
@@ -1242,7 +1287,7 @@ class InputOutput:
             text_editable_files = [Text(f) for f in editable_files]
             files_with_label = text_editable_files
             if read_only_files:
-                files_with_label = [Text("Editable:")] + text_editable_files
+                files_with_label = [Text(f"{SYMBOLS['file']} Editable:", style=Mocha.GREEN)] + text_editable_files
                 editable_output = StringIO()
                 Console(file=editable_output, force_terminal=False).print(
                     Columns(files_with_label)
