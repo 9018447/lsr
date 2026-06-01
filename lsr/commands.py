@@ -286,6 +286,19 @@ class Commands:
     def _clear_chat_history(self):
         self.coder.done_messages = []
         self.coder.cur_messages = []
+        # Reset cumulative session counters so status bar reflects cleared state
+        self.coder.total_tokens_sent = 0
+        self.coder.total_tokens_received = 0
+        self.coder.message_tokens_sent = 0
+        self.coder.message_tokens_received = 0
+        self.coder.num_exhausted_context_windows = 0
+        # Cancel any in-flight summarization
+        self.coder.summarize_end()
+        self.coder.summarized_done_messages = []
+        self.coder.summarizing_messages = None
+        # Clear cached prompt tokens
+        if hasattr(self.coder, "_cached_prompt_tokens"):
+            self.coder._cached_prompt_tokens = None
 
     def cmd_reset(self, args):
         "Drop all files and clear the chat history"

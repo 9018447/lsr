@@ -1896,6 +1896,33 @@ class TestCommands(TestCase):
             del coder
             del commands
 
+    def test_clear_chat_history_resets_counters(self):
+        with GitTemporaryDirectory() as repo_dir:
+            io = InputOutput(pretty=False, fancy_input=False, yes=True)
+            coder = Coder.create(self.GPT35, None, io)
+            commands = Commands(io, coder)
+            # Set some state that should be reset
+            coder.cur_messages = [{"role": "user", "content": "Test message"}]
+            coder.done_messages = [{"role": "assistant", "content": "Test response"}]
+            coder.total_tokens_sent = 100
+            coder.total_tokens_received = 200
+            coder.message_tokens_sent = 50
+            coder.message_tokens_received = 75
+            coder.num_exhausted_context_windows = 3
+            coder.summarized_done_messages = [{"role": "assistant", "content": "summary"}]
+            coder.summarizing_messages = [{"role": "user", "content": "test"}]
+            coder._cached_prompt_tokens = 42
+            commands._clear_chat_history()
+            self.assertEqual(len(coder.cur_messages), 0)
+            self.assertEqual(len(coder.done_messages), 0)
+            self.assertEqual(coder.total_tokens_sent, 0)
+            self.assertEqual(coder.total_tokens_received, 0)
+            self.assertEqual(coder.message_tokens_sent, 0)
+            self.assertEqual(coder.message_tokens_received, 0)
+            self.assertEqual(coder.num_exhausted_context_windows, 0)
+            self.assertEqual(len(coder.summarized_done_messages), 0)
+            self.assertIsNone(coder.summarizing_messages)
+            self.assertIsNone(coder._cached_prompt_tokens)
     def test_reset_with_original_read_only_files(self):
         with GitTemporaryDirectory() as repo_dir:
             io = InputOutput(pretty=False, fancy_input=False, yes=True)
