@@ -39,18 +39,6 @@ def get_parser(default_config_files, git_root):
         config_file_parser_class=configargparse.YAMLConfigFileParser,
         auto_env_var_prefix="LSR_",
     )
-    # List of valid edit formats for argparse validation & shtab completion.
-    # Dynamically gather them from the registered coder classes so the list
-    # stays in sync if new formats are added.
-    from lsr import coders as _lsr_coders
-
-    edit_format_choices = sorted(
-        {
-            c.edit_format
-            for c in _lsr_coders.__all__
-            if hasattr(c, "edit_format") and c.edit_format is not None
-        }
-    )
     group = parser.add_argument_group("Main model")
     group.add_argument(
         "files", metavar="FILE", nargs="*", help="files to edit with an LLM (optional)"
@@ -163,7 +151,6 @@ def get_parser(default_config_files, git_root):
         "--edit-format",
         "--chat-mode",
         metavar="EDIT_FORMAT",
-        choices=edit_format_choices,
         default=None,
         help="Specify what edit format the LLM should use (default depends on model)",
     )
@@ -198,7 +185,6 @@ def get_parser(default_config_files, git_root):
     group.add_argument(
         "--editor-edit-format",
         metavar="EDITOR_EDIT_FORMAT",
-        choices=edit_format_choices,
         default=None,
         help="Specify the edit format for the editor model (default: depends on editor model)",
     )

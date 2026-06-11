@@ -16,13 +16,11 @@ except ImportError:
 import importlib_resources
 import shtab
 from dotenv import load_dotenv
-from prompt_toolkit.enums import EditingMode
 
 from lsr import __version__, models, urls, utils
 from lsr.args import get_parser
 from lsr.coders import Coder
 from lsr.coders.base_coder import UnknownEditFormat
-from lsr.commands import Commands, SwitchCoder
 from lsr.format_settings import format_settings, scrub_sensitive_info
 from lsr.history import ChatSummary
 from lsr.io import InputOutput
@@ -503,6 +501,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     if return_coder and args.yes_always is None:
         args.yes_always = True
 
+    from prompt_toolkit.enums import EditingMode
+
     editing_mode = EditingMode.VI if args.vim else EditingMode.EMACS
 
     def get_io(pretty):
@@ -838,6 +838,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
     if repo and not args.skip_sanity_check_repo:
         num_files = len(repo.get_tracked_files())
+
+    from lsr.commands import Commands, SwitchCoder
 
     commands = Commands(
         io,
