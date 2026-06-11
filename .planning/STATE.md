@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-last_updated: "2026-06-11T15:03:52.446Z"
+last_updated: "2026-06-11T15:23:53.693Z"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -19,26 +19,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** Reduce lsr startup time by 60%+ (target <200ms) by stripping non-LaTeX modules
-**Current focus:** Phase 1 — Strip Non-LaTeX Modules
+**Current focus:** Phase 3 — Optimize Core Initialization
 
 ## Current Phase
 
-**Phase 1: Strip Non-LaTeX Modules**
+**Phase 3: Optimize Core Initialization**
 
-- **Goal:** Remove or aggressively lazy-load modules irrelevant to LaTeX writing
-- **Requirements:** STRIP-01 (repomap), STRIP-02 (openrouter/requests)
-- **Status:** Ready to plan
-- **Context:** `.planning/phases/phase-01/1-CONTEXT.md`
+- **Goal:** Reduce overhead in model configuration and parser construction
+- **Requirements:** INIT-01, INIT-02, INIT-03
+- **Status:** Context gathered — ready to plan
+- **Context:** `.planning/phases/03-optimize-core-initialization/03-CONTEXT.md`
 
 ## Completed Work
 
 - ✓ Quantitative import-time analysis (`python -X importtime`)
 - ✓ Identified 590ms total startup, top bottlenecks mapped
 - ✓ GSD planning documents created and updated with user constraints
-- ✓ Discuss-phase completed — key decisions locked:
-  - Repomap is unnecessary for LaTeX (D1)
-  - OpenRouter must not be default-loaded (D2)
-  - Git support retained (D3)
+- ✓ Phase 3 discuss-phase completed — key decisions locked:
+  - `model_info_manager` becomes a lazy `__getattr__` proxy keeping the existing name (D1)
+  - `~/.lsr/caches/` created only on first model-info query (D2)
+  - `main()` refactored so `get_parser()` is called exactly once (D3)
+  - Full `litellm.validate_environment()` moved out of `Model.__init__()` into sanity-check path (D4)
 
 ## Blockers
 
@@ -46,10 +47,7 @@ None
 
 ## Next Actions
 
-1. [ ] Move `requests` import inside `OpenRouterModelManager` methods (`openrouter.py`)
-2. [ ] Defer `OpenRouterModelManager` instantiation in `ModelInfoManager` (`models.py`)
-3. [ ] Guard `lsr.repomap` import behind `use_repo_map` flag (`base_coder.py`)
-4. [ ] Run benchmark to verify ~164ms improvement
+1. [ ] Run `/gsd-plan-phase 3` to create the detailed plan
 
 ## Metrics
 
