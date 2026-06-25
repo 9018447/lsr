@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import traceback
@@ -27,7 +28,7 @@ from lsr.io import InputOutput
 from lsr.llm import litellm  # noqa: F401; properly init litellm on launch
 from lsr.models import ModelSettings
 from lsr.onboarding import offer_openrouter_oauth, select_default_model
-from lsr.repo import ANY_GIT_ERROR, GitRepo
+from lsr.repo import ANY_GIT_ERROR, ANY_VCS_ERROR, Repo
 from lsr.report import report_uncaught_exceptions
 from lsr.versioncheck import check_version, install_from_main_branch, install_upgrade
 from lsr.watch import FileWatcher
@@ -44,20 +45,36 @@ def check_config_files_for_yes(config_files):
                     for line in f:
                         if line.strip().startswith("yes:"):
                             print("Configuration error detected.")
-                            print(
-                                f"The file {config_file} contains a line starting with 'yes:'"
-                            )
-                            print(
-                                "Please replace 'yes:' with 'yes-always:' in this file."
-                            )
+                            print(f"The file {config_file} contains a line starting with 'yes:'")
+                            print("Please replace 'yes:' with 'yes-always:' in this file.")
                             found = True
             except Exception:
                 pass
     return found
 
 
-def get_git_root():
-    """Try and guess the git repo, since the conf.yml can be at the repo root"""
+def get_vcs_root():
+    """Try and guess the repo root, preferring jj over git."""
+    try:
+        cwd = Path.cwd()
+    except OSError:
+        cwd = Path(".")
+
+    # Prefer jj when a colocated .jj directory exists.
+    try:
+        result = subprocess.run(
+            ["jj", "root"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return result.stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
+        pass
+
     try:
         repo = git.Repo(search_parent_directories=True)
         return repo.working_tree_dir
@@ -65,42 +82,47 @@ def get_git_root():
         return None
 
 
-def guessed_wrong_repo(io, git_root, fnames, git_dname):
+def guessed_wrong_repo(io, vcs_root, fnames, git_dname):
     """After we parse the args, we can determine the real repo. Did we guess wrong?"""
 
     try:
-        check_repo = Path(GitRepo(io, fnames, git_dname).root).resolve()
-    except (OSError,) + ANY_GIT_ERROR:
+        check_repo = Path(Repo.create(io, fnames, git_dname).root).resolve()
+    except (OSError,) + ANY_VCS_ERROR:
         return
 
     # we had no guess, rely on the "true" repo result
-    if not git_root:
+    if not vcs_root:
         return str(check_repo)
 
-    git_root = Path(git_root).resolve()
-    if check_repo == git_root:
+    vcs_root = Path(vcs_root).resolve()
+    if check_repo == vcs_root:
         return
 
     return str(check_repo)
 
 
-def make_new_repo(git_root, io):
+def make_new_repo(vcs_root, io):
     try:
-        repo = git.Repo.init(git_root)
-        check_gitignore(git_root, io, False)
-    except ANY_GIT_ERROR as err:  # issue #1233
-        io.tool_error(f"Unable to create git repo in {git_root}")
+        git.Repo.init(vcs_root)
+        subprocess.run(
+            ["jj", "git", "init", "--colocate"],
+            cwd=vcs_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        check_gitignore(vcs_root, io, False)
+    except ANY_VCS_ERROR as err:  # issue #1233
+        io.tool_error(f"Unable to create VCS repo in {vcs_root}")
         io.tool_output(str(err))
         return
 
-    io.tool_output(f"Git repository created in {git_root}")
-    return repo
+    io.tool_output(f"VCS repository created in {vcs_root}")
 
 
-def setup_git(git_root, io):
-    if git is None:
-        return
-
+def setup_vcs(vcs_root, io):
     try:
         cwd = Path.cwd()
     except OSError:
@@ -108,10 +130,10 @@ def setup_git(git_root, io):
 
     repo = None
 
-    if git_root:
+    if vcs_root:
         try:
-            repo = git.Repo(git_root)
-        except ANY_GIT_ERROR:
+            repo = git.Repo(vcs_root)
+        except ANY_VCS_ERROR:
             pass
     elif cwd == Path.home():
         io.tool_warning(
@@ -119,10 +141,14 @@ def setup_git(git_root, io):
         )
         return
     elif cwd and io.confirm_ask(
-        "No git repo found, create one to track lsr's changes (recommended)?"
+        "No repo found, create one to track lsr's changes (recommended)?"
     ):
-        git_root = str(cwd.resolve())
-        repo = make_new_repo(git_root, io)
+        vcs_root = str(cwd.resolve())
+        make_new_repo(vcs_root, io)
+        try:
+            repo = git.Repo(vcs_root)
+        except ANY_VCS_ERROR:
+            pass
 
     if not repo:
         return
@@ -146,32 +172,30 @@ def setup_git(git_root, io):
             io.tool_warning('Update git name with: git config user.name "Your Name"')
         if not user_email:
             git_config.set_value("user", "email", "you@example.com")
-            io.tool_warning(
-                'Update git email with: git config user.email "you@example.com"'
-            )
+            io.tool_warning('Update git email with: git config user.email "you@example.com"')
 
     return repo.working_tree_dir
 
 
-def check_gitignore(git_root, io, ask=True):
-    if not git_root:
+def check_gitignore(vcs_root, io, ask=True):
+    if not vcs_root:
         return
 
     try:
-        repo = git.Repo(git_root)
+        repo = git.Repo(vcs_root)
         patterns_to_add = []
 
         if not repo.ignored(".lsr"):
             patterns_to_add.append(".lsr*")
 
-        env_path = Path(git_root) / ".env"
+        env_path = Path(vcs_root) / ".env"
         if env_path.exists() and not repo.ignored(".env"):
             patterns_to_add.append(".env")
 
         if not patterns_to_add:
             return
 
-        gitignore_file = Path(git_root) / ".gitignore"
+        gitignore_file = Path(vcs_root) / ".gitignore"
         if gitignore_file.exists():
             try:
                 content = io.read_text(gitignore_file)
@@ -184,14 +208,12 @@ def check_gitignore(git_root, io, ask=True):
                 return
         else:
             content = ""
-    except ANY_GIT_ERROR:
+    except ANY_VCS_ERROR:
         return
 
     if ask:
         io.tool_output("You can skip this check with --no-gitignore")
-        if not io.confirm_ask(
-            f"Add {', '.join(patterns_to_add)} to .gitignore (recommended)?"
-        ):
+        if not io.confirm_ask(f"Add {', '.join(patterns_to_add)} to .gitignore (recommended)?"):
             return
 
     content += "\n".join(patterns_to_add) + "\n"
@@ -244,11 +266,11 @@ def parse_lint_cmds(lint_cmds, io):
     return res
 
 
-def generate_search_path_list(default_file, git_root, command_line_file):
+def generate_search_path_list(default_file, vcs_root, command_line_file):
     files = []
     files.append(Path.home() / default_file)  # homedir
-    if git_root:
-        files.append(Path(git_root) / default_file)  # git root
+    if vcs_root:
+        files.append(Path(vcs_root) / default_file)  # git root
     files.append(default_file)
     if command_line_file:
         files.append(command_line_file)
@@ -274,9 +296,9 @@ def generate_search_path_list(default_file, git_root, command_line_file):
     return files
 
 
-def register_models(git_root, model_settings_fname, io, verbose=False):
+def register_models(vcs_root, model_settings_fname, io, verbose=False):
     model_settings_files = generate_search_path_list(
-        ".lsr.model.settings.yml", git_root, model_settings_fname
+        ".lsr.model.settings.yml", vcs_root, model_settings_fname
     )
 
     try:
@@ -300,11 +322,11 @@ def register_models(git_root, model_settings_fname, io, verbose=False):
     return None
 
 
-def load_dotenv_files(git_root, dotenv_fname, encoding="utf-8"):
+def load_dotenv_files(vcs_root, dotenv_fname, encoding="utf-8"):
     # Standard .env file search path
     dotenv_files = generate_search_path_list(
         ".env",
-        git_root,
+        vcs_root,
         dotenv_fname,
     )
 
@@ -329,23 +351,19 @@ def load_dotenv_files(git_root, dotenv_fname, encoding="utf-8"):
     return loaded
 
 
-def register_litellm_models(git_root, model_metadata_fname, io, verbose=False):
+def register_litellm_models(vcs_root, model_metadata_fname, io, verbose=False):
     model_metadata_files = []
 
     # Add the resource file path
-    resource_metadata = importlib_resources.files("lsr.resources").joinpath(
-        "model-metadata.json"
-    )
+    resource_metadata = importlib_resources.files("lsr.resources").joinpath("model-metadata.json")
     model_metadata_files.append(str(resource_metadata))
 
     model_metadata_files += generate_search_path_list(
-        ".lsr.model.metadata.json", git_root, model_metadata_fname
+        ".lsr.model.metadata.json", vcs_root, model_metadata_fname
     )
 
     try:
-        model_metadata_files_loaded = models.register_litellm_models(
-            model_metadata_files
-        )
+        model_metadata_files_loaded = models.register_litellm_models(model_metadata_files)
         if len(model_metadata_files_loaded) > 0 and verbose:
             io.tool_output("Loaded model metadata from:")
             for model_metadata_file in model_metadata_files_loaded:
@@ -359,23 +377,23 @@ def sanity_check_repo(repo, io):
     if not repo:
         return True
 
-    if not repo.repo.working_tree_dir:
+    if repo.vcs == "git" and (not repo.repo or not repo.repo.working_tree_dir):
         io.tool_error("The git repo does not seem to have a working tree?")
         return False
 
     bad_ver = False
     try:
         repo.get_tracked_files()
-        if not repo.git_repo_error:
+        if not repo.vcs_error:
             return True
-        error_msg = str(repo.git_repo_error)
+        error_msg = str(repo.vcs_error)
     except UnicodeDecodeError as exc:
         error_msg = (
-            "Failed to read the Git repository. This issue is likely caused by a path encoded "
+            "Failed to read the repository. This issue is likely caused by a path encoded "
             f'in a format different from the expected encoding "{sys.getfilesystemencoding()}".\n'
             f"Internal error: {str(exc)}"
         )
-    except ANY_GIT_ERROR as exc:
+    except ANY_VCS_ERROR as exc:
         error_msg = str(exc)
         bad_ver = "version in (1, 2)" in error_msg
     except AssertionError as exc:
@@ -384,30 +402,28 @@ def sanity_check_repo(repo, io):
 
     if bad_ver:
         io.tool_error("Aider only works with git repos with version number 1 or 2.")
-        io.tool_output(
-            "You may be able to convert your repo: git update-index --index-version=2"
-        )
+        io.tool_output("You may be able to convert your repo: git update-index --index-version=2")
         io.tool_output("Or run lsr --no-git to proceed without using git.")
         io.offer_url(urls.git_index_version, "Open documentation url for more info?")
         return False
 
-    io.tool_error("Unable to read git repository, it may be corrupt?")
+    io.tool_error("Unable to read repository, it may be corrupt?")
     io.tool_output(error_msg)
     return False
 
 
-def main(argv=None, input=None, output=None, force_git_root=None, return_coder=False):
+def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=False):
     report_uncaught_exceptions()
 
     if argv is None:
         argv = sys.argv[1:]
 
     if git is None:
-        git_root = None
-    elif force_git_root:
-        git_root = force_git_root
+        vcs_root = None
+    elif force_vcs_root:
+        vcs_root = force_vcs_root
     else:
-        git_root = get_git_root()
+        vcs_root = get_vcs_root()
 
     conf_fname = Path(".lsr.conf.yml")
 
@@ -417,21 +433,18 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     except OSError:
         pass
 
-    if git_root:
-        git_conf = Path(git_root) / conf_fname  # git root
+    if vcs_root:
+        git_conf = Path(vcs_root) / conf_fname  # git root
         if git_conf not in default_config_files:
             default_config_files.append(git_conf)
     default_config_files.append(Path.home() / conf_fname)  # homedir
     default_config_files = list(map(str, default_config_files))
 
-    parser = get_parser(default_config_files, git_root)
+    parser = get_parser(default_config_files, vcs_root)
     try:
         args, unknown = parser.parse_known_args(argv)
     except AttributeError as e:
-        if all(
-            word in str(e)
-            for word in ["bool", "object", "has", "no", "attribute", "strip"]
-        ):
+        if all(word in str(e) for word in ["bool", "object", "has", "no", "attribute", "strip"]):
             if check_config_files_for_yes(default_config_files):
                 return 1
         raise e
@@ -444,12 +457,12 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
     default_config_files.reverse()
 
-    parser = get_parser(default_config_files, git_root)
+    parser = get_parser(default_config_files, vcs_root)
 
     args, unknown = parser.parse_known_args(argv)
 
     # Load the .env file specified in the arguments
-    loaded_dotenvs = load_dotenv_files(git_root, args.env_file, args.encoding)
+    loaded_dotenvs = load_dotenv_files(vcs_root, args.env_file, args.encoding)
 
     # Parse again to include any arguments that might have been defined in .env
     args = parser.parse_args(argv)
@@ -580,9 +593,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         )
         os.environ["OPENAI_API_VERSION"] = args.openai_api_version
     if args.openai_api_type:
-        io.tool_warning(
-            "--openai-api-type is deprecated, use --set-env OPENAI_API_TYPE=<value>"
-        )
+        io.tool_warning("--openai-api-type is deprecated, use --set-env OPENAI_API_TYPE=<value>")
         os.environ["OPENAI_API_TYPE"] = args.openai_api_type
     if args.openai_organization_id:
         io.tool_warning(
@@ -619,7 +630,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 good = False
         if not good:
             io.tool_output(
-                "Provide either a single directory of a git repo, or a list of one or more files."
+                "Provide either a single directory of a repo, or a list of one or more files."
             )
             return 1
 
@@ -636,8 +647,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     # We can't know the git repo for sure until after parsing the args.
     # If we guessed wrong, reparse because that changes things like
     # the location of the config.yml and history files.
-    if args.git and not force_git_root and git is not None:
-        right_repo_root = guessed_wrong_repo(io, git_root, fnames, git_dname)
+    if args.git and not force_vcs_root and git is not None:
+        right_repo_root = guessed_wrong_repo(io, vcs_root, fnames, git_dname)
         if right_repo_root:
             return main(argv, input, output, right_repo_root, return_coder=return_coder)
 
@@ -657,9 +668,9 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         check_version(io, verbose=args.verbose)
 
     if args.git:
-        git_root = setup_git(git_root, io)
+        vcs_root = setup_vcs(vcs_root, io)
         if args.gitignore:
-            check_gitignore(git_root, io)
+            check_gitignore(vcs_root, io)
 
     if args.verbose:
         show = format_settings(parser, args)
@@ -672,10 +683,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     is_first_run = is_first_run_of_new_version(io, verbose=args.verbose)
     check_and_load_imports(io, is_first_run, verbose=args.verbose)
 
-    register_models(git_root, args.model_settings_file, io, verbose=args.verbose)
-    register_litellm_models(
-        git_root, args.model_metadata_file, io, verbose=args.verbose
-    )
+    register_models(vcs_root, args.model_settings_file, io, verbose=args.verbose)
+    register_litellm_models(vcs_root, args.model_metadata_file, io, verbose=args.verbose)
 
     if args.list_models:
         models.print_matching_models(io, args.list_models)
@@ -702,9 +711,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     args.model = selected_model_name  # Update args with the selected model
 
     # Check if an OpenRouter model was selected/specified but the key is missing
-    if args.model.startswith("openrouter/") and not os.environ.get(
-        "OPENROUTER_API_KEY"
-    ):
+    if args.model.startswith("openrouter/") and not os.environ.get("OPENROUTER_API_KEY"):
         io.tool_warning(
             f"The specified model '{args.model}' requires an OpenRouter API key, which was not"
             " found."
@@ -746,35 +753,61 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             "Model setting 'remove_reasoning' is deprecated, please use 'reasoning_tag' instead."
         )
 
-    # Set reasoning effort and thinking tokens if specified
-    if args.reasoning_effort is not None:
-        # Apply if check is disabled or model explicitly supports it
-        if not args.check_model_accepts_settings or (
-            main_model.accepts_settings
-            and "reasoning_effort" in main_model.accepts_settings
-        ):
-            main_model.set_reasoning_effort(args.reasoning_effort)
+    # Default reasoning controls to avoid unconstrained thinking loops.
+    # These are applied to every model that declares support; unsupported models skip them.
+    DEFAULT_THINKING_BUDGET = "2000"
+    DEFAULT_REASONING_EFFORT = "medium"
 
-    if args.thinking_tokens is not None:
-        # Apply if check is disabled or model explicitly supports it
-        if not args.check_model_accepts_settings or (
-            main_model.accepts_settings
-            and "thinking_tokens" in main_model.accepts_settings
-        ):
-            main_model.set_thinking_tokens(args.thinking_tokens)
+    reasoning_effort = (
+        args.reasoning_effort if args.reasoning_effort is not None else DEFAULT_REASONING_EFFORT
+    )
+    thinking_budget = (
+        args.thinking_budget
+        if args.thinking_budget is not None
+        else (args.thinking_tokens if args.thinking_tokens is not None else DEFAULT_THINKING_BUDGET)
+    )
+    reasoning_effort_explicit = args.reasoning_effort is not None
+    thinking_budget_explicit = args.thinking_budget is not None or args.thinking_tokens is not None
 
-    # Show warnings about unsupported settings that are being ignored
+    # Apply reasoning effort and thinking budget to all models that support them
+    # (or when the user has disabled the compatibility check).
+    if not args.check_model_accepts_settings or (
+        main_model.accepts_settings and "reasoning_effort" in main_model.accepts_settings
+    ):
+        main_model.set_reasoning_effort(reasoning_effort)
+
+    if not args.check_model_accepts_settings or (
+        main_model.accepts_settings and "thinking_budget" in main_model.accepts_settings
+    ):
+        main_model.set_thinking_budget(thinking_budget)
+    elif not args.check_model_accepts_settings or (
+        main_model.accepts_settings and "thinking_tokens" in main_model.accepts_settings
+    ):
+        main_model.set_thinking_tokens(thinking_budget)
+
+    # Show warnings about unsupported settings that are being ignored.
+    # Only warn when the user explicitly asked for a setting the model doesn't accept;
+    # defaults are applied silently if supported and skipped silently if not.
     if args.check_model_accepts_settings:
         settings_to_check = [
-            {"arg": args.reasoning_effort, "name": "reasoning_effort"},
-            {"arg": args.thinking_tokens, "name": "thinking_tokens"},
+            {
+                "value": reasoning_effort,
+                "name": "reasoning_effort",
+                "explicit": reasoning_effort_explicit,
+            },
+            {
+                "value": thinking_budget,
+                "name": "thinking_budget",
+                "explicit": thinking_budget_explicit,
+                # Some providers expose the same concept under a different key.
+                "aliases": ["thinking_tokens"],
+            },
         ]
 
         for setting in settings_to_check:
-            if setting["arg"] is not None and (
-                not main_model.accepts_settings
-                or setting["name"] not in main_model.accepts_settings
-            ):
+            accepted = main_model.accepts_settings or []
+            names = [setting["name"]] + setting.get("aliases", [])
+            if setting["explicit"] and not any(name in accepted for name in names):
                 io.tool_warning(
                     f"Warning: {main_model.name} does not support '{setting['name']}', ignoring."
                 )
@@ -803,9 +836,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             io.tool_output("You can skip this check with --no-show-model-warnings")
 
             try:
-                io.offer_url(
-                    urls.model_warnings, "Open documentation url for more info?"
-                )
+                io.offer_url(urls.model_warnings, "Open documentation url for more info?")
                 io.tool_output()
             except KeyboardInterrupt:
                 return 1
@@ -813,7 +844,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
     repo = None
     if args.git:
         try:
-            repo = GitRepo(
+            repo = Repo.create(
                 io,
                 fnames,
                 git_dname,
@@ -826,8 +857,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 commit_prompt=args.commit_prompt,
                 subtree_only=args.subtree_only,
                 git_commit_verify=args.git_commit_verify,
-                attribute_co_authored_by=args.attribute_co_authored_by,  # Pass the arg
-                use_cwd=args.cwd_relative,  # 新增参数
+                attribute_co_authored_by=args.attribute_co_authored_by,
+                use_cwd=args.cwd_relative,
             )
         except FileNotFoundError:
             pass
@@ -921,8 +952,8 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         return coder
 
     ignores = []
-    if git_root:
-        ignores.append(str(Path(git_root) / ".gitignore"))
+    if vcs_root:
+        ignores.append(str(Path(vcs_root) / ".gitignore"))
     if args.lsrignore:
         ignores.append(args.lsrignore)
 
@@ -998,19 +1029,17 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             allow_never=False,
         )
 
-    if git_root and Path.cwd().resolve() != Path(git_root).resolve():
+    if vcs_root and Path.cwd().resolve() != Path(vcs_root).resolve():
         io.tool_warning(
-            "Note: in-chat filenames are always relative to the git working dir, not the current"
+            "Note: in-chat filenames are always relative to the repo working dir, not the current"
             " working dir."
         )
 
         io.tool_output(f"Cur working dir: {Path.cwd()}")
-        io.tool_output(f"Git working dir: {git_root}")
+        io.tool_output(f"Repo working dir: {vcs_root}")
 
     if args.stream and args.cache_prompts:
-        io.tool_warning(
-            "Cost estimates may be inaccurate when using streaming and caching."
-        )
+        io.tool_warning("Cost estimates may be inaccurate when using streaming and caching.")
 
     if args.message:
         io.add_to_input_history(args.message)
@@ -1115,12 +1144,8 @@ def check_and_load_imports(io, is_first_run, verbose=False):
                 load_slow_imports(swallow=False)
             except Exception as err:
                 io.tool_error(str(err))
-                io.tool_output(
-                    "Error loading required imports. Did you install lsr properly?"
-                )
-                io.offer_url(
-                    urls.install_properly, "Open documentation url for more info?"
-                )
+                io.tool_output("Error loading required imports. Did you install lsr properly?")
+                io.offer_url(urls.install_properly, "Open documentation url for more info?")
                 sys.exit(1)
 
             if verbose:

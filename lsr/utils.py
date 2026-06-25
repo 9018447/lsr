@@ -13,6 +13,26 @@ from lsr.waiting import Spinner
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp", ".pdf"}
 
 
+def read_text_robust(path):
+    """Read a text file, tolerating common encoding issues.
+
+    Tries UTF-8, then UTF-8 with BOM, then Latin-1 (which never fails).
+    Returns the decoded text, or None if the file cannot be read.
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+
+    for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return None
+
+
 class IgnorantTemporaryDirectory:
     def __init__(self):
         if sys.version_info >= (3, 10):

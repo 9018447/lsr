@@ -1,12 +1,14 @@
 import contextlib
 import os
+import subprocess
 import time
 from pathlib import Path, PurePosixPath
 
 try:
     import git
 
-    ANY_GIT_ERROR = [
+    GITPYTHON_AVAILABLE = True
+    GIT_ERRORS = [
         git.exc.ODBError,
         git.exc.GitError,
         git.exc.InvalidGitRepositoryError,
@@ -14,7 +16,8 @@ try:
     ]
 except ImportError:
     git = None
-    ANY_GIT_ERROR = []
+    GITPYTHON_AVAILABLE = False
+    GIT_ERRORS = []
 
 import pathspec
 
@@ -23,22 +26,43 @@ from lsr import prompts, utils
 from .dump import dump  # noqa: F401
 from .waiting import WaitingSpinner
 
-ANY_GIT_ERROR += [
-    OSError,
-    IndexError,
-    BufferError,
-    TypeError,
-    ValueError,
-    AttributeError,
-    AssertionError,
-    TimeoutError,
-]
-ANY_GIT_ERROR = tuple(ANY_GIT_ERROR)
+ANY_VCS_ERROR = tuple(
+    GIT_ERRORS
+    + [
+        OSError,
+        IndexError,
+        BufferError,
+        TypeError,
+        ValueError,
+        AttributeError,
+        AssertionError,
+        TimeoutError,
+        subprocess.SubprocessError,
+        FileNotFoundError,
+    ]
+)
+
+# Keep the old export name for backward compatibility.
+ANY_GIT_ERROR = ANY_VCS_ERROR
+
+
+def _run_cmd(cmd, cwd=None, capture_output=True, text=True, check=False, env=None):
+    """Thin wrapper around subprocess.run with sensible defaults."""
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=capture_output,
+        text=text,
+        check=check,
+        env=env,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 @contextlib.contextmanager
-def set_git_env(var_name, value, original_value):
-    """Temporarily set a Git environment variable."""
+def set_env(var_name, value, original_value):
+    """Temporarily set an environment variable."""
     os.environ[var_name] = value
     try:
         yield
@@ -49,7 +73,57 @@ def set_git_env(var_name, value, original_value):
             del os.environ[var_name]
 
 
-class GitRepo:
+def find_repo_root(fnames, git_dname):
+    """Find the unique repository root and determine whether it is a jj or git repo.
+
+    Returns a tuple (vcs, root) where vcs is 'jj' or 'git'.
+    Raises FileNotFoundError if no repo is found.
+    """
+    if git_dname:
+        check_fnames = [git_dname]
+    elif fnames:
+        check_fnames = fnames
+    else:
+        check_fnames = ["."]
+
+    repo_infos = []
+    for fname in check_fnames:
+        fname = Path(fname)
+        fname = fname.resolve()
+
+        if not fname.exists() and fname.parent.exists():
+            fname = fname.parent
+
+        # Prefer jj if a .jj directory exists anywhere in the ancestry.
+        try:
+            jj_root = _run_cmd(["jj", "root"], cwd=str(fname), check=True).stdout.strip()
+            if jj_root:
+                repo_infos.append(("jj", utils.safe_abs_path(jj_root)))
+                continue
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            pass
+
+        if git is not None:
+            try:
+                repo_path = git.Repo(fname, search_parent_directories=True).working_dir
+                repo_infos.append(("git", utils.safe_abs_path(repo_path)))
+            except tuple(GIT_ERRORS):
+                pass
+
+    if not repo_infos:
+        raise FileNotFoundError
+
+    root_set = set(info[1] for info in repo_infos)
+
+    if len(root_set) > 1:
+        raise FileNotFoundError
+
+    return repo_infos[0]
+
+
+class BaseRepo:
+    """Shared behavior for VCS backends (path/ignore normalization)."""
+
     repo = None
     lsr_ignore_file = None
     lsr_ignore_spec = None
@@ -57,13 +131,13 @@ class GitRepo:
     lsr_ignore_last_check = 0
     subtree_only = False
     ignore_file_cache = {}
-    git_repo_error = None
+    vcs_error = None
+    vcs = "unknown"
 
     def __init__(
         self,
         io,
-        fnames,
-        git_dname,
+        root,
         lsr_ignore_file=None,
         models=None,
         attribute_author=True,
@@ -72,272 +146,176 @@ class GitRepo:
         attribute_commit_message_committer=False,
         commit_prompt=None,
         subtree_only=False,
-        git_commit_verify=True,
-        attribute_co_authored_by=False,  # Added parameter
-        use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
+        commit_verify=True,
+        attribute_co_authored_by=False,
+        use_cwd=True,
     ):
         self.io = io
         self.models = models
+        self.root = utils.safe_abs_path(root)
 
         self.normalized_path = {}
         self.tree_files = {}
-        self.use_cwd = use_cwd  # 新增属性
+        self.use_cwd = use_cwd
+        self.ignore_file_cache = {}
 
         self.attribute_author = attribute_author
         self.attribute_committer = attribute_committer
         self.attribute_commit_message_author = attribute_commit_message_author
         self.attribute_commit_message_committer = attribute_commit_message_committer
-        self.attribute_co_authored_by = (
-            attribute_co_authored_by  # Assign from parameter
-        )
+        self.attribute_co_authored_by = attribute_co_authored_by
         self.commit_prompt = commit_prompt
         self.subtree_only = subtree_only
-        self.git_commit_verify = git_commit_verify
-        self.ignore_file_cache = {}
-
-        if git_dname:
-            check_fnames = [git_dname]
-        elif fnames:
-            check_fnames = fnames
-        else:
-            check_fnames = ["."]
-
-        repo_paths = []
-        for fname in check_fnames:
-            fname = Path(fname)
-            fname = fname.resolve()
-
-            if not fname.exists() and fname.parent.exists():
-                fname = fname.parent
-
-            try:
-                repo_path = git.Repo(fname, search_parent_directories=True).working_dir
-                repo_path = utils.safe_abs_path(repo_path)
-                repo_paths.append(repo_path)
-            except ANY_GIT_ERROR:
-                pass
-
-        num_repos = len(set(repo_paths))
-
-        if num_repos == 0:
-            raise FileNotFoundError
-        if num_repos > 1:
-            self.io.tool_error("Files are in different git repos.")
-            raise FileNotFoundError
-
-        # https://github.com/gitpython-developers/GitPython/issues/427
-        self.repo = git.Repo(repo_paths.pop(), odbt=git.GitDB)
-        self.root = utils.safe_abs_path(self.repo.working_tree_dir)
+        self.commit_verify = commit_verify
 
         if lsr_ignore_file:
             self.lsr_ignore_file = Path(lsr_ignore_file)
 
+    # ------------------------------------------------------------------
+    # Abstract / backend-specific hooks
+    # ------------------------------------------------------------------
+    def is_dirty(self, path=None):
+        raise NotImplementedError
+
+    def get_tracked_files(self):
+        raise NotImplementedError
+
+    def get_dirty_files(self):
+        raise NotImplementedError
+
     def commit(
         self, fnames=None, context=None, message=None, lsr_edits=False, coder=None
     ):
-        """
-        Commit the specified files or all dirty files if none are specified.
+        raise NotImplementedError
 
-        Args:
-            fnames (list, optional): List of filenames to commit. Defaults to None (commit all
-                                     dirty files).
-            context (str, optional): Context for generating commit message. Defaults to None.
-            message (str, optional): Explicit commit message. Defaults to None (generate message).
-            lsr_edits (bool, optional): Whether the changes were made by Aider. Defaults to False.
-                                          This affects attribution logic.
-            coder (Coder, optional): The Coder instance, used for config and model info.
-                                     Defaults to None.
+    def get_head_commit(self):
+        raise NotImplementedError
 
-        Returns:
-            tuple(str, str) or None: The commit hash and commit message if successful,
-                                     else None.
+    def get_head_commit_sha(self, short=False):
+        raise NotImplementedError
 
-        Attribution Logic:
-        ------------------
-        This method handles Git commit attribution based on configuration flags and whether
-        Aider generated the changes (`lsr_edits`).
+    def get_head_commit_message(self, default=None):
+        raise NotImplementedError
 
-        Key Concepts:
-        - Author: The person who originally wrote the code changes.
-        - Committer: The person who last applied the commit to the repository.
-        - lsr_edits=True: Changes were generated by Aider (LLM).
-        - lsr_edits=False: Commit is user-driven (e.g., /commit manually staged changes).
-        - Explicit Setting: A flag (--attribute-...) is set to True or False
-          via command line or config file.
-        - Implicit Default: A flag is not explicitly set, defaulting to None in args, which is
-          interpreted as True unless overridden by other logic.
+    def diff_commits(self, pretty, from_commit, to_commit):
+        raise NotImplementedError
 
-        Flags:
-        - --attribute-author: Modify Author name to "User Name (lsr)".
-        - --attribute-committer: Modify Committer name to "User Name (lsr)".
-        - --attribute-co-authored-by: Add
-          "Co-authored-by: lsr (<model>) <lsr@your-username.github.io/lsr>" trailer to commit message.
+    def git_ignored_file(self, path):
+        raise NotImplementedError
 
-        Behavior Summary:
-
-        1. When lsr_edits = True (AI Changes):
-           - If --attribute-co-authored-by=True:
-             - Co-authored-by trailer IS ADDED.
-             - Author/Committer names are NOT modified by default (co-authored-by takes precedence).
-             - EXCEPTION: If --attribute-author/--attribute-committer is EXPLICITLY True, the
-               respective name IS modified (explicit overrides precedence).
-           - If --attribute-co-authored-by=False:
-             - Co-authored-by trailer is NOT added.
-             - Author/Committer names ARE modified by default (implicit True).
-             - EXCEPTION: If --attribute-author/--attribute-committer is EXPLICITLY False,
-               the respective name is NOT modified.
-
-        2. When lsr_edits = False (User Changes):
-           - --attribute-co-authored-by is IGNORED (trailer never added).
-           - Author name is NEVER modified (--attribute-author ignored).
-           - Committer name IS modified by default (implicit True, as Aider runs `git commit`).
-           - EXCEPTION: If --attribute-committer is EXPLICITLY False, the name is NOT modified.
-
-        Resulting Scenarios:
-        - Standard AI edit (defaults): Co-authored-by=False -> Author=You(lsr),
-          Committer=You(lsr)
-        - AI edit with Co-authored-by (default): Co-authored-by=True -> Author=You,
-          Committer=You, Trailer added
-        - AI edit with Co-authored-by + Explicit Author: Co-authored-by=True,
-          --attribute-author -> Author=You(lsr), Committer=You, Trailer added
-        - User commit (defaults): lsr_edits=False -> Author=You, Committer=You(lsr)
-        - User commit with explicit no-committer: lsr_edits=False,
-          --no-attribute-committer -> Author=You, Committer=You
-        """
-        if not fnames and not self.repo.is_dirty():
-            return
-
-        diffs = self.get_diffs(fnames)
-        if not diffs:
-            return
-
-        if message:
-            commit_message = message
-        else:
-            user_language = None
-            if coder:
-                user_language = coder.commit_language
-                if not user_language:
-                    user_language = coder.get_user_language()
-            commit_message = self.get_commit_message(diffs, context, user_language)
-
-        # Retrieve attribute settings, prioritizing coder.args if available
-        if coder and hasattr(coder, "args"):
-            attribute_author = coder.args.attribute_author
-            attribute_committer = coder.args.attribute_committer
-            attribute_commit_message_author = coder.args.attribute_commit_message_author
-            attribute_commit_message_committer = (
-                coder.args.attribute_commit_message_committer
-            )
-            attribute_co_authored_by = coder.args.attribute_co_authored_by
-        else:
-            # Fallback to self attributes (initialized from config/defaults)
-            attribute_author = self.attribute_author
-            attribute_committer = self.attribute_committer
-            attribute_commit_message_author = self.attribute_commit_message_author
-            attribute_commit_message_committer = self.attribute_commit_message_committer
-            attribute_co_authored_by = self.attribute_co_authored_by
-
-        # Determine explicit settings (None means use default behavior)
-        author_explicit = attribute_author is not None
-        committer_explicit = attribute_committer is not None
-
-        # Determine effective settings (apply default True if not explicit)
-        effective_author = True if attribute_author is None else attribute_author
-        effective_committer = (
-            True if attribute_committer is None else attribute_committer
-        )
-
-        # Determine commit message prefixing
-        prefix_commit_message = lsr_edits and (
-            attribute_commit_message_author or attribute_commit_message_committer
-        )
-
-        # Determine Co-authored-by trailer
-        commit_message_trailer = ""
-        if lsr_edits and attribute_co_authored_by:
-            model_name = "unknown-model"
-            if coder and hasattr(coder, "main_model") and coder.main_model.name:
-                model_name = coder.main_model.name
-            commit_message_trailer = f"\n\nCo-authored-by: lsr ({model_name}) <lsr@your-username.github.io/lsr>"
-
-        # Determine if author/committer names should be modified
-        # Author modification applies only to lsr edits.
-        # It's used if effective_author is True AND
-        # (co-authored-by is False OR author was explicitly set).
-        use_attribute_author = (
-            lsr_edits
-            and effective_author
-            and (not attribute_co_authored_by or author_explicit)
-        )
-
-        # Committer modification applies regardless of lsr_edits (based on tests).
-        # It's used if effective_committer is True AND
-        # (it's not an lsr edit with co-authored-by OR committer was explicitly set).
-        use_attribute_committer = effective_committer and (
-            not (lsr_edits and attribute_co_authored_by) or committer_explicit
-        )
-
-        if not commit_message:
-            commit_message = "(no commit message provided)"
-
-        if prefix_commit_message:
-            commit_message = "lsr: " + commit_message
-
-        full_commit_message = commit_message + commit_message_trailer
-
-        cmd = ["-m", full_commit_message]
-        if not self.git_commit_verify:
-            cmd.append("--no-verify")
-        if fnames:
-            fnames = [str(self.abs_root_path(fn)) for fn in fnames]
-            for fname in fnames:
-                try:
-                    self.repo.git.add(fname)
-                except ANY_GIT_ERROR as err:
-                    self.io.tool_error(f"Unable to add {fname}: {err}")
-            cmd += ["--"] + fnames
-        else:
-            cmd += ["-a"]
-
-        original_user_name = self.repo.git.config("--get", "user.name")
-        original_committer_name_env = os.environ.get("GIT_COMMITTER_NAME")
-        original_author_name_env = os.environ.get("GIT_AUTHOR_NAME")
-        committer_name = f"{original_user_name} (lsr)"
-
-        try:
-            # Use context managers to handle environment variables
-            with contextlib.ExitStack() as stack:
-                if use_attribute_committer:
-                    stack.enter_context(
-                        set_git_env(
-                            "GIT_COMMITTER_NAME",
-                            committer_name,
-                            original_committer_name_env,
-                        )
-                    )
-                if use_attribute_author:
-                    stack.enter_context(
-                        set_git_env(
-                            "GIT_AUTHOR_NAME", committer_name, original_author_name_env
-                        )
-                    )
-
-                # Perform the commit
-                self.repo.git.commit(cmd)
-                commit_hash = self.get_head_commit_sha(short=True)
-                self.io.tool_output(f"Commit {commit_hash} {commit_message}", bold=True)
-                return commit_hash, commit_message
-
-        except ANY_GIT_ERROR as err:
-            self.io.tool_error(f"Unable to commit: {err}")
-            # No return here, implicitly returns None
+    def add_file(self, path):
+        raise NotImplementedError
 
     def get_rel_repo_dir(self):
+        raise NotImplementedError
+
+    def current_bookmark(self):
+        raise NotImplementedError
+
+    def undo_last_commit(self, commit_hash):
+        """Undo the commit identified by `commit_hash`.
+
+        Raises ValueError with a user-facing message when the operation cannot
+        proceed safely.
+        """
+        raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+    def normalize_path(self, path):
+        orig_path = path
+        res = self.normalized_path.get(orig_path)
+        if res:
+            return res
+
+        if self.use_cwd:
+            cwd = Path.cwd()
+            try:
+                path_obj = Path(path)
+                if path_obj.is_absolute():
+                    path = str(path_obj.relative_to(cwd))
+                else:
+                    abs_path = Path(self.root) / path
+                    path = str(abs_path.relative_to(cwd))
+            except ValueError:
+                path = str(path)
+        else:
+            path = str(
+                Path(PurePosixPath((Path(self.root) / path).relative_to(self.root)))
+            )
+
+        self.normalized_path[orig_path] = path
+        return path
+
+    def refresh_lsr_ignore(self):
+        if not self.lsr_ignore_file:
+            return
+
+        current_time = time.time()
+        if current_time - self.lsr_ignore_last_check < 1:
+            return
+
+        self.lsr_ignore_last_check = current_time
+
+        if not self.lsr_ignore_file.is_file():
+            return
+
+        mtime = self.lsr_ignore_file.stat().st_mtime
+        if mtime != self.lsr_ignore_ts:
+            self.lsr_ignore_ts = mtime
+            self.ignore_file_cache = {}
+            lines = self.lsr_ignore_file.read_text().splitlines()
+            self.lsr_ignore_spec = pathspec.PathSpec.from_lines(
+                pathspec.patterns.GitWildMatchPattern,
+                lines,
+            )
+
+    def ignored_file(self, fname):
+        self.refresh_lsr_ignore()
+
+        if fname in self.ignore_file_cache:
+            return self.ignore_file_cache[fname]
+
+        result = self.ignored_file_raw(fname)
+        self.ignore_file_cache[fname] = result
+        return result
+
+    def ignored_file_raw(self, fname):
+        if self.subtree_only:
+            try:
+                fname_path = Path(self.normalize_path(fname))
+                cwd_path = Path.cwd().resolve().relative_to(Path(self.root).resolve())
+            except ValueError:
+                return True
+
+            if cwd_path not in fname_path.parents and fname_path != cwd_path:
+                return True
+
+        if not self.lsr_ignore_file or not self.lsr_ignore_file.is_file():
+            return False
+
         try:
-            return os.path.relpath(self.repo.git_dir, os.getcwd())
-        except (ValueError, OSError):
-            return self.repo.git_dir
+            fname = self.normalize_path(fname)
+        except ValueError:
+            return True
+
+        return self.lsr_ignore_spec.match_file(fname)
+
+    def path_in_repo(self, path):
+        if not path:
+            return
+
+        tracked_files = set(self.get_tracked_files())
+        normalized = self.normalize_path(path)
+        return normalized in tracked_files
+
+    def abs_root_path(self, path):
+        if self.use_cwd:
+            res = Path.cwd() / path
+        else:
+            res = Path(self.root) / path
+        return utils.safe_abs_path(res)
 
     def get_commit_message(self, diffs, context, user_language=None):
         diffs = "# Diffs:\n" + diffs
@@ -380,7 +358,7 @@ class GitRepo:
 
                 commit_message = model.simple_send_with_retries(messages)
                 if commit_message:
-                    break  # Found a model that could generate the message
+                    break
 
         if not commit_message:
             self.io.tool_error("Failed to generate commit message!")
@@ -392,18 +370,148 @@ class GitRepo:
 
         return commit_message
 
-    def get_diffs(self, fnames=None):
-        # We always want diffs of index and working dir
 
+class GitRepo(BaseRepo):
+    """Git backend implemented with GitPython."""
+
+    vcs = "git"
+
+    def __init__(self, io, root, **kwargs):
+        super().__init__(io, root, **kwargs)
+        self.repo = git.Repo(self.root, odbt=git.GitDB)
+
+    def commit(
+        self, fnames=None, context=None, message=None, lsr_edits=False, coder=None
+    ):
+        if not fnames and not self.repo.is_dirty():
+            return
+
+        diffs = self.get_diffs(fnames)
+        if not diffs:
+            return
+
+        if message:
+            commit_message = message
+        else:
+            user_language = None
+            if coder:
+                user_language = coder.commit_language
+                if not user_language:
+                    user_language = coder.get_user_language()
+            commit_message = self.get_commit_message(diffs, context, user_language)
+
+        if coder and hasattr(coder, "args"):
+            attribute_author = coder.args.attribute_author
+            attribute_committer = coder.args.attribute_committer
+            attribute_commit_message_author = coder.args.attribute_commit_message_author
+            attribute_commit_message_committer = (
+                coder.args.attribute_commit_message_committer
+            )
+            attribute_co_authored_by = coder.args.attribute_co_authored_by
+        else:
+            attribute_author = self.attribute_author
+            attribute_committer = self.attribute_committer
+            attribute_commit_message_author = self.attribute_commit_message_author
+            attribute_commit_message_committer = self.attribute_commit_message_committer
+            attribute_co_authored_by = self.attribute_co_authored_by
+
+        author_explicit = attribute_author is not None
+        committer_explicit = attribute_committer is not None
+
+        effective_author = True if attribute_author is None else attribute_author
+        effective_committer = True if attribute_committer is None else attribute_committer
+
+        prefix_commit_message = lsr_edits and (
+            attribute_commit_message_author or attribute_commit_message_committer
+        )
+
+        commit_message_trailer = ""
+        if lsr_edits and attribute_co_authored_by:
+            model_name = "unknown-model"
+            if coder and hasattr(coder, "main_model") and coder.main_model.name:
+                model_name = coder.main_model.name
+            commit_message_trailer = (
+                f"\n\nCo-authored-by: lsr ({model_name}) <lsr@your-username.github.io/lsr>"
+            )
+
+        use_attribute_author = (
+            lsr_edits
+            and effective_author
+            and (not attribute_co_authored_by or author_explicit)
+        )
+
+        use_attribute_committer = effective_committer and (
+            not (lsr_edits and attribute_co_authored_by) or committer_explicit
+        )
+
+        if not commit_message:
+            commit_message = "(no commit message provided)"
+
+        if prefix_commit_message:
+            commit_message = "lsr: " + commit_message
+
+        full_commit_message = commit_message + commit_message_trailer
+
+        cmd = ["-m", full_commit_message]
+        if not self.commit_verify:
+            cmd.append("--no-verify")
+        if fnames:
+            fnames = [str(self.abs_root_path(fn)) for fn in fnames]
+            for fname in fnames:
+                try:
+                    self.repo.git.add(fname)
+                except ANY_VCS_ERROR as err:
+                    self.io.tool_error(f"Unable to add {fname}: {err}")
+            cmd += ["--"] + fnames
+        else:
+            cmd += ["-a"]
+
+        original_user_name = self.repo.git.config("--get", "user.name")
+        original_committer_name_env = os.environ.get("GIT_COMMITTER_NAME")
+        original_author_name_env = os.environ.get("GIT_AUTHOR_NAME")
+        committer_name = f"{original_user_name} (lsr)"
+
+        try:
+            with contextlib.ExitStack() as stack:
+                if use_attribute_committer:
+                    stack.enter_context(
+                        set_env(
+                            "GIT_COMMITTER_NAME",
+                            committer_name,
+                            original_committer_name_env,
+                        )
+                    )
+                if use_attribute_author:
+                    stack.enter_context(
+                        set_env(
+                            "GIT_AUTHOR_NAME", committer_name, original_author_name_env
+                        )
+                    )
+
+                self.repo.git.commit(cmd)
+                commit_hash = self.get_head_commit_sha(short=True)
+                self.io.tool_output(f"Commit {commit_hash} {commit_message}", bold=True)
+                return commit_hash, commit_message
+
+        except ANY_VCS_ERROR as err:
+            self.io.tool_error(f"Unable to commit: {err}")
+
+    def get_rel_repo_dir(self):
+        try:
+            return os.path.relpath(self.repo.git_dir, os.getcwd())
+        except (ValueError, OSError):
+            return self.repo.git_dir
+
+    def get_diffs(self, fnames=None):
         current_branch_has_commits = False
         try:
             active_branch = self.repo.active_branch
             try:
                 commits = self.repo.iter_commits(active_branch)
                 current_branch_has_commits = any(commits)
-            except ANY_GIT_ERROR:
+            except ANY_VCS_ERROR:
                 pass
-        except (TypeError,) + ANY_GIT_ERROR:
+        except (TypeError,) + ANY_VCS_ERROR:
             pass
 
         if not fnames:
@@ -433,7 +541,7 @@ class GitRepo:
             )
 
             return diffs
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to diff: {err}")
 
     def diff_commits(self, pretty, from_commit, to_commit):
@@ -458,8 +566,8 @@ class GitRepo:
             commit = self.repo.head.commit
         except ValueError:
             commit = None
-        except ANY_GIT_ERROR as err:
-            self.git_repo_error = err
+        except ANY_VCS_ERROR as err:
+            self.vcs_error = err
             self.io.tool_error(f"Unable to list files in git repo: {err}")
             self.io.tool_output("Is your git repo corrupted?")
             return []
@@ -471,15 +579,13 @@ class GitRepo:
             else:
                 try:
                     iterator = commit.tree.traverse()
-                    blob = None  # Initialize blob
+                    blob = None
                     while True:
                         try:
                             blob = next(iterator)
-                            if blob.type == "blob":  # blob is a file
+                            if blob.type == "blob":
                                 files.add(blob.path)
                         except IndexError:
-                            # Handle potential index error during tree traversal
-                            # without relying on potentially unassigned 'blob'
                             self.io.tool_warning(
                                 "GitRepo: Index error encountered while reading git tree object."
                                 " Skipping."
@@ -487,78 +593,24 @@ class GitRepo:
                             continue
                         except StopIteration:
                             break
-                except ANY_GIT_ERROR as err:
-                    self.git_repo_error = err
+                except ANY_VCS_ERROR as err:
+                    self.vcs_error = err
                     self.io.tool_error(f"Unable to list files in git repo: {err}")
                     self.io.tool_output("Is your git repo corrupted?")
                     return []
                 files = set(self.normalize_path(path) for path in files)
                 self.tree_files[commit] = set(files)
 
-        # Add staged files
         index = self.repo.index
         try:
             staged_files = [path for path, _ in index.entries.keys()]
             files.update(self.normalize_path(path) for path in staged_files)
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to read staged files: {err}")
 
         res = [fname for fname in files if not self.ignored_file(fname)]
 
         return res
-
-    def normalize_path(self, path):
-        orig_path = path
-        res = self.normalized_path.get(orig_path)
-        if res:
-            return res
-
-        if self.use_cwd:
-            # 使用当前工作目录作为参考点
-            cwd = Path.cwd()
-            try:
-                # 将路径转换为相对于当前工作目录的路径
-                path_obj = Path(path)
-                if path_obj.is_absolute():
-                    path = str(path_obj.relative_to(cwd))
-                else:
-                    # 如果是相对路径，先转换为绝对路径，再相对于当前工作目录
-                    abs_path = Path(self.root) / path
-                    path = str(abs_path.relative_to(cwd))
-            except ValueError:
-                # 如果路径不在当前工作目录下，保持原样
-                path = str(path)
-        else:
-            # 保持原有逻辑，使用 Git 根目录
-            path = str(
-                Path(PurePosixPath((Path(self.root) / path).relative_to(self.root)))
-            )
-
-        self.normalized_path[orig_path] = path
-        return path
-
-    def refresh_lsr_ignore(self):
-        if not self.lsr_ignore_file:
-            return
-
-        current_time = time.time()
-        if current_time - self.lsr_ignore_last_check < 1:
-            return
-
-        self.lsr_ignore_last_check = current_time
-
-        if not self.lsr_ignore_file.is_file():
-            return
-
-        mtime = self.lsr_ignore_file.stat().st_mtime
-        if mtime != self.lsr_ignore_ts:
-            self.lsr_ignore_ts = mtime
-            self.ignore_file_cache = {}
-            lines = self.lsr_ignore_file.read_text().splitlines()
-            self.lsr_ignore_spec = pathspec.PathSpec.from_lines(
-                pathspec.patterns.GitWildMatchPattern,
-                lines,
-            )
 
     def git_ignored_file(self, path):
         if not self.repo:
@@ -566,75 +618,15 @@ class GitRepo:
         try:
             if self.repo.ignored(path):
                 return True
-        except ANY_GIT_ERROR:
+        except ANY_VCS_ERROR:
             return False
-
-    def ignored_file(self, fname):
-        self.refresh_lsr_ignore()
-
-        if fname in self.ignore_file_cache:
-            return self.ignore_file_cache[fname]
-
-        result = self.ignored_file_raw(fname)
-        self.ignore_file_cache[fname] = result
-        return result
-
-    def ignored_file_raw(self, fname):
-        if self.subtree_only:
-            try:
-                fname_path = Path(self.normalize_path(fname))
-                cwd_path = Path.cwd().resolve().relative_to(Path(self.root).resolve())
-            except ValueError:
-                # Issue #1524
-                # ValueError: 'C:\\dev\\squid-certbot' is not in the subpath of
-                # 'C:\\dev\\squid-certbot'
-                # Clearly, fname is not under cwd... so ignore it
-                return True
-
-            if cwd_path not in fname_path.parents and fname_path != cwd_path:
-                return True
-
-        if not self.lsr_ignore_file or not self.lsr_ignore_file.is_file():
-            return False
-
-        try:
-            fname = self.normalize_path(fname)
-        except ValueError:
-            return True
-
-        return self.lsr_ignore_spec.match_file(fname)
-
-    def path_in_repo(self, path):
-        if not self.repo:
-            return
-        if not path:
-            return
-
-        tracked_files = set(self.get_tracked_files())
-        normalized = self.normalize_path(path)
-        return normalized in tracked_files
-
-    def abs_root_path(self, path):
-        if self.use_cwd:
-            # 使用当前工作目录作为根目录
-            res = Path.cwd() / path
-        else:
-            # 保持原有逻辑，使用 Git 根目录
-            res = Path(self.root) / path
-        return utils.safe_abs_path(res)
 
     def get_dirty_files(self):
-        """
-        Returns a list of all files which are dirty (not committed), either staged or in the working
-        directory.
-        """
         dirty_files = set()
 
-        # Get staged files
         staged_files = self.repo.git.diff("--name-only", "--cached").splitlines()
         dirty_files.update(staged_files)
 
-        # Get unstaged files
         unstaged_files = self.repo.git.diff("--name-only").splitlines()
         dirty_files.update(unstaged_files)
 
@@ -649,7 +641,7 @@ class GitRepo:
     def get_head_commit(self):
         try:
             return self.repo.head.commit
-        except (ValueError,) + ANY_GIT_ERROR:
+        except (ValueError,) + ANY_VCS_ERROR:
             return None
 
     def get_head_commit_sha(self, short=False):
@@ -665,3 +657,497 @@ class GitRepo:
         if not commit:
             return default
         return commit.message
+
+    def add_file(self, path):
+        self.repo.git.add(str(self.abs_root_path(path)))
+
+    def current_bookmark(self):
+        try:
+            return str(self.repo.active_branch)
+        except ANY_VCS_ERROR:
+            return None
+
+    def undo_last_commit(self, commit_hash):
+        last_commit = self.get_head_commit()
+        if not last_commit or not last_commit.parents:
+            raise ValueError("This is the first commit in the repository. Cannot undo.")
+
+        last_commit_hash = self.get_head_commit_sha(short=True)
+        if last_commit_hash != commit_hash:
+            raise ValueError(
+                "The last commit was not made by lsr in this chat session."
+            )
+
+        if len(last_commit.parents) > 1:
+            raise ValueError(
+                f"The last commit {last_commit.hexsha} has more than 1 parent, can't undo."
+            )
+
+        prev_commit = last_commit.parents[0]
+        changed_files_last_commit = [item.a_path for item in last_commit.diff(prev_commit)]
+
+        for fname in changed_files_last_commit:
+            if self.repo.is_dirty(path=fname):
+                raise ValueError(
+                    f"The file {fname} has uncommitted changes. Please stash them before undoing."
+                )
+
+            try:
+                prev_commit.tree[fname]
+            except KeyError:
+                raise ValueError(
+                    f"The file {fname} was not in the repository in the previous commit. Cannot"
+                    " undo safely."
+                )
+
+        local_head = self.repo.git.rev_parse("HEAD")
+        current_branch = self.repo.active_branch.name
+        try:
+            remote_head = self.repo.git.rev_parse(f"origin/{current_branch}")
+            has_origin = True
+        except ANY_VCS_ERROR:
+            has_origin = False
+
+        if has_origin:
+            if local_head == remote_head:
+                raise ValueError(
+                    "The last commit has already been pushed to the origin. Undoing is not"
+                    " possible."
+                )
+
+        unrestored = set()
+        for file_path in changed_files_last_commit:
+            try:
+                self.repo.git.checkout("HEAD~1", file_path)
+            except ANY_VCS_ERROR:
+                unrestored.add(file_path)
+
+        if unrestored:
+            raise ValueError(
+                "Error restoring files, aborting undo."
+                f"\nUnable to restore files: {', '.join(sorted(unrestored))}"
+            )
+
+        self.repo.git.reset("--soft", "HEAD~1")
+
+
+class JjRepo(BaseRepo):
+    """Jujutsu backend for colocated jj+git repositories.
+
+    We treat the working copy parent (@-) as the equivalent of git HEAD and the
+    working copy (@) as the unstaged working tree.  The commit() workflow is:
+        1. describe @ with the message
+        2. jj new  (finalise @ as @-, create a new empty working copy)
+        3. for files not in fnames, restore them from @-- into @ so that @-
+           contains only the requested files.
+    """
+
+    vcs = "jj"
+
+    def _jj(self, *args, check=True, env=None):
+        cmd = ["jj", "--no-pager"] + list(args)
+        res = _run_cmd(cmd, cwd=self.root, check=check, env=env)
+        return res
+
+    def _jj_text(self, *args, check=True, env=None):
+        return self._jj(*args, check=check, env=env).stdout
+
+    def _rev_exists(self, rev):
+        try:
+            self._jj("log", "-r", rev, "--no-graph", "-T", "", check=True)
+            return True
+        except ANY_VCS_ERROR:
+            return False
+
+    def _resolve_commit_id(self, rev, short=False):
+        template = "commit_id.short(7)" if short else "commit_id"
+        return self._jj_text("log", "-r", rev, "--no-graph", "-T", template).strip() or None
+
+    def _resolve_change_id(self, rev):
+        return self._jj_text("log", "-r", rev, "--no-graph", "-T", "change_id").strip() or None
+
+    def _rev_message(self, rev):
+        return self._jj_text("log", "-r", rev, "--no-graph", "-T", "description").strip() or None
+
+    def is_dirty(self, path=None):
+        if path and not self.path_in_repo(path):
+            return True
+
+        cmd = ["diff", "--summary"]
+        if path:
+            cmd.extend(["--", str(path)])
+        try:
+            text = self._jj_text(*cmd)
+            return bool(text.strip())
+        except ANY_VCS_ERROR:
+            return True
+
+    def get_tracked_files(self):
+        try:
+            text = self._jj_text("file", "list", "-r", "@")
+        except ANY_VCS_ERROR as err:
+            self.vcs_error = err
+            self.io.tool_error(f"Unable to list files in jj repo: {err}")
+            return []
+
+        files = set()
+        for line in text.splitlines():
+            line = line.strip()
+            if line:
+                files.add(line)
+
+        files = set(self.normalize_path(path) for path in files)
+        res = [fname for fname in files if not self.ignored_file(fname)]
+        return res
+
+    def get_dirty_files(self):
+        try:
+            text = self._jj_text("diff", "--summary")
+        except ANY_VCS_ERROR as err:
+            self.io.tool_error(f"Unable to list dirty files: {err}")
+            return []
+
+        dirty_files = set()
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # jj diff --summary lines look like: "M path/to/file" or "A path/to/file"
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                dirty_files.add(parts[1])
+        return list(dirty_files)
+
+    def git_ignored_file(self, path):
+        try:
+            res = _run_cmd(
+                ["git", "check-ignore", "-q", str(path)], cwd=self.root, check=False
+            )
+            return res.returncode == 0
+        except ANY_VCS_ERROR:
+            return False
+
+    def add_file(self, path):
+        # jj auto-tracks new files on snapshot; no explicit add needed.
+        pass
+
+    def get_rel_repo_dir(self):
+        jj_dir = Path(self.root) / ".jj"
+        try:
+            return os.path.relpath(str(jj_dir), os.getcwd())
+        except (ValueError, OSError):
+            return str(jj_dir)
+
+    def get_diffs(self, fnames=None):
+        if not self._rev_exists("@-"):
+            # No parent yet; compare working copy to empty tree.
+            from_rev = "root()"
+        else:
+            from_rev = "@-"
+
+        if not fnames:
+            fnames = []
+
+        diffs = ""
+        for fname in fnames:
+            if not self.path_in_repo(fname):
+                diffs += f"Added {fname}\n"
+
+        cmd = ["diff", "--git", "--from", from_rev, "--to", "@"] + list(fnames)
+        try:
+            diffs += self._jj_text(*cmd)
+        except ANY_VCS_ERROR as err:
+            self.io.tool_error(f"Unable to diff: {err}")
+
+        return diffs
+
+    def diff_commits(self, pretty, from_commit, to_commit):
+        args = ["diff", "--git", "--from", from_commit, "--to", to_commit]
+        if pretty:
+            args.append("--color=always")
+        else:
+            args.append("--color=never")
+        return self._jj_text(*args)
+
+    def commit(
+        self, fnames=None, context=None, message=None, lsr_edits=False, coder=None
+    ):
+        if not self.is_dirty():
+            return
+
+        diffs = self.get_diffs(fnames)
+        if not diffs:
+            return
+
+        if message:
+            commit_message = message
+        else:
+            user_language = None
+            if coder:
+                user_language = coder.commit_language
+                if not user_language:
+                    user_language = coder.get_user_language()
+            commit_message = self.get_commit_message(diffs, context, user_language)
+
+        if coder and hasattr(coder, "args"):
+            attribute_author = coder.args.attribute_author
+            attribute_committer = coder.args.attribute_committer
+            attribute_commit_message_author = coder.args.attribute_commit_message_author
+            attribute_commit_message_committer = (
+                coder.args.attribute_commit_message_committer
+            )
+            attribute_co_authored_by = coder.args.attribute_co_authored_by
+        else:
+            attribute_author = self.attribute_author
+            attribute_committer = self.attribute_committer
+            attribute_commit_message_author = self.attribute_commit_message_author
+            attribute_commit_message_committer = self.attribute_commit_message_committer
+            attribute_co_authored_by = self.attribute_co_authored_by
+
+        author_explicit = attribute_author is not None
+        committer_explicit = attribute_committer is not None
+
+        effective_author = True if attribute_author is None else attribute_author
+        effective_committer = True if attribute_committer is None else attribute_committer
+
+        prefix_commit_message = lsr_edits and (
+            attribute_commit_message_author or attribute_commit_message_committer
+        )
+
+        commit_message_trailer = ""
+        if lsr_edits and attribute_co_authored_by:
+            model_name = "unknown-model"
+            if coder and hasattr(coder, "main_model") and coder.main_model.name:
+                model_name = coder.main_model.name
+            commit_message_trailer = (
+                f"\n\nCo-authored-by: lsr ({model_name}) <lsr@your-username.github.io/lsr>"
+            )
+
+        use_attribute_author = (
+            lsr_edits
+            and effective_author
+            and (not attribute_co_authored_by or author_explicit)
+        )
+
+        use_attribute_committer = effective_committer and (
+            not (lsr_edits and attribute_co_authored_by) or committer_explicit
+        )
+
+        if not commit_message:
+            commit_message = "(no commit message provided)"
+
+        if prefix_commit_message:
+            commit_message = "lsr: " + commit_message
+
+        full_commit_message = commit_message + commit_message_trailer
+
+        original_user_name = None
+        try:
+            original_user_name = _run_cmd(
+                ["git", "config", "--get", "user.name"], cwd=self.root, check=True
+            ).stdout.strip()
+        except ANY_VCS_ERROR:
+            pass
+
+        committer_name = f"{original_user_name} (lsr)" if original_user_name else "lsr"
+
+        env = dict(os.environ)
+        if use_attribute_committer:
+            env["GIT_COMMITTER_NAME"] = committer_name
+        if use_attribute_author:
+            env["GIT_AUTHOR_NAME"] = committer_name
+
+        try:
+            self._jj("describe", "-m", full_commit_message, env=env)
+
+            if fnames:
+                selected = [str(self.normalize_path(f)) for f in fnames]
+                # Split the working copy so selected files stay in the commit
+                # and remaining changes move to the new working copy.
+                split_env = dict(env)
+                split_env.setdefault("JJ_EDITOR", "true")
+                split_env.setdefault("EDITOR", "true")
+                self._jj("split", "-r", "@", "--", *selected, env=split_env)
+            else:
+                self._jj("new", env=env)
+
+            commit_hash = self.get_head_commit_sha(short=True)
+            self.io.tool_output(f"Commit {commit_hash} {commit_message}", bold=True)
+            return commit_hash, commit_message
+
+        except ANY_VCS_ERROR as err:
+            self.io.tool_error(f"Unable to commit: {err}")
+
+    def get_head_commit(self):
+        if not self._rev_exists("@-"):
+            return None
+        return JjCommit(self, "@-")
+
+    def get_head_commit_sha(self, short=False):
+        if not self._rev_exists("@-"):
+            return None
+        return self._resolve_commit_id("@-", short=short)
+
+    def get_head_commit_message(self, default=None):
+        if not self._rev_exists("@-"):
+            return default
+        return self._rev_message("@-") or default
+
+    def current_bookmark(self):
+        try:
+            text = self._jj_text(
+                "bookmark", "list", "-r", "@-", "-T", "separate(\" \", name)"
+            ).strip()
+            if text:
+                return text.split()[0]
+        except ANY_VCS_ERROR:
+            pass
+        return None
+
+    def undo_last_commit(self, commit_hash):
+        if not self._rev_exists("@-"):
+            raise ValueError("This is the first commit in the repository. Cannot undo.")
+
+        last_commit_hash = self.get_head_commit_sha(short=True)
+        if last_commit_hash != commit_hash:
+            raise ValueError(
+                "The last commit was not made by lsr in this chat session."
+            )
+
+        last_commit = self.get_head_commit()
+        if len(last_commit.parents) > 1:
+            raise ValueError(
+                f"The last commit {last_commit.hexsha} has more than 1 parent, can't undo."
+            )
+
+        prev_commit = last_commit.parents[0] if last_commit.parents else None
+        changed_files_last_commit = [
+            item.a_path for item in last_commit.diff(prev_commit)
+        ]
+
+        for fname in changed_files_last_commit:
+            if self.is_dirty(path=fname):
+                raise ValueError(
+                    f"The file {fname} has uncommitted changes. Please stash them before undoing."
+                )
+
+        # Colocated repos: use git to detect whether the change was already pushed.
+        try:
+            local_head = self._resolve_commit_id("@-", short=False)
+            branch_res = _run_cmd(
+                ["git", "branch", "--show-current"], cwd=self.root, check=False
+            )
+            current_branch = branch_res.stdout.strip()
+            if current_branch:
+                remote_res = _run_cmd(
+                    ["git", "rev-parse", f"origin/{current_branch}"],
+                    cwd=self.root,
+                    check=False,
+                )
+                remote_head = remote_res.stdout.strip()
+                if remote_head and local_head == remote_head:
+                    raise ValueError(
+                        "The last commit has already been pushed to the origin. Undoing is not"
+                        " possible."
+                    )
+        except ANY_VCS_ERROR:
+            pass
+
+        unrestored = set()
+        for file_path in changed_files_last_commit:
+            try:
+                self._jj("restore", "--from", "@--", file_path)
+            except ANY_VCS_ERROR:
+                unrestored.add(file_path)
+
+        if unrestored:
+            raise ValueError(
+                "Error restoring files, aborting undo."
+                f"\nUnable to restore files: {', '.join(sorted(unrestored))}"
+            )
+
+        self._jj("abandon", "@-")
+
+
+class JjCommit:
+    """Lightweight stand-in for a git commit object used by cmd_undo."""
+
+    def __init__(self, repo, rev):
+        self.repo = repo
+        self.rev = rev
+        self.hexsha = repo._resolve_commit_id(rev, short=False)
+        self.message = repo._rev_message(rev) or ""
+        self.parents = []
+
+        try:
+            parent_id = repo._resolve_commit_id(f"{rev}-", short=False)
+            if parent_id:
+                self.parents.append(JjCommit(repo, f"{rev}-"))
+        except ANY_VCS_ERROR:
+            pass
+
+    def diff(self, other):
+        """Return a list of simple objects with an ``a_path`` attribute."""
+        if other is None:
+            other_rev = "root()"
+        else:
+            other_rev = other.rev
+
+        try:
+            text = self.repo._jj_text(
+                "diff", "--summary", "--from", other_rev, "--to", self.rev
+            )
+        except ANY_VCS_ERROR:
+            return []
+
+        diffs = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                path = parts[1]
+                diffs.append(type("Diff", (), {"a_path": path})())
+        return diffs
+
+
+class Repo:
+    """Factory that returns a JjRepo when a colocated jj repo exists, otherwise GitRepo."""
+
+    @staticmethod
+    def create(
+        io,
+        fnames,
+        git_dname,
+        lsr_ignore_file=None,
+        models=None,
+        attribute_author=True,
+        attribute_committer=True,
+        attribute_commit_message_author=False,
+        attribute_commit_message_committer=False,
+        commit_prompt=None,
+        subtree_only=False,
+        git_commit_verify=True,
+        attribute_co_authored_by=False,
+        use_cwd=True,
+    ):
+        vcs, root = find_repo_root(fnames, git_dname)
+
+        kwargs = dict(
+            lsr_ignore_file=lsr_ignore_file,
+            models=models,
+            attribute_author=attribute_author,
+            attribute_committer=attribute_committer,
+            attribute_commit_message_author=attribute_commit_message_author,
+            attribute_commit_message_committer=attribute_commit_message_committer,
+            commit_prompt=commit_prompt,
+            subtree_only=subtree_only,
+            commit_verify=git_commit_verify,
+            attribute_co_authored_by=attribute_co_authored_by,
+            use_cwd=use_cwd,
+        )
+
+        if vcs == "jj":
+            return JjRepo(io, root, **kwargs)
+        return GitRepo(io, root, **kwargs)

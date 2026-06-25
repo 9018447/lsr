@@ -19,7 +19,7 @@ class DotEnvFormatter(argparse.HelpFormatter):
         return f"""
 ##########################################################
 # Sample lsr .env file.
-# Place at the root of your git repo.
+# Place at the root of your repo.
 # Or use `lsr --env <fname>` to specify.
 ##########################################################
 
@@ -93,7 +93,7 @@ class YamlHelpFormatter(argparse.HelpFormatter):
 ##########################################################
 # Sample .lsr.conf.yml
 # This file lists *all* the valid configuration entries.
-# Place in your home dir, or at the root of your git repo.
+# Place in your home dir, or at the root of your repo.
 ##########################################################
 
 # Note: You can only put OpenAI and Anthropic API keys in the YAML

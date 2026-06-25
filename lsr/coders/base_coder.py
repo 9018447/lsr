@@ -38,6 +38,7 @@ from lsr.history import ChatSummary
 from lsr.io import ConfirmGroup, InputOutput
 from lsr.linter import Linter
 from lsr.llm import litellm
+from lsr.lsp_manager import LspManager
 from lsr.models import RETRY_TIMEOUT
 from lsr.reasoning_tags import (
     REASONING_TAG,
@@ -45,7 +46,7 @@ from lsr.reasoning_tags import (
     remove_reasoning_content,
     replace_reasoning_tags,
 )
-from lsr.repo import ANY_GIT_ERROR, GitRepo
+from lsr.repo import ANY_VCS_ERROR, Repo
 
 try:
     from lsr.repomap import RepoMap
@@ -58,7 +59,6 @@ from lsr.waiting import WaitingSpinner
 
 from ..dump import dump  # noqa: F401
 from .chat_chunks import ChatChunks
-
 
 _URL_PATTERN = re.compile(r'(https?://[^\s/$.?#].[^\s"]*)')
 _URL_PATTERN_NO_COMMA = re.compile(r'(https?://[^\s/$.?#].[^\s"]*[^\s,.])')
@@ -170,11 +170,7 @@ class Coder:
             # confused the new LLM. It may try and imitate it, disobeying
             # the system prompt.
             done_messages = from_coder.done_messages
-            if (
-                edit_format != from_coder.edit_format
-                and done_messages
-                and summarize_from_coder
-            ):
+            if edit_format != from_coder.edit_format and done_messages and summarize_from_coder:
                 try:
                     done_messages = from_coder.summarizer.summarize_all(done_messages)
                 except ValueError:
@@ -186,9 +182,7 @@ class Coder:
             # Bring along context from the old Coder
             update = dict(
                 fnames=list(from_coder.abs_fnames),
-                read_only_fnames=list(
-                    from_coder.abs_read_only_fnames
-                ),  # Copy read-only files
+                read_only_fnames=list(from_coder.abs_read_only_fnames),  # Copy read-only files
                 done_messages=done_messages,
                 cur_messages=from_coder.cur_messages,
                 lsr_commit_hashes=from_coder.lsr_commit_hashes,
@@ -271,14 +265,14 @@ class Coder:
             rel_repo_dir = self.repo.get_rel_repo_dir()
             num_files = len(self.repo.get_tracked_files())
 
-            lines.append(f"Git repo: {rel_repo_dir} with {num_files:,} files")
+            lines.append(f"VCS repo: {rel_repo_dir} with {num_files:,} files")
             if num_files > 1000:
                 lines.append(
                     "Warning: For large repos, consider using --subtree-only and .lsrignore"
                 )
                 lines.append(f"See: {urls.large_repos}")
         else:
-            lines.append("Git repo: none")
+            lines.append("VCS repo: none")
 
         # Repo-map
         if self.repo_map:
@@ -309,9 +303,7 @@ class Coder:
             lines.append("Restored previous conversation history.")
 
         if self.io.multiline_mode:
-            lines.append(
-                "Multiline mode: Enabled. Enter inserts newline, Alt-Enter submits text"
-            )
+            lines.append("Multiline mode: Enabled. Enter inserts newline, Alt-Enter submits text")
 
         return lines
 
@@ -436,9 +428,7 @@ class Coder:
         self.main_model = main_model
         # Set the reasoning tag name based on model settings or default
         self.reasoning_tag_name = (
-            self.main_model.reasoning_tag
-            if self.main_model.reasoning_tag
-            else REASONING_TAG
+            self.main_model.reasoning_tag if self.main_model.reasoning_tag else REASONING_TAG
         )
 
         self.stream = stream and main_model.streaming
@@ -454,7 +444,7 @@ class Coder:
         self.repo = repo
         if use_git and self.repo is None:
             try:
-                self.repo = GitRepo(
+                self.repo = Repo.create(
                     self.io,
                     fnames,
                     None,
@@ -468,11 +458,7 @@ class Coder:
 
         for fname in fnames:
             fname = Path(fname)
-            if (
-                self.repo
-                and self.repo.git_ignored_file(fname)
-                and not self.add_gitignore_files
-            ):
+            if self.repo and self.repo.git_ignored_file(fname) and not self.add_gitignore_files:
                 self.io.tool_warning(f"Skipping {fname} that matches gitignore spec.")
                 continue
 
@@ -499,6 +485,19 @@ class Coder:
         if not self.repo:
             self.root = utils.find_common_root(self.abs_fnames)
 
+        if self.commands.lsp_manager is None and self.commands.args is not None:
+            lsp_enabled = getattr(self.commands.args, "disable_lsp", False) is False
+            server_overrides = {}
+            for lang in ("latex", "typst", "markdown"):
+                override = getattr(self.commands.args, f"lsp_server_{lang}", None)
+                if override:
+                    server_overrides[lang] = override
+            self.commands.lsp_manager = LspManager(
+                workspace_root=self.root,
+                enabled=lsp_enabled,
+                server_overrides=server_overrides,
+            )
+
         if read_only_fnames:
             self.abs_read_only_fnames = set()
             for fname in read_only_fnames:
@@ -506,9 +505,7 @@ class Coder:
                 if os.path.exists(abs_fname):
                     self.abs_read_only_fnames.add(abs_fname)
                 else:
-                    self.io.tool_warning(
-                        f"Error: Read-only file {fname} does not exist. Skipping."
-                    )
+                    self.io.tool_warning(f"Error: Read-only file {fname} does not exist. Skipping.")
 
         if map_tokens is None:
             use_repo_map = main_model.use_repo_map
@@ -518,9 +515,7 @@ class Coder:
 
         max_inp_tokens = self.main_model.info.get("max_input_tokens") or 0
 
-        has_map_prompt = (
-            hasattr(self, "gpt_prompts") and self.gpt_prompts.repo_content_prefix
-        )
+        has_map_prompt = hasattr(self, "gpt_prompts") and self.gpt_prompts.repo_content_prefix
 
         if use_repo_map and self.repo and has_map_prompt and RepoMap is not None:
             self.repo_map = RepoMap(
@@ -581,7 +576,12 @@ class Coder:
         for i, line in enumerate(lines):
             if i == 0:
                 content.append(line, style=f"bold {Mocha.LAVENDER}")
-            elif line.startswith("Model") or line.startswith("Main model") or line.startswith("Editor model") or line.startswith("Weak model"):
+            elif (
+                line.startswith("Model")
+                or line.startswith("Main model")
+                or line.startswith("Editor model")
+                or line.startswith("Weak model")
+            ):
                 content.append(line, style=Mocha.MAUVE)
             elif line.startswith("Git repo"):
                 content.append(line, style=Mocha.GREEN)
@@ -606,7 +606,6 @@ class Coder:
             padding=(1, 2),
         )
         self.io.console.print(panel)
-
 
     def add_rel_fname(self, rel_fname):
         self.abs_fnames.add(self.abs_root_path(rel_fname))
@@ -680,10 +679,7 @@ class Coder:
         lines = all_content.splitlines()
         good = False
         for fence_open, fence_close in self.fences:
-            if any(
-                line.startswith(fence_open) or line.startswith(fence_close)
-                for line in lines
-            ):
+            if any(line.startswith(fence_open) or line.startswith(fence_close) for line in lines):
                 continue
             good = True
             break
@@ -712,9 +708,7 @@ class Coder:
 
         parts = []
         for fname, content, relative_fname in file_entries:
-            parts.append(
-                f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
-            )
+            parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
 
         return "".join(parts)
 
@@ -729,9 +723,7 @@ class Coder:
 
         parts = []
         for content, relative_fname in file_entries:
-            parts.append(
-                f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n"
-            )
+            parts.append(f"\n{relative_fname}\n{self.fence[0]}\n{content}{self.fence[1]}\n")
 
         return "".join(parts)
 
@@ -885,14 +877,12 @@ class Coder:
 
     def get_images_message(self, fnames):
         supports_images = self.main_model.info.get("supports_vision")
-        supports_pdfs = self.main_model.info.get(
-            "supports_pdf_input"
-        ) or self.main_model.info.get("max_pdf_size_mb")
+        supports_pdfs = self.main_model.info.get("supports_pdf_input") or self.main_model.info.get(
+            "max_pdf_size_mb"
+        )
 
         # https://github.com/BerriAI/litellm/pull/6928
-        supports_pdfs = (
-            supports_pdfs or "claude-3-5-sonnet-20241022" in self.main_model.name
-        )
+        supports_pdfs = supports_pdfs or "claude-3-5-sonnet-20241022" in self.main_model.name
 
         if not (supports_images or supports_pdfs):
             return None
@@ -965,35 +955,34 @@ class Coder:
 
     def get_input(self):
         inchat_files = self.get_inchat_relative_files()
-        read_only_files = [
-            self.get_rel_fname(fname) for fname in self.abs_read_only_fnames
-        ]
+        read_only_files = [self.get_rel_fname(fname) for fname in self.abs_read_only_fnames]
         all_files = sorted(set(inchat_files + read_only_files))
-        edit_format = (
-            "" if self.edit_format == self.main_model.edit_format else self.edit_format
-        )
+        edit_format = "" if self.edit_format == self.main_model.edit_format else self.edit_format
 
         # Show status bar before input
-        if hasattr(self.io, 'status_bar') and self.io.status_bar:
-            # Get git branch if available
+        if hasattr(self.io, "status_bar") and self.io.status_bar:
+            # Get branch/bookmark if available
             git_branch = None
-            if self.repo and hasattr(self.repo, 'repo'):
+            if self.repo:
                 try:
-                    git_branch = str(self.repo.repo.active_branch)
+                    if self.repo.vcs == "jj":
+                        git_branch = self.repo.current_bookmark()
+                    else:
+                        git_branch = str(self.repo.repo.active_branch)
                 except Exception:
                     pass
-            
+
             # Build context for status bar
             max_tokens = 0
             if self.main_model and self.main_model.info:
                 max_tokens = self.main_model.info.get("max_input_tokens") or 0
             status_context = {
-                'model': self.main_model.name if self.main_model else 'unknown',
-                'files': list(self.abs_fnames),
-                'tokens': self.total_tokens_sent + self.total_tokens_received,
-                'max_tokens': max_tokens,
-                'edit_format': edit_format or self.edit_format or 'ask',
-                'git_branch': git_branch,
+                "model": self.main_model.name if self.main_model else "unknown",
+                "files": list(self.abs_fnames),
+                "tokens": self.total_tokens_sent + self.total_tokens_received,
+                "max_tokens": max_tokens,
+                "edit_format": edit_format or self.edit_format or "ask",
+                "git_branch": git_branch,
             }
             self.io.status_bar.render(status_context)
 
@@ -1031,10 +1020,7 @@ class Coder:
             list(self.send_message(message))
 
             # Extract and persist plan when in plan mode
-            if (
-                getattr(self, "edit_format", None) == "plan"
-                and self.partial_response_content
-            ):
+            if getattr(self, "edit_format", None) == "plan" and self.partial_response_content:
                 content = self.partial_response_content
                 if "## Plan:" in content or "Type `/code` to execute" in content:
                     self.current_plan = content
@@ -1047,18 +1033,14 @@ class Coder:
                             f"Type `/code` to execute, or `/plan list` to see all plans."
                         )
                     except Exception as exc:
-                        self.io.tool_warning(
-                            f"Plan saved in memory, but disk write failed: {exc}"
-                        )
+                        self.io.tool_warning(f"Plan saved in memory, but disk write failed: {exc}")
                         self.io.tool_output("Type `/code` to execute it.")
 
             if not self.reflected_message:
                 break
 
             if self.num_reflections >= self.max_reflections:
-                self.io.tool_warning(
-                    f"Only {self.max_reflections} reflections allowed, stopping."
-                )
+                self.io.tool_warning(f"Only {self.max_reflections} reflections allowed, stopping.")
                 return
 
             self.num_reflections += 1
@@ -1087,9 +1069,7 @@ class Coder:
             return inp
 
         # Exclude double quotes from the matched URL characters
-        urls = list(
-            set(_URL_PATTERN_NO_COMMA.findall(inp))
-        )  # Use set to remove duplicates
+        urls = list(set(_URL_PATTERN_NO_COMMA.findall(inp)))  # Use set to remove duplicates
         group = ConfirmGroup(urls)
         for url in urls:
             if url not in self.rejected_urls:
@@ -1134,9 +1114,7 @@ class Coder:
     def summarize_worker(self):
         self.summarizing_messages = list(self.done_messages)
         try:
-            self.summarized_done_messages = self.summarizer.summarize(
-                self.summarizing_messages
-            )
+            self.summarized_done_messages = self.summarizer.summarize(self.summarizing_messages)
         except ValueError as err:
             self.io.tool_warning(err.args[0])
 
@@ -1266,7 +1244,7 @@ class Coder:
         platform_text += f"- Current date: {dt}\n"
 
         if self.repo:
-            platform_text += "- The user is operating inside a git repository\n"
+            platform_text += "- The user is operating inside a VCS repository\n"
 
         if self.lint_cmds:
             if self.auto_lint:
@@ -1284,7 +1262,9 @@ class Coder:
 
         if self.test_cmd:
             if self.auto_test:
-                platform_text += "- The user's pre-commit runs this test command, don't suggest running them: "
+                platform_text += (
+                    "- The user's pre-commit runs this test command, don't suggest running them: "
+                )
             else:
                 platform_text += "- The user prefers this test command: "
             platform_text += self.test_cmd + "\n"
@@ -1313,7 +1293,7 @@ class Coder:
             ):
                 final_reminders.append(
                     "Always reply to the user in Simplified Chinese (简体中文).\n"
-                    "When writing or editing LaTeX content, match the original language: "
+                    "When writing or editing document content, match the original language: "
                     "if the original is English, use academic English; "
                     "if the original is Chinese, use academic Chinese (学术中文).\n"
                 )
@@ -1323,17 +1303,11 @@ class Coder:
         platform_text = self.get_platform_info()
 
         if self.suggest_shell_commands:
-            shell_cmd_prompt = self.gpt_prompts.shell_cmd_prompt.format(
-                platform=platform_text
-            )
-            shell_cmd_reminder = self.gpt_prompts.shell_cmd_reminder.format(
-                platform=platform_text
-            )
+            shell_cmd_prompt = self.gpt_prompts.shell_cmd_prompt.format(platform=platform_text)
+            shell_cmd_reminder = self.gpt_prompts.shell_cmd_reminder.format(platform=platform_text)
             rename_with_shell = self.gpt_prompts.rename_with_shell
         else:
-            shell_cmd_prompt = self.gpt_prompts.no_shell_cmd_prompt.format(
-                platform=platform_text
-            )
+            shell_cmd_prompt = self.gpt_prompts.no_shell_cmd_prompt.format(platform=platform_text)
             shell_cmd_reminder = self.gpt_prompts.no_shell_cmd_reminder.format(
                 platform=platform_text
             )
@@ -1345,7 +1319,9 @@ class Coder:
             language = "the same language they are using"  # Default if no specific lang detected
 
         if self.fence[0] == "`" * 4:
-            quad_backtick_reminder = "\nIMPORTANT: Use *quadruple* backticks ```` as fences, not triple backticks!\n"
+            quad_backtick_reminder = (
+                "\nIMPORTANT: Use *quadruple* backticks ```` as fences, not triple backticks!\n"
+            )
         else:
             quad_backtick_reminder = ""
 
@@ -1374,17 +1350,11 @@ class Coder:
             main_sys = self.gpt_prompts.scientific_writing_preamble + "\n\n" + main_sys
 
         # Inject current plan context when not in plan mode
-        if (
-            getattr(self, "current_plan", None)
-            and getattr(self, "edit_format", None) != "plan"
-        ):
+        if getattr(self, "current_plan", None) and getattr(self, "edit_format", None) != "plan":
             plan_summary = self.current_plan[:2000]
             if len(self.current_plan) > 2000:
                 plan_summary += "\n... (plan truncated)"
-            main_sys += (
-                "\n\n## ACTIVE PLAN\nFollow this approved plan closely:\n"
-                + plan_summary
-            )
+            main_sys += "\n\n## ACTIVE PLAN\nFollow this approved plan closely:\n" + plan_summary
 
         if self.main_model.system_prompt_prefix:
             main_sys = self.main_model.system_prompt_prefix + "\n" + main_sys
@@ -1480,9 +1450,7 @@ class Coder:
         ):
             if self.main_model.reminder == "sys":
                 chunks.reminder = reminder_message
-            elif (
-                self.main_model.reminder == "user" and final and final["role"] == "user"
-            ):
+            elif self.main_model.reminder == "user" and final and final["role"] == "user":
                 # stuff it into the user message
                 new_content = (
                     final["content"]
@@ -1548,9 +1516,7 @@ class Coder:
                 ) or getattr(completion.usage, "cache_read_input_tokens", 0)
 
                 if self.verbose:
-                    self.io.tool_output(
-                        f"Warmed {format_tokens(cache_hit_tokens)} cached tokens."
-                    )
+                    self.io.tool_output(f"Warmed {format_tokens(cache_hit_tokens)} cached tokens.")
 
         self.cache_warming_thread = threading.Timer(0, warm_cache_worker)
         self.cache_warming_thread.daemon = True
@@ -1561,9 +1527,7 @@ class Coder:
     def check_tokens(self, messages):
         """Check if the messages will fit within the model's token limits."""
         input_tokens = self.main_model.token_count(messages)
-        self._cached_prompt_tokens = (
-            input_tokens  # Cache for calculate_and_show_tokens_and_cost
-        )
+        self._cached_prompt_tokens = input_tokens  # Cache for calculate_and_show_tokens_and_cost
         max_input_tokens = self.main_model.info.get("max_input_tokens") or 0
 
         if max_input_tokens and input_tokens >= max_input_tokens:
@@ -1662,9 +1626,7 @@ class Coder:
                         exhausted = True
                         break
 
-                    self.multi_response_content = (
-                        self.get_multi_response_content_in_progress()
-                    )
+                    self.multi_response_content = self.get_multi_response_content_in_progress()
 
                     if messages[-1]["role"] == "assistant":
                         messages[-1]["content"] = self.multi_response_content
@@ -1678,9 +1640,7 @@ class Coder:
                         )
                 except Exception as err:
                     self.mdstream = None
-                    lines = traceback.format_exception(
-                        type(err), err, err.__traceback__
-                    )
+                    lines = traceback.format_exception(type(err), err, err.__traceback__)
                     self.io.tool_warning("".join(lines))
                     self.io.tool_error(str(err))
                     return
@@ -1692,9 +1652,7 @@ class Coder:
             # Ensure any waiting spinner is stopped
             self._stop_waiting_spinner()
 
-            self.partial_response_content = self.get_multi_response_content_in_progress(
-                True
-            )
+            self.partial_response_content = self.get_multi_response_content_in_progress(True)
             self.remove_reasoning_content()
             self.multi_response_content = ""
 
@@ -1767,9 +1725,7 @@ class Coder:
             self.lsr_edited_files.update(edited)
             saved_message = self.auto_commit(edited)
 
-            if not saved_message and hasattr(
-                self.gpt_prompts, "files_content_gpt_edits_no_repo"
-            ):
+            if not saved_message and hasattr(self.gpt_prompts, "files_content_gpt_edits_no_repo"):
                 saved_message = self.gpt_prompts.files_content_gpt_edits_no_repo
 
             self.move_back_cur_messages(saved_message)
@@ -1812,9 +1768,7 @@ class Coder:
             output_tokens = self.main_model.token_count(self.partial_response_content)
         max_output_tokens = self.main_model.info.get("max_output_tokens") or 0
 
-        input_tokens = self.main_model.token_count(
-            self.format_messages().all_messages()
-        )
+        input_tokens = self.main_model.token_count(self.format_messages().all_messages())
         max_input_tokens = self.main_model.info.get("max_input_tokens") or 0
 
         total_tokens = input_tokens + output_tokens
@@ -1838,9 +1792,7 @@ class Coder:
         res.append("Token counts below are approximate.")
         res.append("")
         res.append(f"Input tokens: ~{input_tokens:,} of {max_input_tokens:,}{inp_err}")
-        res.append(
-            f"Output tokens: ~{output_tokens:,} of {max_output_tokens:,}{out_err}"
-        )
+        res.append(f"Output tokens: ~{output_tokens:,} of {max_output_tokens:,}{out_err}")
         res.append(f"Total tokens: ~{total_tokens:,} of {max_input_tokens:,}{tot_err}")
 
         if output_tokens >= max_output_tokens:
@@ -1885,9 +1837,7 @@ class Coder:
 
     def add_assistant_reply_to_cur_messages(self):
         if self.partial_response_content:
-            self.cur_messages += [
-                dict(role="assistant", content=self.partial_response_content)
-            ]
+            self.cur_messages += [dict(role="assistant", content=self.partial_response_content)]
         if self.partial_response_function_call:
             self.cur_messages += [
                 dict(
@@ -1914,11 +1864,8 @@ class Coder:
             addable_rel_fnames = self.get_addable_relative_files()
 
             # Get basenames of files already in chat or read-only
-            existing_basenames = {
-                os.path.basename(f) for f in self.get_inchat_relative_files()
-            } | {
-                os.path.basename(self.get_rel_fname(f))
-                for f in self.abs_read_only_fnames
+            existing_basenames = {os.path.basename(f) for f in self.get_inchat_relative_files()} | {
+                os.path.basename(self.get_rel_fname(f)) for f in self.abs_read_only_fnames
             }
 
         mentioned_rel_fnames = set()
@@ -1932,13 +1879,7 @@ class Coder:
             fname = os.path.basename(rel_fname)
 
             # Don't add basenames that could be plain words like "run" or "make"
-            if (
-                "/" in fname
-                or "\\" in fname
-                or "." in fname
-                or "_" in fname
-                or "-" in fname
-            ):
+            if "/" in fname or "\\" in fname or "." in fname or "_" in fname or "-" in fname:
                 if fname not in fname_to_rel_fnames:
                     fname_to_rel_fnames[fname] = []
                 fname_to_rel_fnames[fname].append(rel_fname)
@@ -2166,16 +2107,14 @@ class Coder:
                     sys.stdout.write(text)
                 except UnicodeEncodeError:
                     # Safely encode and decode the text
-                    safe_text = text.encode(
-                        sys.stdout.encoding, errors="backslashreplace"
-                    ).decode(sys.stdout.encoding)
+                    safe_text = text.encode(sys.stdout.encoding, errors="backslashreplace").decode(
+                        sys.stdout.encoding
+                    )
                     sys.stdout.write(safe_text)
                 sys.stdout.flush()
                 yield text
         if not received_content:
-            self.io.tool_warning(
-                "Empty response received from LLM. Check your provider account?"
-            )
+            self.io.tool_warning("Empty response received from LLM. Check your provider account?")
 
     def live_incremental_response(self, final):
         show_resp = self.render_incremental_response(final)
@@ -2205,12 +2144,10 @@ class Coder:
         if completion and hasattr(completion, "usage") and completion.usage is not None:
             prompt_tokens = completion.usage.prompt_tokens
             completion_tokens = completion.usage.completion_tokens
-            cache_hit_tokens = getattr(
-                completion.usage, "prompt_cache_hit_tokens", 0
-            ) or getattr(completion.usage, "cache_read_input_tokens", 0)
-            cache_write_tokens = getattr(
-                completion.usage, "cache_creation_input_tokens", 0
+            cache_hit_tokens = getattr(completion.usage, "prompt_cache_hit_tokens", 0) or getattr(
+                completion.usage, "cache_read_input_tokens", 0
             )
+            cache_write_tokens = getattr(completion.usage, "cache_creation_input_tokens", 0)
 
             if hasattr(completion.usage, "cache_read_input_tokens") or hasattr(
                 completion.usage, "cache_creation_input_tokens"
@@ -2222,17 +2159,12 @@ class Coder:
 
         else:
             # Use cached token count from check_tokens if available
-            if (
-                hasattr(self, "_cached_prompt_tokens")
-                and self._cached_prompt_tokens is not None
-            ):
+            if hasattr(self, "_cached_prompt_tokens") and self._cached_prompt_tokens is not None:
                 prompt_tokens = self._cached_prompt_tokens
                 self._cached_prompt_tokens = None
             else:
                 prompt_tokens = self.main_model.token_count(messages)
-            completion_tokens = self.main_model.token_count(
-                self.partial_response_content
-            )
+            completion_tokens = self.main_model.token_count(self.partial_response_content)
             self.message_tokens_sent += prompt_tokens
 
         self.message_tokens_received += completion_tokens
@@ -2378,9 +2310,7 @@ class Coder:
     def get_addable_relative_files(self):
         all_files = set(self.get_all_relative_files())
         inchat_files = set(self.get_inchat_relative_files())
-        read_only_files = set(
-            self.get_rel_fname(fname) for fname in self.abs_read_only_fnames
-        )
+        read_only_files = set(self.get_rel_fname(fname) for fname in self.abs_read_only_fnames)
         return all_files - inchat_files - read_only_files
 
     def check_for_dirty_commit(self, path):
@@ -2414,9 +2344,7 @@ class Coder:
             return True
 
         if self.repo and self.repo.git_ignored_file(path):
-            self.io.tool_warning(
-                f"Skipping edits to {path} that matches gitignore spec."
-            )
+            self.io.tool_warning(f"Skipping edits to {path} that matches gitignore spec.")
             return
 
         if not Path(full_path).exists():
@@ -2433,7 +2361,7 @@ class Coder:
                 # actually already part of the repo.
                 # But let's only add if we need to, just to be safe.
                 if need_to_add and self.auto_commits:
-                    self.repo.repo.git.add(full_path)
+                    self.repo.add_file(full_path)
 
             self.abs_fnames.add(full_path)
             self.check_added_files()
@@ -2447,7 +2375,7 @@ class Coder:
             return
 
         if need_to_add and self.auto_commits:
-            self.repo.repo.git.add(full_path)
+            self.repo.add_file(full_path)
 
         self.abs_fnames.add(full_path)
         self.check_added_files()
@@ -2478,9 +2406,7 @@ class Coder:
         if tokens < warn_number_of_tokens:
             return
 
-        self.io.tool_warning(
-            "Warning: it's best to only add files that need changes to the chat."
-        )
+        self.io.tool_warning("Warning: it's best to only add files that need changes to the chat.")
         self.io.tool_warning(urls.edit_errors)
         self.warning_given = True
 
@@ -2533,7 +2459,7 @@ class Coder:
             self.reflected_message = str(err)
             return edited
 
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(str(err))
             return edited
         except Exception as err:
@@ -2603,9 +2529,7 @@ class Coder:
                 edited = [f for f in edited if self.repo.path_in_repo(f)]
             if not edited:
                 return
-            res = self.repo.commit(
-                fnames=edited, context=context, lsr_edits=True, coder=self
-            )
+            res = self.repo.commit(fnames=edited, context=context, lsr_edits=True, coder=self)
             if res:
                 self.show_auto_commit_outcome(res)
                 commit_hash, commit_message = res
@@ -2615,7 +2539,7 @@ class Coder:
                 )
 
             return self.gpt_prompts.files_content_gpt_no_edits
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to commit: {str(err)}")
             return
 
@@ -2631,9 +2555,7 @@ class Coder:
         if not self.commit_before_message:
             return
         if self.commit_before_message[-1] != self.repo.get_head_commit_sha():
-            self.io.tool_output(
-                "You can use /undo to undo and discard each lsr commit."
-            )
+            self.io.tool_output("You can use /undo to undo and discard each lsr commit.")
 
     def dirty_commit(self):
         if not self.need_commit_before_edits:
@@ -2699,9 +2621,7 @@ class Coder:
             self.io.tool_output(f"Running {command}")
             # Add the command to input history
             self.io.add_to_input_history(f"/run {command.strip()}")
-            exit_status, output = run_cmd(
-                command, error_print=self.io.tool_error, cwd=self.root
-            )
+            exit_status, output = run_cmd(command, error_print=self.io.tool_error, cwd=self.root)
             if output:
                 accumulated_output += f"Output from {command}\n{output}\n"
 
@@ -2710,7 +2630,5 @@ class Coder:
         ):
             num_lines = len(accumulated_output.strip().splitlines())
             line_plural = "line" if num_lines == 1 else "lines"
-            self.io.tool_output(
-                f"Added {num_lines} {line_plural} of output to the chat."
-            )
+            self.io.tool_output(f"Added {num_lines} {line_plural} of output to the chat.")
             return accumulated_output

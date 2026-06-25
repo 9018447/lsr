@@ -6,7 +6,7 @@
 # https://www.conventionalcommits.org/en/v1.0.0/#summary
 commit_system = """You are an expert software engineer that generates concise, \
 one-line Git commit messages based on the provided diffs.
-Review the provided context and diffs which are about to be committed to a git repo.
+Review the provided context and diffs which are about to be committed to a VCS repo.
 Review the diffs carefully.
 Generate a one-line commit message for those changes.
 The commit message should be structured as follows: <type>: <description>
@@ -22,7 +22,7 @@ Reply only with the one-line commit message, without any additional text, explan
 
 # COMMANDS
 undo_command_reply = (
-    "I did `git reset --hard HEAD~1` to discard the last edits. Please wait for further"
+    "I undid the last commit to discard the most recent edits. Please wait for further"
     " instructions before attempting that change again. Feel free to ask relevant questions about"
     " why the changes were reverted."
 )

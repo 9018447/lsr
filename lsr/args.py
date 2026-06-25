@@ -18,20 +18,20 @@ from lsr.args_formatter import (
 from .dump import dump  # noqa: F401
 
 
-def resolve_lsrignore_path(path_str, git_root=None):
+def resolve_lsrignore_path(path_str, vcs_root=None):
     path = Path(path_str)
     if path.is_absolute():
         return str(path)
-    elif git_root:
-        return str(Path(git_root) / path)
+    elif vcs_root:
+        return str(Path(vcs_root) / path)
     return str(path)
 
 
-def default_env_file(git_root):
-    return os.path.join(git_root, ".env") if git_root else ".env"
+def default_env_file(vcs_root):
+    return os.path.join(vcs_root, ".env") if vcs_root else ".env"
 
 
-def get_parser(default_config_files, git_root):
+def get_parser(default_config_files, vcs_root):
     parser = configargparse.ArgumentParser(
         description="LaTeX Research Assistant - AI-powered LaTeX writing assistant",
         add_config_file_help=True,
@@ -125,14 +125,27 @@ def get_parser(default_config_files, git_root):
     group.add_argument(
         "--reasoning-effort",
         type=str,
-        help="Set the reasoning_effort API parameter (default: not set)",
+        help=(
+            "Set the reasoning_effort API parameter. Defaults to 'medium' for supported models"
+            " (skipped for models that do not accept it)."
+        ),
+    )
+    group.add_argument(
+        "--thinking-budget",
+        type=str,
+        help=(
+            "Set the thinking_budget API parameter for models that support it (e.g. Qwen3)."
+            " Defaults to 2000 for supported models (skipped for models that do not accept it);"
+            " use 0 to disable."
+        ),
     )
     group.add_argument(
         "--thinking-tokens",
         type=str,
         help=(
-            "Set the thinking token budget for models that support it. Use 0 to disable. (default:"
-            " not set)"
+            "Alias for --thinking-budget. Set the thinking token budget for models that support"
+            " it. Defaults to 2000 for supported models (skipped for models that do not accept"
+            " it); use 0 to disable."
         ),
     )
     group.add_argument(
@@ -254,13 +267,11 @@ def get_parser(default_config_files, git_root):
     ##########
     group = parser.add_argument_group("History Files")
     default_input_history_file = (
-        os.path.join(git_root, ".lsr.input.history")
-        if git_root
-        else ".lsr.input.history"
+        os.path.join(vcs_root, ".lsr.input.history") if vcs_root else ".lsr.input.history"
     )
     default_chat_history_file = (
-        os.path.join(git_root, ".your-username.github.io/lsr.history.md")
-        if git_root
+        os.path.join(vcs_root, ".your-username.github.io/lsr.history.md")
+        if vcs_root
         else ".your-username.github.io/lsr.history.md"
     )
     group.add_argument(
@@ -389,12 +400,14 @@ def get_parser(default_config_files, git_root):
     )
 
     ##########
-    group = parser.add_argument_group("Git settings")
+    group = parser.add_argument_group("Version control settings")
     group.add_argument(
+        "--vcs",
         "--git",
+        dest="git",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Enable/disable looking for a git repo (default: True)",
+        help="Enable/disable looking for a VCS repo (jj preferred, git fallback) (default: True)",
     )
     group.add_argument(
         "--gitignore",
@@ -408,28 +421,26 @@ def get_parser(default_config_files, git_root):
         default=False,
         help="Enable/disable the addition of files listed in .gitignore to Aider's editing scope.",
     )
-    default_lsrignore_file = (
-        os.path.join(git_root, ".lsrignore") if git_root else ".lsrignore"
-    )
+    default_lsrignore_file = os.path.join(vcs_root, ".lsrignore") if vcs_root else ".lsrignore"
 
     group.add_argument(
         "--lsrignore",
         metavar="AIDERIGNORE",
-        type=lambda path_str: resolve_lsrignore_path(path_str, git_root),
+        type=lambda path_str: resolve_lsrignore_path(path_str, vcs_root),
         default=default_lsrignore_file,
-        help="Specify the lsr ignore file (default: .lsrignore in git root)",
+        help="Specify the lsr ignore file (default: .lsrignore in repo root)",
     ).complete = shtab.FILE
     group.add_argument(
         "--subtree-only",
         action="store_true",
-        help="Only consider files in the current subtree of the git repository",
+        help="Only consider files in the current subtree of the repository",
         default=False,
     )
     group.add_argument(
         "--cwd-relative",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Use current working directory as root for file paths instead of git root (default: True)",
+        help="Use current working directory as root for file paths instead of repo root (default: True)",
     )
     group.add_argument(
         "--auto-commits",
@@ -448,7 +459,7 @@ def get_parser(default_config_files, git_root):
         action=argparse.BooleanOptionalAction,
         default=None,
         help=(
-            "Attribute lsr code changes in the git author name (default: True). If explicitly set"
+            "Attribute lsr code changes in the author name (default: True). If explicitly set"
             " to True, overrides --attribute-co-authored-by precedence."
         ),
     )
@@ -457,7 +468,7 @@ def get_parser(default_config_files, git_root):
         action=argparse.BooleanOptionalAction,
         default=None,
         help=(
-            "Attribute lsr commits in the git committer name (default: True). If explicitly set"
+            "Attribute lsr commits in the committer name (default: True). If explicitly set"
             " to True, overrides --attribute-co-authored-by precedence for lsr edits."
         ),
     )
@@ -487,7 +498,7 @@ def get_parser(default_config_files, git_root):
         "--git-commit-verify",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Enable/disable git pre-commit hooks with --no-verify (default: False)",
+        help="Enable/disable pre-commit hooks with --no-verify (default: False)",
     )
     group.add_argument(
         "--commit",
@@ -509,7 +520,7 @@ def get_parser(default_config_files, git_root):
     group.add_argument(
         "--skip-sanity-check-repo",
         action="store_true",
-        help="Skip the sanity check for the git repository (default: False)",
+        help="Skip the sanity check for the VCS repository (default: False)",
         default=False,
     )
     group.add_argument(
@@ -716,7 +727,7 @@ def get_parser(default_config_files, git_root):
         is_config_file=True,
         metavar="CONFIG_FILE",
         help=(
-            "Specify the config file (default: search for .lsr.conf.yml in git root, cwd"
+            "Specify the config file (default: search for .lsr.conf.yml in repo root, cwd"
             " or home directory)"
         ),
     ).complete = shtab.FILE
@@ -725,8 +736,8 @@ def get_parser(default_config_files, git_root):
     group.add_argument(
         "--env-file",
         metavar="ENV_FILE",
-        default=default_env_file(git_root),
-        help="Specify the .env file to load (default: .env in git root)",
+        default=default_env_file(vcs_root),
+        help="Specify the .env file to load (default: .env in repo root)",
     ).complete = shtab.FILE
     group.add_argument(
         "--suggest-shell-commands",
@@ -772,7 +783,27 @@ def get_parser(default_config_files, git_root):
     )
     group.add_argument(
         "--editor",
-        help="Specify which editor to use for the /editor command",
+        help="Specify which editor to use for the /editor and /open commands",
+    )
+    group.add_argument(
+        "--disable-lsp",
+        action="store_true",
+        help="Disable LSP integration for LaTeX, Typst, and Markdown",
+    )
+    group.add_argument(
+        "--lsp-server-latex",
+        default="texlab",
+        help="Command for the LaTeX LSP server (default: texlab)",
+    )
+    group.add_argument(
+        "--lsp-server-typst",
+        default="tinymist",
+        help="Command for the Typst LSP server (default: tinymist)",
+    )
+    group.add_argument(
+        "--lsp-server-markdown",
+        default="marksman",
+        help="Command for the Markdown LSP server (default: marksman)",
     )
 
     supported_shells_list = sorted(list(shtab.SUPPORTED_SHELLS))
@@ -855,9 +886,7 @@ def main():
             print(shtab.complete(parser, shell=shell))
         else:
             print("Error: Please specify a shell for completion.", file=sys.stderr)
-            print(
-                f"Usage: python {sys.argv[0]} completion <shell_name>", file=sys.stderr
-            )
+            print(f"Usage: python {sys.argv[0]} completion <shell_name>", file=sys.stderr)
             print(
                 f"Supported shells are: {', '.join(shtab.SUPPORTED_SHELLS)}",
                 file=sys.stderr,

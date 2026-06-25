@@ -14,14 +14,15 @@ from prompt_toolkit.completion import Completion, PathCompleter
 from prompt_toolkit.document import Document
 from rich.text import Text as RichText
 
-from lsr import models, prompts
+from lsr import models, prompts, utils
+from lsr.document_types import LATEX, MARKDOWN, TYPST, get_document_type
 from lsr.editor import pipe_editor
 from lsr.theme import SYMBOLS, CatppuccinMocha as Mocha
 
 from lsr.help import Help, install_help_extra
 from lsr.io import CommandCompletionException
 from lsr.llm import litellm
-from lsr.repo import ANY_GIT_ERROR
+from lsr.repo import ANY_VCS_ERROR
 from lsr.run_cmd import run_cmd
 from lsr.utils import is_image_file
 
@@ -35,6 +36,12 @@ class SwitchCoder(Exception):
 
 
 class Commands:
+    # Slash-command aliases that dispatch to another cmd_* method.
+    COMMAND_ALIASES = {
+        "git": "vcs",
+        "jj": "vcs",
+    }
+
     def clone(self):
         return Commands(
             self.io,
@@ -74,6 +81,9 @@ class Commands:
 
         # Edit session tracking
         self._last_edit_file = None
+
+        # LSP manager is created lazily by Coder once workspace root is known.
+        self.lsp_manager = None
 
     def cmd_model(self, args):
         "Switch the Main Model to a new LLM"
@@ -138,8 +148,12 @@ class Commands:
 
         return commands
 
-    def do_run(self, cmd_name, args):
+    def _resolve_cmd_name(self, cmd_name):
         cmd_name = cmd_name.replace("-", "_")
+        return self.COMMAND_ALIASES.get(cmd_name, cmd_name)
+
+    def do_run(self, cmd_name, args):
+        cmd_name = self._resolve_cmd_name(cmd_name)
         cmd_method_name = f"cmd_{cmd_name}"
         cmd_method = getattr(self, cmd_method_name, None)
         if not cmd_method:
@@ -148,7 +162,7 @@ class Commands:
 
         try:
             return cmd_method(args)
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to complete {cmd_name}: {err}")
 
     def matching_commands(self, inp):
@@ -160,7 +174,12 @@ class Commands:
         rest_inp = inp[len(words[0]) :].strip()
 
         all_commands = self.get_commands()
-        matching_commands = [cmd for cmd in all_commands if cmd.startswith(first_word)]
+        # Include alias targets so typing an alias prefix still matches.
+        expanded_commands = list(all_commands)
+        for alias, target in self.COMMAND_ALIASES.items():
+            expanded_commands.append("/" + alias.replace("_", "-"))
+
+        matching_commands = [cmd for cmd in expanded_commands if cmd.startswith(first_word)]
         return matching_commands, first_word, rest_inp
 
     def run(self, inp):
@@ -189,12 +208,12 @@ class Commands:
         "Commit edits to the repo made outside the chat (commit message optional)"
         try:
             self.raw_cmd_commit(args)
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to complete commit: {err}")
 
     def raw_cmd_commit(self, args=None):
         if not self.coder.repo:
-            self.io.tool_error("No git repository found.")
+            self.io.tool_error("No repository found.")
             return
 
         if not self.coder.repo.is_dirty():
@@ -208,7 +227,7 @@ class Commands:
         "Check and fix LaTeX syntax in files or all dirty files if none in chat"
 
         if not self.coder.repo:
-            self.io.tool_error("No git repository found.")
+            self.io.tool_error("No repository found.")
             return
 
         if not fnames:
@@ -315,16 +334,12 @@ class Commands:
 
         # system messages
         main_sys = self.coder.fmt_system_prompt(self.coder.gpt_prompts.main_system)
-        main_sys += "\n" + self.coder.fmt_system_prompt(
-            self.coder.gpt_prompts.system_reminder
-        )
+        main_sys += "\n" + self.coder.fmt_system_prompt(self.coder.gpt_prompts.system_reminder)
         msgs = [
             dict(role="system", content=main_sys),
             dict(
                 role="system",
-                content=self.coder.fmt_system_prompt(
-                    self.coder.gpt_prompts.system_reminder
-                ),
+                content=self.coder.fmt_system_prompt(self.coder.gpt_prompts.system_reminder),
             ),
         ]
 
@@ -340,9 +355,7 @@ class Commands:
         # repo map
         other_files = set(self.coder.get_all_abs_files()) - set(self.coder.abs_fnames)
         if self.coder.repo_map:
-            repo_content = self.coder.repo_map.get_repo_map(
-                self.coder.abs_fnames, other_files
-            )
+            repo_content = self.coder.repo_map.get_repo_map(self.coder.abs_fnames, other_files)
             if repo_content:
                 tokens = self.coder.main_model.token_count(repo_content)
                 res.append((tokens, "repository map", "use --map-tokens to resize"))
@@ -370,9 +383,7 @@ class Commands:
                 # approximate
                 content = f"{relative_fname}\n{fence}\n" + content + "{fence}\n"
                 tokens = self.coder.main_model.token_count(content)
-                file_res.append(
-                    (tokens, f"{relative_fname} (read-only)", "/drop to remove")
-                )
+                file_res.append((tokens, f"{relative_fname} (read-only)", "/drop to remove"))
 
         file_res.sort()
         res.extend(file_res)
@@ -432,17 +443,13 @@ class Commands:
             msg = RichText()
             msg.append(cost_pad)
             msg.append(fmt(remaining), style=Mocha.YELLOW)
-            msg.append(
-                " tokens remaining in context window (use /drop or /clear to make space)"
-            )
+            msg.append(" tokens remaining in context window (use /drop or /clear to make space)")
             self.io.tool_output(msg)
         else:
             msg = RichText()
             msg.append(cost_pad)
             msg.append(fmt(remaining), style=Mocha.RED)
-            msg.append(
-                " tokens remaining, window exhausted (use /drop or /clear to make space)"
-            )
+            msg.append(" tokens remaining, window exhausted (use /drop or /clear to make space)")
             self.io.tool_output(msg)
 
         limit_msg = RichText()
@@ -452,113 +459,45 @@ class Commands:
         self.io.tool_output(limit_msg)
 
     def cmd_undo(self, args):
-        "Undo the last git commit if it was done by lsr"
+        "Undo the last commit if it was done by lsr"
         try:
             self.raw_cmd_undo(args)
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to complete undo: {err}")
 
     def raw_cmd_undo(self, args):
         if not self.coder.repo:
-            self.io.tool_error("No git repository found.")
-            return
-
-        last_commit = self.coder.repo.get_head_commit()
-        if not last_commit or not last_commit.parents:
-            self.io.tool_error(
-                "This is the first commit in the repository. Cannot undo."
-            )
+            self.io.tool_error("No repository found.")
             return
 
         last_commit_hash = self.coder.repo.get_head_commit_sha(short=True)
-        last_commit_message = self.coder.repo.get_head_commit_message(
-            "(unknown)"
-        ).strip()
+        last_commit_message = self.coder.repo.get_head_commit_message("(unknown)").strip()
         last_commit_message = (last_commit_message.splitlines() or [""])[0]
         if last_commit_hash not in self.coder.lsr_commit_hashes:
-            self.io.tool_error(
-                "The last commit was not made by lsr in this chat session."
-            )
-            self.io.tool_output(
-                "You could try `/git reset --hard HEAD^` but be aware that this is a destructive"
-                " command!"
-            )
+            self.io.tool_error("The last commit was not made by lsr in this chat session.")
+            if self.coder.repo.vcs == "jj":
+                self.io.tool_output(
+                    "You could try `/jj abandon @-` but be aware that this is a destructive"
+                    " command!"
+                )
+            else:
+                self.io.tool_output(
+                    "You could try `/git reset --hard HEAD^` but be aware that this is a"
+                    " destructive command!"
+                )
             return
 
-        if len(last_commit.parents) > 1:
-            self.io.tool_error(
-                f"The last commit {last_commit.hexsha} has more than 1 parent, can't undo."
-            )
-            return
-
-        prev_commit = last_commit.parents[0]
-        changed_files_last_commit = [
-            item.a_path for item in last_commit.diff(prev_commit)
-        ]
-
-        for fname in changed_files_last_commit:
-            if self.coder.repo.repo.is_dirty(path=fname):
-                self.io.tool_error(
-                    f"The file {fname} has uncommitted changes. Please stash them before undoing."
-                )
-                return
-
-            # Check if the file was in the repo in the previous commit
-            try:
-                prev_commit.tree[fname]
-            except KeyError:
-                self.io.tool_error(
-                    f"The file {fname} was not in the repository in the previous commit. Cannot"
-                    " undo safely."
-                )
-                return
-
-        local_head = self.coder.repo.repo.git.rev_parse("HEAD")
-        current_branch = self.coder.repo.repo.active_branch.name
         try:
-            remote_head = self.coder.repo.repo.git.rev_parse(f"origin/{current_branch}")
-            has_origin = True
-        except ANY_GIT_ERROR:
-            has_origin = False
-
-        if has_origin:
-            if local_head == remote_head:
-                self.io.tool_error(
-                    "The last commit has already been pushed to the origin. Undoing is not"
-                    " possible."
-                )
-                return
-
-        # Reset only the files which are part of `last_commit`
-        restored = set()
-        unrestored = set()
-        for file_path in changed_files_last_commit:
-            try:
-                self.coder.repo.repo.git.checkout("HEAD~1", file_path)
-                restored.add(file_path)
-            except ANY_GIT_ERROR:
-                unrestored.add(file_path)
-
-        if unrestored:
-            self.io.tool_error(f"Error restoring {file_path}, aborting undo.")
-            self.io.tool_output("Restored files:")
-            for file in restored:
-                self.io.tool_output(f"  {file}")
-            self.io.tool_output("Unable to restore files:")
-            for file in unrestored:
-                self.io.tool_output(f"  {file}")
+            self.coder.repo.undo_last_commit(last_commit_hash)
+        except ValueError as err:
+            self.io.tool_error(str(err))
             return
-
-        # Move the HEAD back before the latest commit
-        self.coder.repo.repo.git.reset("--soft", "HEAD~1")
 
         self.io.tool_output(f"Removed: {last_commit_hash} {last_commit_message}")
 
         # Get the current HEAD after undo
         current_head_hash = self.coder.repo.get_head_commit_sha(short=True)
-        current_head_message = self.coder.repo.get_head_commit_message(
-            "(unknown)"
-        ).strip()
+        current_head_message = self.coder.repo.get_head_commit_message("(unknown)").strip()
         current_head_message = (current_head_message.splitlines() or [""])[0]
         self.io.tool_output(f"Now at:  {current_head_hash} {current_head_message}")
 
@@ -569,23 +508,24 @@ class Commands:
         "Display the diff of changes since the last message"
         try:
             self.raw_cmd_diff(args)
-        except ANY_GIT_ERROR as err:
+        except ANY_VCS_ERROR as err:
             self.io.tool_error(f"Unable to complete diff: {err}")
 
     def raw_cmd_diff(self, args=""):
         if not self.coder.repo:
-            self.io.tool_error("No git repository found.")
+            self.io.tool_error("No repository found.")
             return
 
         current_head = self.coder.repo.get_head_commit_sha()
         if current_head is None:
-            self.io.tool_error(
-                "Unable to get current commit. The repository might be empty."
-            )
+            self.io.tool_error("Unable to get current commit. The repository might be empty.")
             return
 
         if len(self.coder.commit_before_message) < 2:
-            commit_before_message = current_head + "^"
+            if self.coder.repo.vcs == "jj":
+                commit_before_message = "root()"
+            else:
+                commit_before_message = current_head + "^"
         else:
             commit_before_message = self.coder.commit_before_message[-2]
 
@@ -596,13 +536,21 @@ class Commands:
         self.io.tool_output(f"Diff since {commit_before_message[:7]}...")
 
         if self.coder.pretty:
-            run_cmd(f"git diff {commit_before_message}")
+            if self.coder.repo.vcs == "jj":
+                run_cmd(f"jj --no-pager diff --git --from {commit_before_message} --to @-")
+            else:
+                run_cmd(f"git diff {commit_before_message}")
             return
+
+        if self.coder.repo.vcs == "jj":
+            to_commit = "@-"
+        else:
+            to_commit = "HEAD"
 
         diff = self.coder.repo.diff_commits(
             self.coder.pretty,
             commit_before_message,
-            "HEAD",
+            to_commit,
         )
 
         self.io.print(diff)
@@ -676,16 +624,20 @@ class Commands:
         return files
 
     def completions_edit(self):
-        """Provide .tex file completions for /edit command."""
+        """Provide manuscript file completions for /edit command."""
+        from lsr.special import ALL_MANUSCRIPT_EXTENSIONS
+
         all_files = set(self.coder.get_all_relative_files())
         inchat_files = set(self.coder.get_inchat_relative_files())
-        tex_files = all_files | inchat_files
-        tex_files = [f for f in tex_files if f.endswith(".tex")]
-        tex_files = [self.quote_fname(fn) for fn in tex_files]
-        return tex_files
+        doc_files = all_files | inchat_files
+        doc_files = [
+            f for f in doc_files if os.path.splitext(f)[1].lower() in ALL_MANUSCRIPT_EXTENSIONS
+        ]
+        doc_files = [self.quote_fname(fn) for fn in doc_files]
+        return doc_files
 
     def completions_mark(self):
-        """Provide completions for /mark command: --reset flag and .tex files."""
+        """Provide completions for /mark command: --reset flag and manuscript files."""
         return ["--reset"] + self.completions_edit()
 
     def glob_filtered_to_repo(self, pattern):
@@ -718,9 +670,7 @@ class Commands:
         else:
             root = Path(self.coder.root)
 
-        matched_files = [
-            fn.relative_to(root) for fn in matched_files if fn.is_relative_to(root)
-        ]
+        matched_files = [fn.relative_to(root) for fn in matched_files if fn.is_relative_to(root)]
 
         # if repo, filter against it
         if self.coder.repo:
@@ -747,9 +697,7 @@ class Commands:
                     fname = Path(self.coder.root) / word
 
             if self.coder.repo and self.coder.repo.ignored_file(fname):
-                self.io.tool_warning(
-                    f"Skipping {fname} due to lsrignore or --subtree-only."
-                )
+                self.io.tool_warning(f"Skipping {fname} due to lsrignore or --subtree-only.")
                 continue
 
             if fname.exists():
@@ -772,12 +720,10 @@ class Commands:
 
             if fname.exists() and fname.is_dir() and self.coder.repo:
                 self.io.tool_error(f"Directory {fname} is not in git.")
-                self.io.tool_output(f"You can add to git with: /git add {fname}")
+                self.io.tool_output(f"You can track the file with: /vcs git add {fname}")
                 continue
 
-            if self.io.confirm_ask(
-                f"No files matched '{word}'. Do you want to create {fname}?"
-            ):
+            if self.io.confirm_ask(f"No files matched '{word}'. Do you want to create {fname}?"):
                 try:
                     fname.parent.mkdir(parents=True, exist_ok=True)
                     fname.touch()
@@ -807,9 +753,7 @@ class Commands:
                 continue
 
             if abs_file_path in self.coder.abs_fnames:
-                self.io.tool_error(
-                    f"{matched_file} is already in the chat as an editable file"
-                )
+                self.io.tool_error(f"{matched_file} is already in the chat as an editable file")
                 continue
             elif abs_file_path in self.coder.abs_read_only_fnames:
                 # Determine if file can be promoted to editable
@@ -848,9 +792,7 @@ class Commands:
 
     def completions_drop(self):
         files = self.coder.get_inchat_relative_files()
-        read_only_files = [
-            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
-        ]
+        read_only_files = [self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames]
         all_files = files + read_only_files
         all_files = [self.quote_fname(fn) for fn in all_files]
         return all_files
@@ -890,9 +832,7 @@ class Commands:
 
             for matched_file in read_only_matched:
                 self.coder.abs_read_only_fnames.remove(matched_file)
-                self.io.tool_output(
-                    f"Removed read-only file {matched_file} from the chat"
-                )
+                self.io.tool_output(f"Removed read-only file {matched_file} from the chat")
 
             # For editable files, use glob if word contains glob chars, otherwise use substring
             if any(c in expanded_word for c in "*?[]"):
@@ -900,9 +840,7 @@ class Commands:
             else:
                 # Use substring matching like we do for read-only files
                 matched_files = [
-                    self.coder.get_rel_fname(f)
-                    for f in self.coder.abs_fnames
-                    if expanded_word in f
+                    self.coder.get_rel_fname(f) for f in self.coder.abs_fnames if expanded_word in f
                 ]
 
             if not matched_files:
@@ -914,13 +852,19 @@ class Commands:
                     self.coder.abs_fnames.remove(abs_fname)
                     self.io.tool_output(f"Removed {matched_file} from the chat")
 
-    def cmd_git(self, args):
-        "Run a git command (output excluded from chat)"
+    def cmd_vcs(self, args):
+        "Run a VCS command (output excluded from chat)"
         combined_output = None
         try:
-            args = "git " + args
-            env = dict(subprocess.os.environ)
-            env["GIT_EDITOR"] = "true"
+            if self.coder.repo and self.coder.repo.vcs == "jj":
+                args = "jj --no-pager " + args
+                env = dict(subprocess.os.environ)
+                env["JJ_EDITOR"] = "true"
+                env["EDITOR"] = "true"
+            else:
+                args = "git " + args
+                env = dict(subprocess.os.environ)
+                env["GIT_EDITOR"] = "true"
             result = subprocess.run(
                 args,
                 stdout=subprocess.PIPE,
@@ -933,7 +877,7 @@ class Commands:
             )
             combined_output = result.stdout
         except Exception as e:
-            self.io.tool_error(f"Error running /git command: {e}")
+            self.io.tool_error(f"Error running /vcs command: {e}")
 
         if combined_output is None:
             return
@@ -1095,9 +1039,7 @@ class Commands:
                     role="user",
                     content=f"请帮我分析并修复以下 LaTeX 编译问题:\n\n{log_content}",
                 ),
-                dict(
-                    role="assistant", content="我来帮你分析并修复这些 LaTeX 编译问题。"
-                ),
+                dict(role="assistant", content="我来帮你分析并修复这些 LaTeX 编译问题。"),
             ]
 
             self.io.tool_output(f"\n{SYMBOLS['success']} 已将日志分析结果添加到 LLM 上下文。")
@@ -1123,9 +1065,7 @@ class Commands:
             self.io.tool_output(f"Auto-detected: {candidates[0]}")
             return candidates[0]
         elif len(candidates) > 1:
-            self.io.tool_output(
-                "\n\u001b[1m\u250c\u2500 .tex files \u2500\u2510\u001b[0m"
-            )
+            self.io.tool_output("\n\u001b[1m\u250c\u2500 .tex files \u2500\u2510\u001b[0m")
             for i, f in enumerate(candidates, 1):
                 self.io.tool_output(f"  {i}. {f}")
             self.io.tool_output("  q. Cancel")
@@ -1164,11 +1104,30 @@ class Commands:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self.io.tool_output(
-                f"\n📖 Opened {os.path.basename(pdf_file)} with zathura"
-            )
+            self.io.tool_output(f"\n📖 Opened {os.path.basename(pdf_file)} with zathura")
         except Exception as e:
             self.io.tool_error(f"Failed to open zathura: {e}")
+
+    def _show_lsp_diagnostics(self, abs_path, header="LSP diagnostics"):
+        """Query and display LSP diagnostics for a file."""
+        if self.lsp_manager is None:
+            return
+
+        diagnostics = self.lsp_manager.get_diagnostics(abs_path)
+        if not diagnostics:
+            return
+
+        self.io.tool_output(f"\n{SYMBOLS['info']} {header} ({len(diagnostics)}):")
+        for diag in diagnostics[:10]:
+            msg = diag.get("message", "")
+            severity = diag.get("severity", 1)
+            rng = diag.get("range", {})
+            start = rng.get("start", {})
+            line = start.get("line", 0) + 1
+            severity_label = {1: "error", 2: "warning", 3: "info", 4: "hint"}.get(severity, "info")
+            self.io.tool_output(f"  [{severity_label}] L{line}: {msg}")
+        if len(diagnostics) > 10:
+            self.io.tool_output(f"  ... and {len(diagnostics) - 10} more")
 
     def _run_latex_compile(self, engine, args):
         """Helper function to run LaTeX compilation."""
@@ -1182,9 +1141,7 @@ class Commands:
             self.io.tool_error(f"File not found: {tex_file}")
             return
 
-        self.io.tool_output(
-            f"\n🔨 Compiling with {engine}: {os.path.basename(tex_file)}"
-        )
+        self.io.tool_output(f"\n🔨 Compiling with {engine}: {os.path.basename(tex_file)}")
         self.io.tool_output("=" * 50)
 
         # Run LaTeX compiler
@@ -1231,6 +1188,9 @@ class Commands:
                     for e in error_lines[:10]:
                         self.io.tool_output(f"  {e}")
 
+            # Also show LSP diagnostics.
+            self._show_lsp_diagnostics(os.path.abspath(tex_file))
+
             # Parse log file and ask user if they want to add to context
             log_file = os.path.splitext(tex_file)[0] + ".log"
             log_info = self._parse_latex_log(log_file)
@@ -1240,13 +1200,65 @@ class Commands:
                 return output
 
         except FileNotFoundError:
-            self.io.tool_error(
-                f"{engine} not found. Please install TeX Live or MiKTeX."
-            )
+            self.io.tool_error(f"{engine} not found. Please install TeX Live or MiKTeX.")
         except subprocess.TimeoutExpired:
             self.io.tool_error("Compilation timed out (120s limit)")
         except Exception as e:
             self.io.tool_error(f"Error: {e}")
+
+    def _run_typst_compile(self, args):
+        """Helper function to run Typst compilation."""
+        from lsr.latex_tools import TypstCompiler, find_main_typ_file
+
+        if args and args.strip():
+            typ_file = args.strip()
+            if not os.path.exists(typ_file):
+                self.io.tool_error(f"File not found: {typ_file}")
+                return
+        else:
+            typ_file = find_main_typ_file(self.coder.root if self.coder else None)
+            if not typ_file:
+                self.io.tool_error("No .typ file found. Use: /typst <file.typ>")
+                return
+            self.io.tool_output(f"Auto-detected: {typ_file}")
+
+        abs_path = os.path.abspath(typ_file)
+        self.io.tool_output(f"\n🔨 Compiling with typst: {os.path.basename(typ_file)}")
+        self.io.tool_output("=" * 50)
+
+        try:
+            compiler = TypstCompiler(root=os.path.dirname(abs_path))
+            success, output, errors = compiler.compile(abs_path)
+
+            if success:
+                self.io.tool_output(f"\n{SYMBOLS['success']} Compilation successful!")
+                self._open_pdf(typ_file)
+            else:
+                self.io.tool_output(f"\n{SYMBOLS['error']} Compilation failed")
+                if errors:
+                    self.io.tool_output("\nErrors:")
+                    for e in errors[:10]:
+                        line = e.get("line")
+                        msg = e.get("message", "")
+                        if line:
+                            self.io.tool_output(f"  L{line}: {msg}")
+                        else:
+                            self.io.tool_output(f"  {msg}")
+
+            # Also show LSP diagnostics.
+            self._show_lsp_diagnostics(abs_path)
+
+            if not success:
+                return output
+
+        except FileNotFoundError:
+            self.io.tool_error("typst not found. Please install Typst.")
+        except Exception as e:
+            self.io.tool_error(f"Error: {e}")
+
+    def cmd_typst(self, args=""):
+        """Compile Typst file with typst compiler"""
+        self._run_typst_compile(args)
 
     def cmd_xelatex(self, args=""):
         """Compile LaTeX file with xelatex engine"""
@@ -1334,9 +1346,7 @@ class Commands:
                     self.io.tool_output(f"  {SYMBOLS['success']} {step_name} completed")
 
             except FileNotFoundError:
-                self.io.tool_error(
-                    f"{cmd} not found. Please install TeX Live or MiKTeX."
-                )
+                self.io.tool_error(f"{cmd} not found. Please install TeX Live or MiKTeX.")
                 return
             except subprocess.TimeoutExpired:
                 self.io.tool_error(f"{step_name} timed out (120s limit)")
@@ -1357,6 +1367,9 @@ class Commands:
                     self.io.tool_output(f"  {w}")
                 if len(warnings) > 5:
                     self.io.tool_output(f"  ... and {len(warnings) - 5} more")
+
+        # Also show LSP diagnostics.
+        self._show_lsp_diagnostics(os.path.abspath(tex_file))
 
         # Parse log file and ask user if they want to add to context
         log_file = os.path.splitext(tex_file)[0] + ".log"
@@ -1393,16 +1406,12 @@ class Commands:
         if add_on_nonzero_exit:
             add = exit_status != 0
         else:
-            add = self.io.confirm_ask(
-                f"Add {k_tokens:.1f}k tokens of command output to the chat?"
-            )
+            add = self.io.confirm_ask(f"Add {k_tokens:.1f}k tokens of command output to the chat?")
 
         if add:
             num_lines = len(combined_output.strip().splitlines())
             line_plural = "line" if num_lines == 1 else "lines"
-            self.io.tool_output(
-                f"Added {num_lines} {line_plural} of output to the chat."
-            )
+            self.io.tool_output(f"Added {num_lines} {line_plural} of output to the chat.")
 
             msg = prompts.run_output.format(
                 command=args,
@@ -1448,7 +1457,7 @@ class Commands:
             read_only_files.append(rel_file_path)
 
         if not chat_files and not other_files and not read_only_files:
-            self.io.tool_output("\nNo files in chat, git repo, or read-only list.")
+            self.io.tool_output("\nNo files in chat, repo, or read-only list.")
             return
 
         if other_files:
@@ -1480,9 +1489,7 @@ class Commands:
             else:
                 self.io.tool_output(f"{cmd} No description available.")
         self.io.tool_output()
-        self.io.tool_output(
-            "Use `/help <question>` to ask questions about how to use lsr."
-        )
+        self.io.tool_output("Use `/help <question>` to ask questions about how to use lsr.")
 
     def cmd_help(self, args):
         "Ask questions about lsr"
@@ -1661,23 +1668,15 @@ class Commands:
 
                 # Check if a file with the same name already exists in the chat
                 existing_file = next(
-                    (
-                        f
-                        for f in self.coder.abs_fnames
-                        if Path(f).name == abs_file_path.name
-                    ),
+                    (f for f in self.coder.abs_fnames if Path(f).name == abs_file_path.name),
                     None,
                 )
                 if existing_file:
                     self.coder.abs_fnames.remove(existing_file)
-                    self.io.tool_output(
-                        f"Replaced existing image in the chat: {existing_file}"
-                    )
+                    self.io.tool_output(f"Replaced existing image in the chat: {existing_file}")
 
                 self.coder.abs_fnames.add(str(abs_file_path))
-                self.io.tool_output(
-                    f"Added clipboard image to the chat: {abs_file_path}"
-                )
+                self.io.tool_output(f"Added clipboard image to the chat: {abs_file_path}")
                 self.coder.check_added_files()
 
                 return
@@ -1745,9 +1744,7 @@ class Commands:
                 self.io.tool_error(f"Not a file or directory: {abs_path}")
 
     def _add_read_only_file(self, abs_path, original_name):
-        if is_image_file(original_name) and not self.coder.main_model.info.get(
-            "supports_vision"
-        ):
+        if is_image_file(original_name) and not self.coder.main_model.info.get("supports_vision"):
             self.io.tool_error(
                 f"Cannot add image file {original_name} as the"
                 f" {self.coder.main_model.name} does not support images."
@@ -1755,9 +1752,7 @@ class Commands:
             return
 
         if abs_path in self.coder.abs_read_only_fnames:
-            self.io.tool_error(
-                f"{original_name} is already in the chat as a read-only file"
-            )
+            self.io.tool_error(f"{original_name} is already in the chat as a read-only file")
             return
         elif abs_path in self.coder.abs_fnames:
             self.coder.abs_fnames.remove(abs_path)
@@ -1813,9 +1808,7 @@ class Commands:
         adjusted_start = -len(after_command)
 
         for completion in path_completer.get_completions(new_document, complete_event):
-            if not completion.text.endswith(".tex") and not completion.text.endswith(
-                "/"
-            ):
+            if not completion.text.endswith(".tex") and not completion.text.endswith("/"):
                 continue
             quoted = self.quote_fname(after_command + completion.text)
             yield Completion(
@@ -1841,9 +1834,7 @@ class Commands:
     def cmd_copy(self, args):
         "Copy the last assistant message to the clipboard"
         all_messages = self.coder.done_messages + self.coder.cur_messages
-        assistant_messages = [
-            msg for msg in reversed(all_messages) if msg["role"] == "assistant"
-        ]
+        assistant_messages = [msg for msg in reversed(all_messages) if msg["role"] == "assistant"]
 
         if not assistant_messages:
             self.io.tool_error("No assistant messages found to copy.")
@@ -1858,18 +1849,14 @@ class Commands:
                 if len(last_assistant_message) > 50
                 else last_assistant_message
             )
-            self.io.tool_output(
-                f"Copied last assistant message to clipboard. Preview: {preview}"
-            )
+            self.io.tool_output(f"Copied last assistant message to clipboard. Preview: {preview}")
         except pyperclip.PyperclipException as e:
             self.io.tool_error(f"Failed to copy to clipboard: {str(e)}")
             self.io.tool_output(
                 "You may need to install xclip or xsel on Linux, or pbcopy on macOS."
             )
         except Exception as e:
-            self.io.tool_error(
-                f"An unexpected error occurred while copying to clipboard: {str(e)}"
-            )
+            self.io.tool_error(f"An unexpected error occurred while copying to clipboard: {str(e)}")
 
     def cmd_editor(self, initial_content=""):
         "Open an editor to write a prompt"
@@ -1880,11 +1867,28 @@ class Commands:
 
     def _find_tex_files(self):
         """Find .tex files from the coder's tracked files or the working directory."""
+        return self._find_document_files({".tex"})
+
+    def _find_document_files(self, extensions=None):
+        """Find manuscript files matching the given extensions.
+
+        If extensions is None, search all supported manuscript extensions
+        (.tex, .md, .typ, .bib, .sty, .cls, .dtx, .ins).
+        """
+        from lsr.special import ALL_MANUSCRIPT_EXTENSIONS
+
+        if extensions is None:
+            extensions = ALL_MANUSCRIPT_EXTENSIONS
+
+        ext_set = {ext.lower() for ext in extensions}
         candidates = []
+
+        def matches(path):
+            return os.path.splitext(path)[1].lower() in ext_set
 
         # 1. From currently tracked files (abs_fnames + abs_read_only_fnames)
         for fpath in self.coder.abs_fnames | self.coder.abs_read_only_fnames:
-            if fpath.endswith(".tex"):
+            if matches(fpath):
                 try:
                     candidates.append(self.coder.get_rel_fname(fpath))
                 except Exception:
@@ -1894,15 +1898,16 @@ class Commands:
         if not candidates and self.coder.repo:
             try:
                 for f in self.coder.repo.get_tracked_files():
-                    if f.endswith(".tex"):
+                    if matches(f):
                         candidates.append(f)
             except Exception:
                 pass
 
-        # 3. From current working directory
+        # 3. From the coder's project root
         if not candidates:
-            for f in os.listdir("."):
-                if f.endswith(".tex") and not f.startswith("."):
+            root = getattr(self.coder, "root", None) or "."
+            for f in os.listdir(root):
+                if matches(f) and not f.startswith("."):
                     candidates.append(f)
 
         return sorted(set(candidates))
@@ -1917,9 +1922,7 @@ class Commands:
         # Sort newest first
         sorted_files = sorted(session_files, key=os.path.getmtime, reverse=True)
 
-        self.io.tool_output(
-            "\n\u001b[1m\u250c\u2500 Available sessions \u2500\u2510\u001b[0m"
-        )
+        self.io.tool_output("\n\u001b[1m\u250c\u2500 Available sessions \u2500\u2510\u001b[0m")
         for i, sf in enumerate(sorted_files, 1):
             mtime = os.path.getmtime(sf)
             time_str = time.strftime("%H:%M:%S", time.localtime(mtime))
@@ -1950,7 +1953,10 @@ class Commands:
             return None
 
     def _parse_and_select_sections(self, args, action_verb="edit"):
-        """Parse a .tex file's LaTeX structure and let the user interactively select sections.
+        """Parse a manuscript file's structure and let the user interactively select sections.
+
+        Supports LaTeX, Typst, and Markdown. Uses LSP document symbols when
+        available, falling back to regex parsing.
 
         Returns (abs_path, filename, items, selected_items) where:
           - abs_path: absolute path of the file
@@ -1959,17 +1965,15 @@ class Commands:
           - selected_items: list of (sec_type, title, start_line, end_line, content) for user's selection
         Returns None if the user cancels or the file is invalid.
         """
-        import re
-
         if not args:
-            # Auto-sniff .tex files when no argument given
-            candidates = self._find_tex_files()
+            # Auto-sniff manuscript files when no argument given
+            candidates = self._find_document_files()
             if len(candidates) == 1:
                 args = candidates[0]
                 self.io.tool_output(f"Auto-detected: {args}")
             elif len(candidates) > 1:
                 self.io.tool_output(
-                    "\n\u001b[1m\u250c\u2500 .tex files \u2500\u2510\u001b[0m"
+                    "\n\u001b[1m\u250c\u2500 manuscript files \u2500\u2510\u001b[0m"
                 )
                 for i, f in enumerate(candidates, 1):
                     self.io.tool_output(f"  {i}. {f}")
@@ -1984,11 +1988,9 @@ class Commands:
                     self.io.tool_error("Invalid selection.")
                     return None
             else:
-                self.io.tool_output(f"Usage: /{action_verb} <file.tex>")
+                self.io.tool_output(f"Usage: /{action_verb} <file>")
                 self.io.tool_output("")
-                self.io.tool_output(
-                    f"Interactively select LaTeX sections to {action_verb}."
-                )
+                self.io.tool_output(f"Interactively select sections to {action_verb}.")
                 return None
 
         filename = args.strip()
@@ -1998,40 +2000,32 @@ class Commands:
             self.io.tool_error(f"File not found: {filename}")
             return None
 
-        try:
-            with open(abs_path, encoding="utf-8") as f:
-                content = f.read()
-        except Exception as e:
-            self.io.tool_error(f"Error reading file: {e}")
+        doc_type = get_document_type(abs_path)
+        if doc_type is None:
+            self.io.tool_error(f"Unsupported file type: {filename}")
             return None
 
-        # Parse LaTeX structure
-        lines = content.split("\n")
-        items = []
+        content = utils.read_text_robust(abs_path)
+        if content is None:
+            self.io.tool_error(f"Error reading file: {abs_path}")
+            return None
 
-        section_pattern = re.compile(r"\\(section|subsection|subsubsection)\{([^}]+)\}")
+        # Notify LSP that the file is open.
+        if self.lsp_manager is not None:
+            self.lsp_manager.notify_open(abs_path, content)
 
-        section_markers = []
-        for i, line in enumerate(lines):
-            m = section_pattern.search(line)
-            if m:
-                section_markers.append((i, m.group(1), m.group(2)))
-
-        for idx, (start_line, sec_type, title) in enumerate(section_markers):
-            if idx + 1 < len(section_markers):
-                end_line = section_markers[idx + 1][0] - 1
-            else:
-                end_line = len(lines) - 1
-
-            while end_line > start_line and not lines[end_line].strip():
-                end_line -= 1
-
-            section_content = "\n".join(lines[start_line : end_line + 1])
-            items.append((sec_type, title, start_line, end_line, section_content))
+        # Try LSP first, then fallback to regex.
+        items = None
+        if self.lsp_manager is not None:
+            items = self.lsp_manager.get_symbols(abs_path)
+        if items is None:
+            items = doc_type.parse_sections(content)
 
         if not items:
             self.io.tool_output("No sections found in this file.")
             return None
+
+        lines = content.split("\n")
 
         # Load persisted marks and edit counts for this file
         marks = self._load_marks()
@@ -2093,15 +2087,15 @@ class Commands:
 
         # ── Create section mode ──────────────────────────────
         if selection.lower() == "c":
-            return self._create_section(abs_path, filename, lines, items)
+            return self._create_section(abs_path, filename, lines, items, doc_type)
 
         # ── Remove section mode ─────────────────────────────
         if selection.lower() == "r":
-            return self._remove_section(abs_path, filename, lines, items)
+            return self._remove_section(abs_path, filename, lines, items, doc_type)
 
         # ── Move section mode ───────────────────────────────
         if selection.lower() == "m":
-            return self._move_section(abs_path, filename, lines, items)
+            return self._move_section(abs_path, filename, lines, items, doc_type)
 
         selected_indices = set()
         if selection.lower() == "all":
@@ -2132,7 +2126,7 @@ class Commands:
         selected_items = [items[i] for i in sorted(selected_indices)]
         return (abs_path, filename, items, selected_items)
 
-    def _create_section(self, abs_path, filename, lines, items):
+    def _create_section(self, abs_path, filename, lines, items, doc_type):
         """Interactive section/subsection/subsubsection creation.
 
         Flow: level → title → position → insert into file → re-invoke picker.
@@ -2171,7 +2165,11 @@ class Commands:
             self.io.tool_error("Invalid level.")
             return None
         level_name = level_names[level_choice]
-        latex_cmd = "\\" + level_name
+
+        # Paragraph is LaTeX-only; ignore for Markdown/Typst.
+        if level_name == "paragraph" and doc_type.name != "latex":
+            self.io.tool_error("Paragraph level is only supported for LaTeX.")
+            return None
 
         # ── Step 2: Enter title ─────────────────────
         title = input(f"  {cyan}\u276f{rst} Title: ").strip()
@@ -2181,9 +2179,8 @@ class Commands:
 
         # ── Step 3: Choose position ──────────────────
         n = len(items)
-        self.io.tool_output(
-            f"\n  {dim}Insert \\{level_name}{{{title}}} before section N{rst}"
-        )
+        heading_preview = doc_type.format_display_heading(level_name, title)
+        self.io.tool_output(f"\n  {dim}Insert {heading_preview} before section N{rst}")
         self.io.tool_output(
             f"  {dim}1 \u2192 before \u00a71  \u00b7  "
             f"{n} \u2192 before \u00a7{n}  \u00b7  "
@@ -2200,8 +2197,13 @@ class Commands:
         pos = max(1, min(pos, n + 1))
 
         # ── Step 4: Build the new section text ───────────
-        new_text = f"{latex_cmd}{{{title}}}"
-        new_text += f"\n% TODO: Write {level_name} content here"
+        heading_line = doc_type.format_heading(level_name, title)
+        todo_comment = doc_type.format_todo_comment(level_name)
+        if level_name == "paragraph" and doc_type.name == "latex":
+            # LaTeX \paragraph{} is inline; skip TODO placeholder.
+            new_text = heading_line
+        else:
+            new_text = f"{heading_line}\n{todo_comment}"
 
         # ── Step 5: Determine insertion line ──────────
         if pos <= n:
@@ -2221,13 +2223,12 @@ class Commands:
             f.write("\n".join(lines))
 
         self.io.tool_output(
-            f"\n  {green}\u2714 Created \\{level_name}{{{title}}} "
-            f"{dim}at position {pos}{rst}"
+            f"\n  {green}\u2714 Created {heading_preview} " f"{dim}at position {pos}{rst}"
         )
 
         return self._parse_and_select_sections(filename, action_verb="edit")
 
-    def _remove_section(self, abs_path, filename, lines, items):
+    def _remove_section(self, abs_path, filename, lines, items, doc_type):
         """Interactive section removal with double confirmation.
 
         Flow: select section → confirm → confirm again → delete → re-invoke picker.
@@ -2240,13 +2241,10 @@ class Commands:
         yellow = "\u001b[33m"
         red = "\u001b[31m"
 
-        self.io.tool_output(
-            f"\n  {bold}{red}\u250c\u2500 Remove section \u2500\u2510{rst}"
-        )
+        self.io.tool_output(f"\n  {bold}{red}\u250c\u2500 Remove section \u2500\u2510{rst}")
         for i, (sec_type, title, *_rest) in enumerate(items, 1):
-            self.io.tool_output(
-                f"  {red}{dim}\u2502{rst} {i:2d}. \\{sec_type}{{{title}}}"
-            )
+            display = doc_type.format_display_heading(sec_type, title)
+            self.io.tool_output(f"  {red}{dim}\u2502{rst} {i:2d}. {display}")
         self.io.tool_output(
             f"  {bold}{red}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
             f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
@@ -2264,25 +2262,18 @@ class Commands:
 
         sec_type, title, start, end, content_item = items[idx]
         line_count = end - start + 1
+        display = doc_type.format_display_heading(sec_type, title)
 
         # First confirmation
-        self.io.tool_output(
-            f"\n  {yellow}\u26a0 About to delete \\{sec_type}{{{title}}}{rst}"
-        )
-        self.io.tool_output(
-            f"    {dim}{line_count} lines (L{start + 1}\u2013{end + 1}){rst}"
-        )
-        confirm1 = (
-            input(f"  {yellow}\u276f{rst} Type 'yes' to confirm: ").strip().lower()
-        )
+        self.io.tool_output(f"\n  {yellow}\u26a0 About to delete {display}{rst}")
+        self.io.tool_output(f"    {dim}{line_count} lines (L{start + 1}\u2013{end + 1}){rst}")
+        confirm1 = input(f"  {yellow}\u276f{rst} Type 'yes' to confirm: ").strip().lower()
         if confirm1 != "yes":
             self.io.tool_output(f"  {dim}Cancelled.{rst}")
             return self._parse_and_select_sections(filename, action_verb="edit")
 
         # Second confirmation
-        self.io.tool_output(
-            f"  {red}{bold}\u26a0 FINAL WARNING \u2014 cannot be undone{rst}"
-        )
+        self.io.tool_output(f"  {red}{bold}\u26a0 FINAL WARNING \u2014 cannot be undone{rst}")
         confirm2 = input(f"  {red}\u276f{rst} Type 'DELETE' to proceed: ").strip()
         if confirm2 != "DELETE":
             self.io.tool_output(f"  {dim}Cancelled.{rst}")
@@ -2301,11 +2292,11 @@ class Commands:
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-        self.io.tool_output(f"\n  {green}\u2714 Removed \\{sec_type}{{{title}}}{rst}")
+        self.io.tool_output(f"\n  {green}\u2714 Removed {display}{rst}")
 
         return self._parse_and_select_sections(filename, action_verb="edit")
 
-    def _move_section(self, abs_path, filename, lines, items):
+    def _move_section(self, abs_path, filename, lines, items, doc_type):
         """Interactive section reordering.
 
         Flow: select section → choose target position → move → re-invoke picker.
@@ -2317,13 +2308,10 @@ class Commands:
         green = "\u001b[32m"
         yellow = "\u001b[33m"
 
-        self.io.tool_output(
-            f"\n  {bold}{cyan}\u250c\u2500 Move section \u2500\u2510{rst}"
-        )
+        self.io.tool_output(f"\n  {bold}{cyan}\u250c\u2500 Move section \u2500\u2510{rst}")
         for i, (sec_type, title, *_rest) in enumerate(items, 1):
-            self.io.tool_output(
-                f"  {cyan}{dim}\u2502{rst} {i:2d}. \\{sec_type}{{{title}}}"
-            )
+            display = doc_type.format_display_heading(sec_type, title)
+            self.io.tool_output(f"  {cyan}{dim}\u2502{rst} {i:2d}. {display}")
         self.io.tool_output(
             f"  {bold}{cyan}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
             f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
@@ -2340,26 +2328,24 @@ class Commands:
             return None
 
         src_type, src_title, src_start, src_end, src_content = items[src_idx]
+        src_display = doc_type.format_display_heading(src_type, src_title)
 
         # Re-list targets (excluding the moving section)
         display_idx = 0
         target_map = {}
         self.io.tool_output(
-            f"\n  {yellow}\u250c\u2500 Insert \\{src_type}{{{src_title}}} before \u2500\u2510{rst}"
+            f"\n  {yellow}\u250c\u2500 Insert {src_display} before \u2500\u2510{rst}"
         )
         for i, (sec_type, title, *_rest) in enumerate(items):
             if i == src_idx:
                 continue
             display_idx += 1
             target_map[display_idx] = i
-            self.io.tool_output(
-                f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. \\{sec_type}{{{title}}}"
-            )
+            display = doc_type.format_display_heading(sec_type, title)
+            self.io.tool_output(f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. {display}")
         display_idx += 1
         target_map[display_idx] = len(items)
-        self.io.tool_output(
-            f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. {dim}(end of file){rst}"
-        )
+        self.io.tool_output(f"  {yellow}{dim}\u2502{rst} {display_idx:2d}. {dim}(end of file){rst}")
         self.io.tool_output(
             f"  {yellow}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
             f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
@@ -2401,7 +2387,7 @@ class Commands:
             # Insert before remaining[tgt_idx]
             # Search for the target heading in modified lines[]
             tgt_item = remaining[tgt_idx]
-            target_heading = f"\\{tgt_item[0]}{{{tgt_item[1]}}}"
+            target_heading = doc_type.format_heading(tgt_item[0], tgt_item[1])
             insert_at = None
             for i, ln in enumerate(lines):
                 if target_heading in ln:
@@ -2421,9 +2407,7 @@ class Commands:
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-        self.io.tool_output(
-            f"\n  \u001b[32m\u2714 Moved \\{src_type}{{{src_title}}} to new position\u001b[0m"
-        )
+        self.io.tool_output(f"\n  \u001b[32m\u2714 Moved {src_display} to new position\u001b[0m")
 
         return self._parse_and_select_sections(filename, action_verb="edit")
 
@@ -2516,7 +2500,7 @@ class Commands:
         return counts.get(abs_path, {})
 
     def cmd_edit(self, args=""):
-        """Edit LaTeX sections with hash-based tracking and auto-replacement."""
+        """Edit manuscript sections with hash-based tracking and auto-replacement."""
         import hashlib
 
         result = self._parse_and_select_sections(args, action_verb="edit")
@@ -2524,6 +2508,7 @@ class Commands:
             return
 
         abs_path, filename, items, selected_items = result
+        doc_type = get_document_type(abs_path)
 
         # Increment per-section edit counts and persist
         file_counts = self._increment_edit_counts(abs_path, selected_items)
@@ -2536,8 +2521,13 @@ class Commands:
         }
 
         tmp_content = []
-        tmp_content.append("% LSR Edit File")
-        tmp_content.append("% Edit the sections below, then run /edit-done")
+        header_marker = doc_type.make_hash_marker("LSR", "Edit File", "header")
+        tmp_content.append(header_marker)
+        tmp_content.append(
+            doc_type.make_hash_marker(
+                "LSR", "Edit the sections below, then run /edit-done", "instructions"
+            )
+        )
         tmp_content.append("")
 
         # Collect titles for filename construction
@@ -2559,8 +2549,8 @@ class Commands:
                 }
             )
 
-            # Write to temp file
-            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            # Write to temp file using format-appropriate markers
+            tmp_content.append(doc_type.make_hash_marker(item_type, title, h))
             tmp_content.append(item_content)
             tmp_content.append("")
 
@@ -2573,15 +2563,14 @@ class Commands:
                 name_parts.append(sanitized)
         descriptive = "__".join(name_parts) if name_parts else "section"
         # Hash for deduplication from all section contents
-        all_content = "\n".join(
-            item_content for _, _, _, _, item_content in selected_items
-        )
+        all_content = "\n".join(item_content for _, _, _, _, item_content in selected_items)
         dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
 
         # Store temp file in ~/.lsr/tmp/
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
+        ext = os.path.splitext(abs_path)[1] or ".tex"
+        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}{ext}"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
         with open(tmp_path, "w", encoding="utf-8") as f:
@@ -2625,8 +2614,8 @@ class Commands:
         import glob
 
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        # Match all lsr session files (edit, deai, expand, condense, translate)
-        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.tex.session"))
+        # Match all lsr session files regardless of document extension.
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.session"))
 
         removed_count = 0
         for sf in session_files:
@@ -2652,7 +2641,6 @@ class Commands:
         Shared logic for /edit-done, /expand-done, /translate-done, /condense-done.
         """
         import json
-        import re
 
         with open(session_file, encoding="utf-8") as f:
             session = json.load(f)
@@ -2664,12 +2652,19 @@ class Commands:
             self.io.tool_error(f"Preview file not found: {tmp_file}")
             return
 
-        # Read edited temp file
-        with open(tmp_file, encoding="utf-8") as f:
-            edited_content = f.read()
+        doc_type = get_document_type(original_file)
+        if doc_type is None:
+            self.io.tool_error(f"Unsupported original file type: {original_file}")
+            return
 
-        # Parse edited content by hash
-        hash_pattern = re.compile(r"% === (?:.*?):.*?\(hash: (\w+)\) ===")
+        # Read edited temp file
+        edited_content = utils.read_text_robust(tmp_file)
+        if edited_content is None:
+            self.io.tool_error(f"Error reading temp file: {tmp_file}")
+            return
+
+        # Parse edited content by hash using the document-type marker pattern.
+        hash_pattern = doc_type.hash_marker_pattern
         edited_sections = {}
         current_hash = None
         current_lines = []
@@ -2681,7 +2676,7 @@ class Commands:
                     while current_lines and not current_lines[-1].strip():
                         current_lines.pop()
                     edited_sections[current_hash] = "\n".join(current_lines)
-                current_hash = m.group(1)
+                current_hash = m.group(2)
                 current_lines = []
             elif current_hash:
                 current_lines.append(line)
@@ -2692,13 +2687,14 @@ class Commands:
             edited_sections[current_hash] = "\n".join(current_lines)
 
         # Read original file
-        with open(original_file, encoding="utf-8") as f:
-            original_lines = f.read().split("\n")
+        original_content = utils.read_text_robust(original_file)
+        if original_content is None:
+            self.io.tool_error(f"Error reading original file: {original_file}")
+            return
+        original_lines = original_content.split("\n")
 
         # Replace sections from bottom to top (to preserve line numbers)
-        sections = sorted(
-            session["sections"], key=lambda s: s["start_line"], reverse=True
-        )
+        sections = sorted(session["sections"], key=lambda s: s["start_line"], reverse=True)
 
         replaced_count = 0
         for section in sections:
@@ -2740,22 +2736,19 @@ class Commands:
         )
         self.io.tool_output(f"    \u001b[2m\u2192\u001b[0m {original_file}")
         if stale_count > 0:
-            self.io.tool_output(
-                f"    {dim}Cleaned up {stale_count} stale session(s){rst}"
-            )
+            self.io.tool_output(f"    {dim}Cleaned up {stale_count} stale session(s){rst}")
 
     def _done_command(self, action_verb):
         """Shared merge-back logic for /{action}-done commands."""
         import glob
 
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        pattern = os.path.join(lsr_home, f"lsr_{action_verb}_*.tex.session")
+        # Match session files regardless of document extension.
+        pattern = os.path.join(lsr_home, f"lsr_{action_verb}_*.session")
         session_files = glob.glob(pattern)
 
         if not session_files:
-            self.io.tool_error(
-                f"No {action_verb} session found. Use /{action_verb} first."
-            )
+            self.io.tool_error(f"No {action_verb} session found. Use /{action_verb} first.")
             return
 
         session_file = max(session_files, key=os.path.getmtime)
@@ -2766,8 +2759,8 @@ class Commands:
         import glob
 
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
-        # Match all lsr session files (edit, deai, expand, condense, translate)
-        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.tex.session"))
+        # Match all lsr session files regardless of document extension.
+        session_files = glob.glob(os.path.join(lsr_home, "lsr_*.session"))
 
         if not session_files:
             self.io.tool_error("No edit session found. Use /edit or /deai first.")
@@ -2777,12 +2770,12 @@ class Commands:
         self._merge_sections_from_session(session_file)
 
     def cmd_mark(self, args=""):
-        """Mark LaTeX sections as completed (persisted across sessions).
+        """Mark sections as completed (persisted across sessions).
 
         Usage:
-            /mark <file.tex>          Interactively select sections to mark as done
-            /mark --reset <file.tex>   Interactively select sections to unmark
-            /mark --reset              Clear ALL marks across all files
+            /mark <file>          Interactively select sections to mark as done
+            /mark --reset <file>  Interactively select sections to unmark
+            /mark --reset         Clear ALL marks across all files
         """
         args = args.strip()
 
@@ -2792,7 +2785,7 @@ class Commands:
             marks = self._load_marks()
 
             if rest:
-                # /mark --reset <file.tex> — interactive unmark
+                # /mark --reset <file> — interactive unmark
                 filename = rest
                 abs_path = self.coder.abs_root_path(filename)
 
@@ -2861,18 +2854,12 @@ class Commands:
                     self.io.tool_output("Cancelled.")
             return
 
-        # /mark <file.tex> — interactive selection (same UI as /edit)
+        # /mark <file> — interactive selection (same UI as /edit)
         if not args:
             self.io.tool_output("Usage:")
-            self.io.tool_output(
-                "  /mark <file.tex>          Interactively mark sections as done"
-            )
-            self.io.tool_output(
-                "  /mark --reset <file.tex>  Interactively unmark sections"
-            )
-            self.io.tool_output(
-                "  /mark --reset            Clear ALL marks (with confirmation)"
-            )
+            self.io.tool_output("  /mark <file>          Interactively mark sections as done")
+            self.io.tool_output("  /mark --reset <file>  Interactively unmark sections")
+            self.io.tool_output("  /mark --reset         Clear ALL marks (with confirmation)")
 
             # Show current marks summary
             marks = self._load_marks()
@@ -2929,6 +2916,13 @@ class Commands:
             return
 
         abs_path, filename, items, selected_items = result
+        doc_type = get_document_type(abs_path)
+
+        def format_section_divider(item_type, title, start, end, item_content):
+            body = f"--- {item_type}: {title} (lines {start + 1}-{end + 1}) ---"
+            if doc_type.comment_end:
+                return f"{doc_type.comment_start} {body} {doc_type.comment_end}\n{item_content}"
+            return f"{doc_type.comment_start} {body}\n{item_content}"
 
         # If abs_path points to an existing temp file with a session,
         # reuse it instead of creating a new temp file.
@@ -2940,8 +2934,7 @@ class Commands:
                 combined_sections = []
                 for item_type, title, start, end, item_content in selected_items:
                     combined_sections.append(
-                        f"% --- {item_type}: {title} (lines {start + 1}-{end + 1}) ---\n"
-                        f"{item_content}"
+                        format_section_divider(item_type, title, start, end, item_content)
                     )
                 combined_content = "\n\n".join(combined_sections)
                 user_msg = prompt_template.format(content=combined_content)
@@ -2964,8 +2957,12 @@ class Commands:
         }
 
         tmp_content = [
-            f"% LSR {action_verb.capitalize()} File",
-            "% The sections below will be edited. Run /edit-done to apply.",
+            doc_type.make_hash_marker("LSR", f"{action_verb.capitalize()} File", "header"),
+            doc_type.make_hash_marker(
+                "LSR",
+                "The sections below will be edited. Run /edit-done to apply.",
+                "instructions",
+            ),
             "",
         ]
 
@@ -2985,7 +2982,7 @@ class Commands:
                 }
             )
 
-            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            tmp_content.append(doc_type.make_hash_marker(item_type, title, h))
             tmp_content.append(item_content)
             tmp_content.append("")
 
@@ -2996,15 +2993,14 @@ class Commands:
             if sanitized:
                 name_parts.append(sanitized)
         descriptive = "__".join(name_parts) if name_parts else "section"
-        all_content = "\n".join(
-            item_content for _, _, _, _, item_content in selected_items
-        )
+        all_content = "\n".join(item_content for _, _, _, _, item_content in selected_items)
         dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
 
         # Write temp file to ~/.lsr/tmp/
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_{action_verb}_{descriptive}_{dedup_hash}.tex"
+        ext = os.path.splitext(abs_path)[1] or ".tex"
+        tmp_filename = f"lsr_{action_verb}_{descriptive}_{dedup_hash}{ext}"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
 
@@ -3030,8 +3026,7 @@ class Commands:
         combined_sections = []
         for item_type, title, start, end, item_content in selected_items:
             combined_sections.append(
-                f"% --- {item_type}: {title} (lines {start + 1}-{end + 1}) ---\n"
-                f"{item_content}"
+                format_section_divider(item_type, title, start, end, item_content)
             )
         combined_content = "\n\n".join(combined_sections)
         user_msg = prompt_template.format(content=combined_content)
@@ -3053,13 +3048,19 @@ class Commands:
 
         Returns list of absolute paths, sorted newest first.
         """
+        from lsr.special import ALL_MANUSCRIPT_EXTENSIONS
+
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         temp_files = []
         for fpath in self.coder.abs_fnames:
-            if fpath.startswith(lsr_home) and fpath.endswith(".tex"):
-                session_file = fpath + ".session"
-                if os.path.exists(session_file):
-                    temp_files.append(fpath)
+            if not fpath.startswith(lsr_home):
+                continue
+            ext = os.path.splitext(fpath)[1].lower()
+            if ext not in ALL_MANUSCRIPT_EXTENSIONS:
+                continue
+            session_file = fpath + ".session"
+            if os.path.exists(session_file):
+                temp_files.append(fpath)
         return sorted(temp_files, key=os.path.getmtime, reverse=True)
 
     def _auto_select_or_edit(self, action_verb):
@@ -3094,9 +3095,7 @@ class Commands:
                 return "", False
         else:
             # No temp files → auto-trigger /edit
-            self.io.tool_output(
-                "No temp file found. Starting /edit to select sections..."
-            )
+            self.io.tool_output("No temp file found. Starting /edit to select sections...")
             self.cmd_edit("")
             return "", False
 
@@ -3139,16 +3138,26 @@ class Commands:
     def _extract_paragraphs_from_temp(self, content):
         """Parse paragraphs from a temp file's content (edit or note session).
 
-        The temp file uses `% === type: title (hash: xxx) ===` markers to
-        delimit sections.  This method extracts text environments from each
-        section for HTML rendering.
+        The temp file uses format-specific hash markers to delimit sections.
+        This method extracts text environments from each section for HTML
+        rendering.
 
         Returns a list of (section_title, env_name, text) tuples suitable
         for generate_note_html().
         """
         from lsr.latex_tools import extract_text_environments
 
-        hash_pattern = re.compile(r"% === (.*?): (.*?) \(hash: (\w+)\) ===")
+        # Detect the document type from the first marker in the content.
+        doc_type = None
+        for dt in (LATEX, MARKDOWN, TYPST):
+            if dt.hash_marker_pattern.search(content):
+                doc_type = dt
+                break
+        if doc_type is None:
+            doc_type = LATEX  # fallback
+
+        hash_pattern = doc_type.hash_marker_pattern
+        comment_prefix = doc_type.comment_start
         current_section = None
         current_lines = []
         paragraphs = []
@@ -3158,21 +3167,46 @@ class Commands:
             if m:
                 if current_section and current_lines:
                     section_content = "\n".join(current_lines)
-                    paras = extract_text_environments(
-                        [(current_section, current_section, 0, 0, section_content)]
-                    )
-                    paragraphs.extend(paras)
-                current_section = m.group(2)
+                    if doc_type.name == "latex":
+                        paras = extract_text_environments(
+                            [(current_section, current_section, 0, 0, section_content)]
+                        )
+                        paragraphs.extend(paras)
+                    else:
+                        # For Markdown/Typst, split into paragraphs.
+                        for para in section_content.split("\n\n"):
+                            para = para.strip()
+                            if para:
+                                paragraphs.append(
+                                    {
+                                        "section": current_section,
+                                        "para_id": len(paragraphs),
+                                        "text": para,
+                                    }
+                                )
+                current_section = m.group(1)
                 current_lines = []
-            elif current_section and not line.startswith("%"):
+            elif current_section and not line.startswith(comment_prefix):
                 current_lines.append(line)
 
         if current_section and current_lines:
             section_content = "\n".join(current_lines)
-            paras = extract_text_environments(
-                [(current_section, current_section, 0, 0, section_content)]
-            )
-            paragraphs.extend(paras)
+            if doc_type.name == "latex":
+                paras = extract_text_environments(
+                    [(current_section, current_section, 0, 0, section_content)]
+                )
+                paragraphs.extend(paras)
+            else:
+                for para in section_content.split("\n\n"):
+                    para = para.strip()
+                    if para:
+                        paragraphs.append(
+                            {
+                                "section": current_section,
+                                "para_id": len(paragraphs),
+                                "text": para,
+                            }
+                        )
 
         return paragraphs
 
@@ -3199,8 +3233,10 @@ class Commands:
         filename = os.path.basename(original_file)
 
         # Read temp file and extract paragraphs for HTML
-        with open(tmp_file, encoding="utf-8") as f:
-            content = f.read()
+        content = utils.read_text_robust(tmp_file)
+        if content is None:
+            self.io.tool_error(f"Error reading preview file: {tmp_file}")
+            return
 
         paragraphs = self._extract_paragraphs_from_temp(content)
         if not paragraphs:
@@ -3245,9 +3281,7 @@ class Commands:
     def _get_chat_files(self):
         """Return (editable_files, read_only_files) currently in the chat session."""
         editable_files = list(self.coder.get_inchat_relative_files())
-        read_only_files = [
-            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
-        ]
+        read_only_files = [self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames]
         return editable_files, read_only_files
 
     def _select_file_interactive(self, all_files, header="Files in chat"):
@@ -3295,9 +3329,7 @@ class Commands:
 
             if all_files:
                 # Interactive selection (like /open)
-                selected = self._select_file_interactive(
-                    all_files, header="Files in chat"
-                )
+                selected = self._select_file_interactive(all_files, header="Files in chat")
                 if selected is None:
                     return
 
@@ -3307,7 +3339,7 @@ class Commands:
                 if os.path.exists(session_file):
                     return self._render_session_as_html(session_file)
 
-                # Regular .tex → fall through to section selection with this file
+                # Regular manuscript file → fall through to section selection with this file
                 args = selected
             else:
                 # No files in chat → auto-trigger /edit flow
@@ -3322,6 +3354,7 @@ class Commands:
             return
 
         abs_path, filename, items, selected_items = result
+        doc_type = get_document_type(abs_path)
 
         # Build session data
         session_data = {
@@ -3331,8 +3364,12 @@ class Commands:
         }
 
         tmp_content = [
-            "% LSR Edit File (created by /note)",
-            "% Review and add comments in the browser, then run /edit-done to apply.",
+            doc_type.make_hash_marker("LSR", "Edit File (created by /note)", "header"),
+            doc_type.make_hash_marker(
+                "LSR",
+                "Review and add comments in the browser, then run /edit-done to apply.",
+                "instructions",
+            ),
             "",
         ]
 
@@ -3352,7 +3389,7 @@ class Commands:
                 }
             )
 
-            tmp_content.append(f"% === {item_type}: {title} (hash: {h}) ===")
+            tmp_content.append(doc_type.make_hash_marker(item_type, title, h))
             tmp_content.append(item_content)
             tmp_content.append("")
 
@@ -3363,15 +3400,14 @@ class Commands:
             if sanitized:
                 name_parts.append(sanitized)
         descriptive = "__".join(name_parts) if name_parts else "section"
-        all_content = "\n".join(
-            item_content for _, _, _, _, item_content in selected_items
-        )
+        all_content = "\n".join(item_content for _, _, _, _, item_content in selected_items)
         dedup_hash = hashlib.sha256(all_content.encode()).hexdigest()[:8]
 
         # Write temp file (use lsr_edit_ prefix so /edit-done can find it)
         lsr_home = os.path.join(os.path.expanduser("~"), ".lsr", "tmp")
         os.makedirs(lsr_home, exist_ok=True)
-        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}.tex"
+        ext = os.path.splitext(abs_path)[1] or ".tex"
+        tmp_filename = f"lsr_edit_{descriptive}_{dedup_hash}{ext}"
         tmp_path = os.path.join(lsr_home, tmp_filename)
         tmp_path = os.path.abspath(tmp_path)
         with open(tmp_path, "w", encoding="utf-8") as f:
@@ -3386,7 +3422,22 @@ class Commands:
         self.coder.abs_fnames.add(tmp_path)
 
         # Extract text environments for HTML preview
-        paragraphs = extract_text_environments(selected_items)
+        if doc_type.name == "latex":
+            paragraphs = extract_text_environments(selected_items)
+        else:
+            # Simple paragraph extraction for Markdown/Typst.
+            paragraphs = []
+            for item_type, title, start, end, item_content in selected_items:
+                for para in item_content.split("\n\n"):
+                    para = para.strip()
+                    if para and not para.startswith(doc_type.comment_start):
+                        paragraphs.append(
+                            {
+                                "section": title,
+                                "para_id": len(paragraphs),
+                                "text": para,
+                            }
+                        )
         if not paragraphs:
             self.io.tool_error("No text content found in selected sections.")
             return
@@ -3455,9 +3506,7 @@ class Commands:
             if highlight:
                 # Show first 150 chars of the highlighted text so LLM can locate it
                 lines.append("Find this text:")
-                lines.append(
-                    f"> {highlight[:150]}{'...' if len(highlight) > 150 else ''}"
-                )
+                lines.append(f"> {highlight[:150]}{'...' if len(highlight) > 150 else ''}")
             lines.append(f"Change requested: {text}")
             lines.append("")
 
@@ -3468,20 +3517,16 @@ class Commands:
         return "\n".join(lines)
 
     def cmd_open(self, args=""):
-        "Open a file in neovim in a new terminal window"
+        "Open a file in the configured or discovered editor"
         import shutil
 
         # Get all added files
         editable_files = list(self.coder.get_inchat_relative_files())
-        read_only_files = [
-            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
-        ]
+        read_only_files = [self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames]
         all_files = editable_files + read_only_files
 
         if not all_files:
-            self.io.tool_output(
-                "No files in chat. Starting /edit to select sections..."
-            )
+            self.io.tool_output("No files in chat. Starting /edit to select sections...")
             return self.cmd_edit("")
 
         if args.strip():
@@ -3522,20 +3567,32 @@ class Commands:
                 self.io.tool_error("Invalid input. Enter a number.")
                 return
 
-        # Find editor: prefer code (VS Code), then nvim/vim
-        editor_cmd = (
-            shutil.which("code") or shutil.which("nvim") or shutil.which("vim") or "vi"
-        )
+        # Determine editor: explicit --editor / self.editor wins, then discovery.
+        if self.editor:
+            editor_cmd = self.editor
+        else:
+            editor_cmd = (
+                shutil.which("code")
+                or shutil.which("codium")
+                or shutil.which("code-oss")
+                or shutil.which("zed")
+                or shutil.which("nvim")
+                or shutil.which("vim")
+                or "vi"
+            )
 
         try:
+            import shlex
+
+            cmd_parts = shlex.split(editor_cmd) + [abs_path]
             subprocess.Popen(
-                [editor_cmd, abs_path],
+                cmd_parts,
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             self.io.tool_output(
-                f"Opened {os.path.basename(abs_path)} in {os.path.basename(editor_cmd)}"
+                f"Opened {os.path.basename(abs_path)} in {os.path.basename(cmd_parts[0])}"
             )
         except Exception as e:
             self.io.tool_error(f"Failed to open file: {e}")
@@ -3543,9 +3600,7 @@ class Commands:
     def completions_open(self):
         """Provide completions for /open command - files in chat."""
         files = self.coder.get_inchat_relative_files()
-        read_only_files = [
-            self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames
-        ]
+        read_only_files = [self.coder.get_rel_fname(fn) for fn in self.coder.abs_read_only_fnames]
         all_files = files + read_only_files
         all_files = [self.quote_fname(fn) for fn in all_files]
         return all_files
@@ -3613,36 +3668,224 @@ class Commands:
             self.io.tool_output(f"Unknown bib action: {action}")
 
     def cmd_template(self, args):
-        "Select or create a LaTeX template"
-        templates = {
-            "article": "\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath}\n\n\\title{Title}\n\\author{Author}\n\\date{\\today}\n\n\\begin{document}\n\\maketitle\n\n\\section{Introduction}\n\n\\end{document}",
-            "report": "\\documentclass{report}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath}\n\n\\title{Title}\n\\author{Author}\n\\date{\\today}\n\n\\begin{document}\n\\maketitle\n\\tableofcontents\n\n\\chapter{Introduction}\n\n\\end{document}",
-            "book": "\\documentclass{book}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath}\n\n\\title{Title}\n\\author{Author}\n\\date{\\today}\n\n\\begin{document}\n\\frontmatter\n\\maketitle\n\\tableofcontents\n\n\\mainmatter\n\\chapter{Introduction}\n\n\\backmatter\n\\end{document}",
-            "beamer": "\\documentclass{beamer}\n\\usetheme{Madrid}\n\n\\title{Presentation Title}\n\\author{Author Name}\n\\institute{Institute}\n\\date{\\today}\n\n\\begin{document}\n\n\\begin{frame}\n\\titlepage\n\\end{frame}\n\n\\begin{frame}{Outline}\\tableofcontents\\end{frame}\n\n\\section{First Section}\n\\begin{frame}{Content}\\end{frame}\n\n\\end{document}",
+        """Select or create a manuscript template.
+
+        Usage: /template [template_name] [filename.tex]
+
+        If template_name is omitted, the first discovered template is used.
+        If filename is omitted, defaults to main.tex.
+        If the first argument is a manuscript filename (e.g. main_manuscript.tex),
+        it is used as the output file and the default template is applied.
+        """
+        from lsr.special import ALL_MANUSCRIPT_EXTENSIONS
+
+        built_in = {
+            "article": (
+                "\\documentclass{article}\n"
+                "\\usepackage[utf8]{inputenc}\n"
+                "\\usepackage{amsmath}\n\n"
+                "\\title{Title}\n"
+                "\\author{Author}\n"
+                "\\date{\\today}\n\n"
+                "\\begin{document}\n"
+                "\\maketitle\n\n"
+                "\\section{Introduction}\n\n"
+                "\\end{document}"
+            ),
+            "report": (
+                "\\documentclass{report}\n"
+                "\\usepackage[utf8]{inputenc}\n"
+                "\\usepackage{amsmath}\n\n"
+                "\\title{Title}\n"
+                "\\author{Author}\n"
+                "\\date{\\today}\n\n"
+                "\\begin{document}\n"
+                "\\maketitle\n"
+                "\\tableofcontents\n\n"
+                "\\chapter{Introduction}\n\n"
+                "\\end{document}"
+            ),
+            "book": (
+                "\\documentclass{book}\n"
+                "\\usepackage[utf8]{inputenc}\n"
+                "\\usepackage{amsmath}\n\n"
+                "\\title{Title}\n"
+                "\\author{Author}\n"
+                "\\date{\\today}\n\n"
+                "\\begin{document}\n"
+                "\\frontmatter\n"
+                "\\maketitle\n"
+                "\\tableofcontents\n\n"
+                "\\mainmatter\n"
+                "\\chapter{Introduction}\n\n"
+                "\\backmatter\n"
+                "\\end{document}"
+            ),
+            "beamer": (
+                "\\documentclass{beamer}\n"
+                "\\usetheme{Madrid}\n\n"
+                "\\title{Presentation Title}\n"
+                "\\author{Author Name}\n"
+                "\\institute{Institute}\n"
+                "\\date{\\today}\n\n"
+                "\\begin{document}\n\n"
+                "\\begin{frame}\n"
+                "\\titlepage\n"
+                "\\end{frame}\n\n"
+                "\\begin{frame}{Outline}\\tableofcontents\\end{frame}\n\n"
+                "\\section{First Section}\n"
+                "\\begin{frame}{Content}\\end{frame}\n\n"
+                "\\end{document}"
+            ),
         }
+
+        discovered = self._discover_templates()
+        # Discovered templates take precedence over built-ins with the same name.
+        templates = {**built_in, **discovered}
 
         if not args:
             self.io.tool_output("Available templates:")
-            for name in templates:
-                self.io.tool_output(f"  {name}")
-            self.io.tool_output("Usage: /template <name> [filename.tex]")
+            for name in sorted(templates.keys()):
+                kind = "built-in" if name in built_in and name not in discovered else "discovered"
+                self.io.tool_output(f"  {name} ({kind})")
+            self.io.tool_output("Usage: /template [template_name] [filename.tex]")
             return
 
         parts = args.split()
-        template_name = parts[0].lower()
-        filename = parts[1] if len(parts) > 1 else "main.tex"
+        first = parts[0]
+        first_ext = os.path.splitext(first)[1].lower()
 
-        if template_name not in templates:
-            self.io.tool_error(f"Unknown template: {template_name}")
+        # If the first argument looks like an output filename, treat it as such
+        # and use the default template.
+        if first_ext in ALL_MANUSCRIPT_EXTENSIONS:
+            template_name = None
+            filename = first
+            extra = parts[1:]
+        else:
+            template_name = first.lower()
+            filename = parts[1] if len(parts) > 1 else "main.tex"
+            extra = parts[2:]
+
+        if extra:
+            self.io.tool_error("Too many arguments.")
+            self.io.tool_output("Usage: /template [template_name] [filename.tex]")
             return
 
-        # Write template to file
+        if template_name is None:
+            # Use first discovered template, or fall back to article.
+            if discovered:
+                template_name = sorted(discovered.keys())[0]
+            else:
+                template_name = "article"
+            self.io.tool_output(f"Using default template: {template_name}")
+        elif template_name not in templates:
+            self.io.tool_error(f"Unknown template: {template_name}")
+            self.io.tool_output("Available templates: " + ", ".join(sorted(templates.keys())))
+            return
+
+        # Load template content: discovered templates are paths to .tex files,
+        # built-ins are raw strings.
+        template_value = templates[template_name]
+        try:
+            if isinstance(template_value, str) and os.path.isfile(template_value):
+                with open(template_value, "r", encoding="utf-8") as f:
+                    content = f.read()
+            else:
+                content = template_value
+        except Exception as e:
+            self.io.tool_error(f"Error reading template '{template_name}': {e}")
+            return
+
+        # Warn when overwriting an existing file.
+        if os.path.exists(filename):
+            self.io.tool_output(f"Warning: overwriting existing file: {filename}")
+
         try:
             with open(filename, "w", encoding="utf-8") as f:
-                f.write(templates[template_name])
+                f.write(content)
             self.io.tool_output(f"Created {filename} with {template_name} template.")
         except Exception as e:
             self.io.tool_error(f"Error creating template: {e}")
+
+    def completions_raw_template(self, document, complete_event):
+        """Provide completions for /template.
+
+        The first argument completes against template names; the second
+        argument completes file paths filtered to manuscript extensions.
+        """
+        from lsr.special import ALL_MANUSCRIPT_EXTENSIONS
+
+        text = document.text_before_cursor
+        words = text.split()
+
+        def _looks_like_path(s):
+            if not s:
+                return False
+            if "/" in s or "\\" in s or s.startswith("~") or "." in s:
+                return True
+            return os.path.splitext(s)[1].lower() in ALL_MANUSCRIPT_EXTENSIONS
+
+        def _template_name_completions(after_command):
+            discovered = sorted(self._discover_templates().keys())
+            built_in = ["article", "report", "book", "beamer"]
+            seen = set()
+            candidates = []
+            for name in discovered + built_in:
+                if name not in seen:
+                    seen.add(name)
+                    candidates.append(name)
+            if after_command:
+                candidates = [c for c in candidates if after_command.lower() in c.lower()]
+            for candidate in candidates:
+                yield Completion(candidate, start_position=-len(after_command))
+
+        def _path_completions(after_command):
+            new_document = Document(after_command, cursor_position=len(after_command))
+
+            def get_paths():
+                return [self.coder.root] if self.coder and self.coder.root else None
+
+            path_completer = PathCompleter(
+                get_paths=get_paths,
+                only_directories=False,
+                expanduser=True,
+            )
+            adjusted_start = -len(after_command)
+
+            for completion in path_completer.get_completions(new_document, complete_event):
+                full = after_command + completion.text
+                ext = os.path.splitext(full)[1].lower()
+                if ext not in ALL_MANUSCRIPT_EXTENSIONS and not completion.text.endswith("/"):
+                    continue
+                quoted = self.quote_fname(full)
+                yield Completion(
+                    text=quoted,
+                    start_position=adjusted_start,
+                    display=completion.display,
+                    style=completion.style,
+                    selected_style=completion.selected_style,
+                )
+
+        # words[0] is the command itself.
+        if len(words) <= 1:
+            # First argument is empty.
+            yield from _template_name_completions("")
+            return
+
+        if len(words) == 2:
+            if text.endswith(" "):
+                # Starting the second argument with an empty prefix.
+                yield from _path_completions("")
+            elif _looks_like_path(words[-1]):
+                # First argument is path-like; treat it as the output filename.
+                yield from _path_completions(words[-1])
+            else:
+                # Completing the first argument (template name).
+                yield from _template_name_completions(words[-1])
+            return
+
+        # Two arguments already typed; complete the second (filename).
+        yield from _path_completions(words[-1])
 
     def _discover_templates(self):
         """Discover templates from template/ directory."""
@@ -3653,9 +3896,7 @@ class Commands:
         # Try multiple locations for template directory
         possible_paths = [
             Path("template"),  # Relative to cwd
-            Path(self.coder.root) / "template"
-            if hasattr(self, "coder") and self.coder
-            else None,
+            Path(self.coder.root) / "template" if hasattr(self, "coder") and self.coder else None,
             Path(__file__).parent.parent / "template",  # Relative to commands.py
         ]
 
@@ -3702,12 +3943,8 @@ class Commands:
             )
             self.io.tool_output("")
             self.io.tool_output("Examples:")
-            self.io.tool_output(
-                "  /init my_paper          # Create project with default template"
-            )
-            self.io.tool_output(
-                "  /init my_paper wiley    # Create project with wiley template"
-            )
+            self.io.tool_output("  /init my_paper          # Create project with default template")
+            self.io.tool_output("  /init my_paper wiley    # Create project with wiley template")
 
             # Show available templates from template/ directory
             discovered = self._discover_templates()
@@ -3734,9 +3971,7 @@ class Commands:
         # Check if directory already exists
         if project_dir.exists():
             self.io.tool_error(f"Directory already exists: {project_dir}")
-            self.io.tool_output(
-                "Please choose a different name or remove the existing directory."
-            )
+            self.io.tool_output("Please choose a different name or remove the existing directory.")
             return
 
         # Discover templates
@@ -3748,12 +3983,8 @@ class Commands:
             if template_name in discovered:
                 template_dir = Path(discovered[template_name]).parent
             else:
-                self.io.tool_error(
-                    f"Template '{template_name}' not found in template/ directory."
-                )
-                self.io.tool_output(
-                    f"Available templates: {', '.join(sorted(discovered.keys()))}"
-                )
+                self.io.tool_error(f"Template '{template_name}' not found in template/ directory.")
+                self.io.tool_output(f"Available templates: {', '.join(sorted(discovered.keys()))}")
                 return
         else:
             # Use first available template if any
@@ -3880,9 +4111,7 @@ Text content here.
         import re
 
         # Extract everything before \begin{document}
-        preamble_match = re.search(
-            r"(.*?\\begin\{document\})", template_content, re.DOTALL
-        )
+        preamble_match = re.search(r"(.*?\\begin\{document\})", template_content, re.DOTALL)
         if not preamble_match:
             # If no \begin{document} found, use default template
             return self._generate_minimal_template()
@@ -3892,9 +4121,7 @@ Text content here.
         # Check if there's content after \begin{document} that we should preserve
         # Look for \title, \author, \maketitle
         title_match = re.search(r"(\\title(?:\[[^\]]*\])?\{[^}]+\})", template_content)
-        author_match = re.search(
-            r"(\\author(?:\[[^\]]*\])?\{[^}]+\})", template_content
-        )
+        author_match = re.search(r"(\\author(?:\[[^\]]*\])?\{[^}]+\})", template_content)
 
         # Build minimal content
         minimal_content = preamble + "\n"
@@ -3946,9 +4173,7 @@ Text content here.
         minimal_content += "\n\\begin{figure}[htbp]"
         minimal_content += "\n    \\centering"
         minimal_content += "\n    % Replace placeholder.png with your image file"
-        minimal_content += (
-            "\n    \\includegraphics[width=0.5\\textwidth]{placeholder.png}"
-        )
+        minimal_content += "\n    \\includegraphics[width=0.5\\textwidth]{placeholder.png}"
         minimal_content += "\n    \\caption{Figure caption}"
         minimal_content += "\n    \\label{fig:example}"
         minimal_content += "\n\\end{figure}"
@@ -3993,12 +4218,8 @@ Text content here.
         if not args:
             self.io.tool_output("Usage: /add-template <filename.tex> [output.md]")
             self.io.tool_output("")
-            self.io.tool_output(
-                "Parse a LaTeX template and generate a prompt template."
-            )
-            self.io.tool_output(
-                "The prompt template can be used to guide LLM to fill in content."
-            )
+            self.io.tool_output("Parse a LaTeX template and generate a prompt template.")
+            self.io.tool_output("The prompt template can be used to guide LLM to fill in content.")
             return
 
         parts = args.split()
@@ -4016,18 +4237,14 @@ Text content here.
                 content = f.read()
 
             # ── 提取文档类和包 ──────────────────────────────
-            doc_class_match = re.search(
-                r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", content
-            )
+            doc_class_match = re.search(r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", content)
             doc_class = doc_class_match.group(1) if doc_class_match else "article"
 
             packages = re.findall(r"\\usepackage(?:\[[^\]]*\])?\{([^}]+)\}", content)
 
             # ── 提取文档结构 ────────────────────────────────
             sections = []
-            for match in re.finditer(
-                r"\\(section|subsection|subsubsection)\{([^}]+)\}", content
-            ):
+            for match in re.finditer(r"\\(section|subsection|subsubsection)\{([^}]+)\}", content):
                 level = match.group(1)
                 title = match.group(2)
                 sections.append((level, title))
@@ -4066,18 +4283,14 @@ Text content here.
             prompt_lines.append("## Document Info")
             prompt_lines.append(f"- Document class: `{doc_class}`")
             if packages:
-                prompt_lines.append(
-                    f"- Packages: {', '.join(f'`{p}`' for p in packages)}"
-                )
+                prompt_lines.append(f"- Packages: {', '.join(f'`{p}`' for p in packages)}")
             prompt_lines.append("")
 
             if sections:
                 prompt_lines.append("## Document Structure")
                 prompt_lines.append("")
                 for level, title in sections:
-                    indent = "  " * (
-                        ["section", "subsection", "subsubsection"].index(level)
-                    )
+                    indent = "  " * (["section", "subsection", "subsubsection"].index(level))
                     prompt_lines.append(f"{indent}- {title}")
                 prompt_lines.append("")
 
@@ -4130,9 +4343,7 @@ Text content here.
             # ── 生成写作任务提示 ──────────────────────────
             prompt_lines.append("## Writing Tasks")
             prompt_lines.append("")
-            prompt_lines.append(
-                "Based on the template analysis, here are the tasks to complete:"
-            )
+            prompt_lines.append("Based on the template analysis, here are the tasks to complete:")
             prompt_lines.append("")
 
             task_num = 1
@@ -4144,9 +4355,7 @@ Text content here.
                 filled = filled_envs.get(env, 0)
                 empty = count - filled
                 if empty > 0:
-                    prompt_lines.append(
-                        f"{task_num}. Create {empty} {env} environment(s)"
-                    )
+                    prompt_lines.append(f"{task_num}. Create {empty} {env} environment(s)")
                     task_num += 1
 
             prompt_template = "\n".join(prompt_lines)
@@ -4161,11 +4370,11 @@ Text content here.
                 output_path = self.coder.abs_root_path(output_file)
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(prompt_template)
-                self.io.tool_output(f"\n{SYMBOLS['success']} Prompt template saved to: {output_file}")
-            else:
                 self.io.tool_output(
-                    f"\nTip: /add-template {filename} output.md  # Save to file"
+                    f"\n{SYMBOLS['success']} Prompt template saved to: {output_file}"
                 )
+            else:
+                self.io.tool_output(f"\nTip: /add-template {filename} output.md  # Save to file")
 
         except Exception as e:
             self.io.tool_error(f"Error parsing template: {e}")

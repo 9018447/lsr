@@ -141,7 +141,7 @@ class RepoMap:
                 force_refresh,
             )
         except RecursionError:
-            self.io.tool_error("Disabling repo map, git repo too large?")
+            self.io.tool_error("Disabling repo map, repo too large?")
             self.max_map_tokens = 0
             return
 

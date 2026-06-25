@@ -10,6 +10,8 @@ This module provides functionality to:
 
 import os
 import platform
+import shlex
+import shutil
 import subprocess
 import tempfile
 
@@ -21,6 +23,8 @@ from lsr.theme import CatppuccinMocha as Mocha
 DEFAULT_EDITOR_NIX = "vi"
 DEFAULT_EDITOR_OS_X = "vim"
 DEFAULT_EDITOR_WINDOWS = "notepad"
+
+GRAPHICAL_EDITORS = ["code", "codium", "code-oss", "zed"]
 
 console = Console()
 
@@ -113,6 +117,19 @@ def discover_editor(editor_override=None):
     return editor
 
 
+def discover_graphical_editor():
+    """Discover an available graphical editor (VS Code:, Zed, etc.).
+
+    Returns the command string of the first available editor, or None if no
+    graphical editor is found.
+    """
+    for candidate in GRAPHICAL_EDITORS:
+        path = shutil.which(candidate)
+        if path:
+            return candidate
+    return None
+
+
 def pipe_editor(input_data="", suffix=None, editor=None):
     """
     Opens the system editor with optional input data and returns the edited content.
@@ -125,14 +142,20 @@ def pipe_editor(input_data="", suffix=None, editor=None):
     :type input_data: str
     :param suffix: Optional file extension for the temporary file (e.g. '.txt', '.md')
     :type suffix: str or None
+    :param editor: Optional editor command string (may include arguments)
+    :type editor: str or None
     :return: The edited content after the editor is closed
     :rtype: str
     """
     filepath = write_temp_file(input_data, suffix)
     command_str = discover_editor(editor)
-    command_str += " " + filepath
+    try:
+        cmd_parts = shlex.split(command_str)
+    except ValueError:
+        cmd_parts = [command_str]
+    cmd_parts.append(filepath)
 
-    subprocess.call(command_str, shell=True)
+    subprocess.call(cmd_parts)
     with open(filepath, "r") as f:
         output_data = f.read()
     try:

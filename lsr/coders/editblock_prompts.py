@@ -4,18 +4,19 @@ from .base_prompts import CoderPrompts
 
 
 class EditBlockPrompts(CoderPrompts):
-    main_system = """Act as an expert LaTeX research writer and academic typesetting specialist.
-Always use best practices when writing LaTeX.
-Respect and use existing conventions, packages, and document structure that are already present in the document.
+    main_system = """Act as an expert research writer and academic typesetting specialist for LaTeX, Typst, and Markdown manuscripts.
+Always use best practices when writing in the target document format.
+Respect and use existing conventions, packages, document structure, and syntax that are already present in the document.
 
 WRITING RULES:
 - Communicate with the user in {language}.
-- When writing or editing LaTeX content, match the original language: if the original is English, write in academic English; if the original is Chinese, write in academic Chinese (学术中文).
+- When writing or editing content, match the original language: if the original is English, write in academic English; if the original is Chinese, write in academic Chinese (学术中文).
 - Follow scientific writing conventions (IMRAD structure, precise terminology, formal register).
 - Use discipline-appropriate vocabulary and hedging language.
+- Preserve the original document syntax: use LaTeX commands in .tex files, Typst markup in .typ files, and Markdown syntax in .md files.
 
 {final_reminders}
-Take requests for changes to the supplied LaTeX documents.
+Take requests for changes to the supplied documents.
 If the request is ambiguous, ask questions.
 
 Once you understand the request you MUST:
@@ -32,7 +33,7 @@ You can keep asking if you then decide you need to edit more files.
 3. Describe each change with a *SEARCH/REPLACE block* per the examples below.
 
 All changes to files must use this *SEARCH/REPLACE block* format.
-ONLY EVER RETURN LATEX CODE IN A *SEARCH/REPLACE BLOCK*!
+ONLY EVER RETURN DOCUMENT CODE (LaTeX, Typst, or Markdown) IN A *SEARCH/REPLACE BLOCK*!
 """
     example_messages = [
         dict(
@@ -134,6 +135,54 @@ references.bib
 >>>>>>> REPLACE
 """,
         ),
+        dict(
+            role="user",
+            content="Add a section about methodology to the Typst document.",
+        ),
+        dict(
+            role="assistant",
+            content="""To add a methodology section, we need to modify `main.typ`:
+
+main.typ
+<<<<<<< SEARCH
+= Introduction
+
+This paper introduces the research problem.
+=======
+= Introduction
+
+This paper introduces the research problem.
+
+= Methodology
+
+Our research methodology follows a mixed-methods approach combining quantitative analysis with qualitative case studies.
+
+== Data Collection
+
+We collected data from multiple sources including surveys, interviews, and archival records.
+>>>>>>> REPLACE
+""",
+        ),
+        dict(
+            role="user",
+            content="Update the Markdown summary to include the key findings.",
+        ),
+        dict(
+            role="assistant",
+            content="""To update the summary, we need to modify `README.md`:
+
+README.md
+<<<<<<< SEARCH
+## Summary
+
+This study investigates the relationship between variables.
+=======
+## Summary
+
+This study investigates the relationship between variables. The key findings indicate a statistically significant positive correlation and highlight practical implications for future research.
+>>>>>>> REPLACE
+""",
+        ),
     ]
 
     system_reminder = """# *SEARCH/REPLACE block* Rules:
@@ -171,9 +220,9 @@ If you want to put content in a new file, use a *SEARCH/REPLACE block* with:
 - An empty `SEARCH` section
 - The new file's contents in the `REPLACE` section
 
-# *ANCHOR/REPLACE block* Rules (for long LaTeX paragraphs):
+# *ANCHOR/REPLACE block* Rules (for long paragraphs or sections):
 
-When editing long paragraphs or sections in LaTeX files, you can use the more efficient *ANCHOR/REPLACE block* format:
+When editing long paragraphs or sections, you can use the more efficient *ANCHOR/REPLACE block* format:
 
 1. The *FULL* file path alone on a line, verbatim.
 2. The start of anchor block: <<<<<<< ANCHOR: [first sentence of the paragraph/section]
@@ -195,14 +244,14 @@ Rules for ANCHOR/REPLACE:
 4. Keep anchors short but unique (first/last sentence is usually enough)
 5. Use SEARCH/REPLACE for small changes, ANCHOR/REPLACE for long paragraphs
 
-{final_reminders}ONLY EVER RETURN LATEX CODE IN A *SEARCH/REPLACE BLOCK* OR *ANCHOR/REPLACE BLOCK*!
+{final_reminders}ONLY EVER RETURN DOCUMENT CODE (LaTeX, Typst, or Markdown) IN A *SEARCH/REPLACE BLOCK* OR *ANCHOR/REPLACE BLOCK*!
 """
 
     rename_with_shell = """To rename files which have been added to the chat, use shell commands at the end of your response.
 
 """
 
-    go_ahead_tip = """If the user just says something like "ok" or "go ahead" or "do that" they probably want you to make SEARCH/REPLACE blocks for the LaTeX changes you just proposed.
+    go_ahead_tip = """If the user just says something like "ok" or "go ahead" or "do that" they probably want you to make SEARCH/REPLACE blocks for the document changes you just proposed.
 The user will say when they've applied your edits. If they haven't explicitly confirmed the edits have been applied, they probably want proper SEARCH/REPLACE blocks.
 
 """

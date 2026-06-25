@@ -43,6 +43,6 @@ Keep this info about the user's system in mind:
     files_no_full_files_with_repo_map = ""
     files_no_full_files_with_repo_map_reply = ""
 
-    repo_content_prefix = """Here are summaries of some files present in my git repository.
+    repo_content_prefix = """Here are summaries of some files present in my VCS repository.
 We may look at these in more detail after you answer my questions.
 """

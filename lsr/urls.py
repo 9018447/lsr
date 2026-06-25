@@ -3,7 +3,8 @@ add_all_files = "https://github.com/your-username/lsr/blob/main/docs/faq.md#how-
 edit_errors = (
     "https://github.com/your-username/lsr/blob/main/docs/troubleshooting.md#edit-errors"
 )
-git = "https://github.com/your-username/lsr/blob/main/docs/git.md"
+vcs = "https://github.com/your-username/lsr/blob/main/docs/vcs.md"
+git = vcs  # backward compatibility
 enable_playwright = "https://github.com/your-username/lsr/blob/main/docs/install.md#optional-dependencies"
 favicon = "https://raw.githubusercontent.com/your-username/lsr/main/docs/assets/favicon-32x32.png"
 model_warnings = "https://github.com/your-username/lsr/blob/main/docs/llms.md#warnings"
