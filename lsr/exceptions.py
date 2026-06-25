@@ -76,7 +76,11 @@ class LiteLLMExceptions:
                     raise ValueError(f"{var} is in litellm but not in lsr's exceptions list")
 
         for var in self.exception_info:
-            ex = getattr(litellm, var)
+            try:
+                ex = getattr(litellm, var)
+            except AttributeError:
+                # litellm no longer exposes this exception class; skip it
+                continue
             self.exceptions[ex] = self.exception_info[var]
 
     def exceptions_tuple(self):

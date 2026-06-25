@@ -254,9 +254,7 @@ def get_parser(default_config_files, git_root):
     ##########
     group = parser.add_argument_group("History Files")
     default_input_history_file = (
-        os.path.join(git_root, ".lsr.input.history")
-        if git_root
-        else ".lsr.input.history"
+        os.path.join(git_root, ".lsr.input.history") if git_root else ".lsr.input.history"
     )
     default_chat_history_file = (
         os.path.join(git_root, ".your-username.github.io/lsr.history.md")
@@ -408,9 +406,7 @@ def get_parser(default_config_files, git_root):
         default=False,
         help="Enable/disable the addition of files listed in .gitignore to Aider's editing scope.",
     )
-    default_lsrignore_file = (
-        os.path.join(git_root, ".lsrignore") if git_root else ".lsrignore"
-    )
+    default_lsrignore_file = os.path.join(git_root, ".lsrignore") if git_root else ".lsrignore"
 
     group.add_argument(
         "--lsrignore",
@@ -772,7 +768,27 @@ def get_parser(default_config_files, git_root):
     )
     group.add_argument(
         "--editor",
-        help="Specify which editor to use for the /editor command",
+        help="Specify which editor to use for the /editor and /open commands",
+    )
+    group.add_argument(
+        "--disable-lsp",
+        action="store_true",
+        help="Disable LSP integration for LaTeX, Typst, and Markdown",
+    )
+    group.add_argument(
+        "--lsp-server-latex",
+        default="texlab",
+        help="Command for the LaTeX LSP server (default: texlab)",
+    )
+    group.add_argument(
+        "--lsp-server-typst",
+        default="tinymist",
+        help="Command for the Typst LSP server (default: tinymist)",
+    )
+    group.add_argument(
+        "--lsp-server-markdown",
+        default="marksman",
+        help="Command for the Markdown LSP server (default: marksman)",
     )
 
     supported_shells_list = sorted(list(shtab.SUPPORTED_SHELLS))
@@ -855,9 +871,7 @@ def main():
             print(shtab.complete(parser, shell=shell))
         else:
             print("Error: Please specify a shell for completion.", file=sys.stderr)
-            print(
-                f"Usage: python {sys.argv[0]} completion <shell_name>", file=sys.stderr
-            )
+            print(f"Usage: python {sys.argv[0]} completion <shell_name>", file=sys.stderr)
             print(
                 f"Supported shells are: {', '.join(shtab.SUPPORTED_SHELLS)}",
                 file=sys.stderr,

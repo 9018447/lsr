@@ -72,3 +72,4 @@ __pycache__/
 # Plan and implementation docs
 PLAN.md
 IMPLEMENTATION_SUMMARY.md
+.env

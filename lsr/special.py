@@ -190,17 +190,34 @@ LATEX_IMPORTANT_FILES = [
     ".texmf",
 ]
 
-# Add LaTeX files to the main list
-ROOT_IMPORTANT_FILES.extend(LATEX_IMPORTANT_FILES)
+# Typst specific files
+TYPST_IMPORTANT_FILES = [
+    "main.typ",
+    "paper.typ",
+    "thesis.typ",
+    "document.typ",
+]
 
-# File extensions that are important in LaTeX projects
+# Markdown specific files
+MARKDOWN_IMPORTANT_FILES = [
+    "main.md",
+    "index.md",
+]
+
+# Add document files to the main list
+ROOT_IMPORTANT_FILES.extend(LATEX_IMPORTANT_FILES)
+ROOT_IMPORTANT_FILES.extend(TYPST_IMPORTANT_FILES)
+ROOT_IMPORTANT_FILES.extend(MARKDOWN_IMPORTANT_FILES)
+
+# File extensions that are important in manuscript projects
 LATEX_EXTENSIONS = {".tex", ".bib", ".sty", ".cls", ".dtx", ".ins"}
+TYPST_EXTENSIONS = {".typ"}
+MARKDOWN_EXTENSIONS = {".md"}
+ALL_MANUSCRIPT_EXTENSIONS = LATEX_EXTENSIONS | TYPST_EXTENSIONS | MARKDOWN_EXTENSIONS
 
 
 # Normalize the lists once
-NORMALIZED_ROOT_IMPORTANT_FILES = set(
-    os.path.normpath(path) for path in ROOT_IMPORTANT_FILES
-)
+NORMALIZED_ROOT_IMPORTANT_FILES = set(os.path.normpath(path) for path in ROOT_IMPORTANT_FILES)
 
 
 def is_important(file_path):

@@ -118,6 +118,70 @@ class LatexCompiler:
             return False, str(e)
 
 
+class TypstCompiler:
+    """Handles Typst compilation with error parsing."""
+
+    def __init__(self, root=None):
+        self.root = root or os.getcwd()
+        self._validate_compiler()
+
+    def _validate_compiler(self):
+        """Check if the Typst compiler is available."""
+        import shutil
+
+        if not shutil.which("typst"):
+            raise RuntimeError("Typst compiler 'typst' not found. Please install Typst.")
+
+    def compile(self, typ_file, output=None):
+        """Compile a .typ file.
+
+        Returns:
+            tuple: (success: bool, output: str, errors: list)
+        """
+        abs_path = os.path.abspath(typ_file)
+        working_dir = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
+
+        if output is None:
+            output = os.path.splitext(filename)[0] + ".pdf"
+
+        cmd = ["typst", "compile", filename, output]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=working_dir,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            output_text = result.stdout + result.stderr
+            errors = self._parse_errors(output_text)
+
+            return result.returncode == 0, output_text, errors
+
+        except subprocess.TimeoutExpired:
+            return False, "Compilation timed out after 120 seconds.", []
+        except Exception as e:
+            return False, str(e), []
+
+    def _parse_errors(self, output):
+        """Parse Typst compilation output for errors."""
+        errors = []
+        # Typical Typst error: "error: message\n   ┌─ file.typ:1:2"
+        for line in output.split("\n"):
+            if line.startswith("error:"):
+                errors.append({"line": None, "message": line, "file": None})
+            elif "┌─" in line or "at " in line:
+                # Try to extract file:line:column
+                match = re.search(r"(\S+\.(?:typ|tex)):(\d+):(\d+)", line)
+                if match and errors:
+                    errors[-1]["file"] = match.group(1)
+                    errors[-1]["line"] = int(match.group(2))
+        return errors
+
+
 def find_main_tex_file(root=None):
     """Find the main .tex file in a project."""
     root = root or os.getcwd()
@@ -139,6 +203,22 @@ def find_main_tex_file(root=None):
                     return str(tex_file)
         except Exception:
             continue
+
+    return None
+
+
+def find_main_typ_file(root=None):
+    """Find the main .typ file in a project."""
+    root = root or os.getcwd()
+
+    candidates = ["main.typ", "paper.typ", "thesis.typ", "document.typ"]
+    for candidate in candidates:
+        path = os.path.join(root, candidate)
+        if os.path.exists(path):
+            return path
+
+    for typ_file in Path(root).glob("*.typ"):
+        return str(typ_file)
 
     return None
 
@@ -166,9 +246,7 @@ def extract_latex_structure(content):
     # Count environments
     structure["figures"] = len(re.findall(r"\\begin\{figure\}", content))
     structure["tables"] = len(re.findall(r"\\begin\{table\}", content))
-    structure["equations"] = len(
-        re.findall(r"\\begin\{(equation|align|gather)\}", content)
-    )
+    structure["equations"] = len(re.findall(r"\\begin\{(equation|align|gather)\}", content))
 
     # Extract citations
     structure["references"] = re.findall(r"\\cite\{([^}]+)\}", content)
@@ -388,9 +466,7 @@ def _convert_tabular_to_html(table_content):
         return None
 
     # Build HTML table
-    html_parts = [
-        '<table style="border-collapse: collapse; width: 100%; margin: 12pt 0;">'
-    ]
+    html_parts = ['<table style="border-collapse: collapse; width: 100%; margin: 12pt 0;">']
 
     if caption:
         html_parts.append(
