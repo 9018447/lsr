@@ -18,20 +18,10 @@ import importlib_resources
 import shtab
 from dotenv import load_dotenv
 
-from lsr import __version__, models, urls, utils
+from lsr import __version__, urls, utils
 from lsr.args import get_parser
-from lsr.coders import Coder
-from lsr.coders.base_coder import UnknownEditFormat
-from lsr.format_settings import format_settings, scrub_sensitive_info
-from lsr.history import ChatSummary
-from lsr.io import InputOutput
 from lsr.llm import litellm  # noqa: F401; properly init litellm on launch
-from lsr.models import ModelSettings
-from lsr.onboarding import offer_openrouter_oauth, select_default_model
-from lsr.repo import ANY_GIT_ERROR, ANY_VCS_ERROR, Repo
-from lsr.report import report_uncaught_exceptions
-from lsr.versioncheck import check_version, install_from_main_branch, install_upgrade
-from lsr.watch import FileWatcher
+from lsr.repo import ANY_VCS_ERROR
 
 from .dump import dump  # noqa: F401
 
@@ -84,6 +74,8 @@ def get_vcs_root():
 
 def guessed_wrong_repo(io, vcs_root, fnames, git_dname):
     """After we parse the args, we can determine the real repo. Did we guess wrong?"""
+
+    from lsr.repo import Repo
 
     try:
         check_repo = Path(Repo.create(io, fnames, git_dname).root).resolve()
@@ -140,9 +132,7 @@ def setup_vcs(vcs_root, io):
             "You should probably run lsr in your project's directory, not your home dir."
         )
         return
-    elif cwd and io.confirm_ask(
-        "No repo found, create one to track lsr's changes (recommended)?"
-    ):
+    elif cwd and io.confirm_ask("No repo found, create one to track lsr's changes (recommended)?"):
         vcs_root = str(cwd.resolve())
         make_new_repo(vcs_root, io)
         try:
@@ -297,6 +287,8 @@ def generate_search_path_list(default_file, vcs_root, command_line_file):
 
 
 def register_models(vcs_root, model_settings_fname, io, verbose=False):
+    from lsr import models
+
     model_settings_files = generate_search_path_list(
         ".lsr.model.settings.yml", vcs_root, model_settings_fname
     )
@@ -352,6 +344,8 @@ def load_dotenv_files(vcs_root, dotenv_fname, encoding="utf-8"):
 
 
 def register_litellm_models(vcs_root, model_metadata_fname, io, verbose=False):
+    from lsr import models
+
     model_metadata_files = []
 
     # Add the resource file path
@@ -413,8 +407,6 @@ def sanity_check_repo(repo, io):
 
 
 def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=False):
-    report_uncaught_exceptions()
-
     if argv is None:
         argv = sys.argv[1:]
 
@@ -427,17 +419,21 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
 
     conf_fname = Path(".lsr.conf.yml")
 
+    # Build config file list in precedence order (lowest to highest), so that
+    # later files override earlier ones.  This lets us create a single parser
+    # instead of the previous two-parser dance.
     default_config_files = []
-    try:
-        default_config_files += [conf_fname.resolve()]  # CWD
-    except OSError:
-        pass
-
+    default_config_files.append(Path.home() / conf_fname)  # homedir
     if vcs_root:
         git_conf = Path(vcs_root) / conf_fname  # git root
         if git_conf not in default_config_files:
             default_config_files.append(git_conf)
-    default_config_files.append(Path.home() / conf_fname)  # homedir
+    try:
+        cwd_conf = conf_fname.resolve()  # CWD
+        if cwd_conf not in default_config_files:
+            default_config_files.append(cwd_conf)
+    except OSError:
+        pass
     default_config_files = list(map(str, default_config_files))
 
     parser = get_parser(default_config_files, vcs_root)
@@ -455,12 +451,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
             exists = "(exists)" if Path(file).exists() else ""
             print(f"  - {file} {exists}")
 
-    default_config_files.reverse()
-
-    parser = get_parser(default_config_files, vcs_root)
-
-    args, unknown = parser.parse_known_args(argv)
-
     # Load the .env file specified in the arguments
     loaded_dotenvs = load_dotenv_files(vcs_root, args.env_file, args.encoding)
 
@@ -472,6 +462,23 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
         parser.prog = "lsr"
         print(shtab.complete(parser, shell=args.shell_completions))
         sys.exit(0)
+
+    # Defer heavy imports until after argparse handles --help/--version and shell
+    # completions, so those fast paths don't pay for chat/coder machinery.
+    from lsr import models
+    from lsr.coders import Coder
+    from lsr.coders.base_coder import UnknownEditFormat
+    from lsr.format_settings import format_settings, scrub_sensitive_info
+    from lsr.history import ChatSummary
+    from lsr.io import InputOutput
+    from lsr.models import ModelSettings
+    from lsr.onboarding import offer_openrouter_oauth, select_default_model
+    from lsr.repo import Repo
+    from lsr.report import report_uncaught_exceptions
+    from lsr.versioncheck import check_version, install_from_main_branch, install_upgrade
+    from lsr.watch import FileWatcher
+
+    report_uncaught_exceptions()
 
     if git is None:
         args.git = False
@@ -866,9 +873,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
     if not args.skip_sanity_check_repo:
         if not sanity_check_repo(repo, io):
             return 1
-
-    if repo and not args.skip_sanity_check_repo:
-        num_files = len(repo.get_tracked_files())
 
     from lsr.commands import Commands, SwitchCoder
 

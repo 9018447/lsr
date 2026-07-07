@@ -351,7 +351,18 @@ class ModelInfoManager:
             return {}
 
 
-model_info_manager = ModelInfoManager()
+class _LazyModelInfoManager:
+    """Lazy proxy for the global ModelInfoManager singleton."""
+
+    _manager = None
+
+    def __getattr__(self, name):
+        if self._manager is None:
+            self._manager = ModelInfoManager()
+        return getattr(self._manager, name)
+
+
+model_info_manager = _LazyModelInfoManager()
 
 
 class Model(ModelSettings):
@@ -369,7 +380,11 @@ class Model(ModelSettings):
         self.name = model
         self.verbose = verbose
 
-        self.max_chat_history_tokens = 1024
+        # Defer expensive litellm/model-info work until first actual use.
+        self._info = None
+        self._validation_result = None
+        self._max_chat_history_tokens = None
+
         self.weak_model = None
         self.editor_model = None
 
@@ -377,18 +392,6 @@ class Model(ModelSettings):
         self.extra_model_settings = next(
             (ms for ms in MODEL_SETTINGS if ms.name == "lsr/extra_params"), None
         )
-
-        self.info = self.get_model_info(model)
-
-        # Are all needed keys/params available?
-        res = self.validate_environment()
-        self.missing_keys = res.get("missing_keys")
-        self.keys_in_environment = res.get("keys_in_environment")
-
-        max_input_tokens = self.info.get("max_input_tokens") or 0
-        # Calculate max_chat_history_tokens as 1/16th of max_input_tokens,
-        # with minimum 1k and maximum 8k
-        self.max_chat_history_tokens = min(max(max_input_tokens / 16, 1024), 8192)
 
         self.configure_model_settings(model)
         if weak_model is False:
@@ -400,6 +403,42 @@ class Model(ModelSettings):
             self.editor_model_name = None
         else:
             self.get_editor_model(editor_model, editor_edit_format)
+
+    @property
+    def info(self):
+        if self._info is None:
+            self._info = self.get_model_info(self.name)
+        return self._info
+
+    @info.setter
+    def info(self, value):
+        self._info = value
+
+    def _ensure_validated(self):
+        if self._validation_result is None:
+            self._validation_result = self.validate_environment()
+
+    @property
+    def missing_keys(self):
+        self._ensure_validated()
+        return self._validation_result.get("missing_keys")
+
+    @property
+    def keys_in_environment(self):
+        self._ensure_validated()
+        return self._validation_result.get("keys_in_environment")
+
+    @property
+    def max_chat_history_tokens(self):
+        if self._max_chat_history_tokens is None:
+            max_input_tokens = self.info.get("max_input_tokens") or 0
+            # Calculate as 1/16th of max_input_tokens, with minimum 1k and max 8k
+            self._max_chat_history_tokens = min(max(max_input_tokens / 16, 1024), 8192)
+        return self._max_chat_history_tokens
+
+    @max_chat_history_tokens.setter
+    def max_chat_history_tokens(self, value):
+        self._max_chat_history_tokens = value
 
     def get_model_info(self, model):
         return model_info_manager.get_model_info(model)
