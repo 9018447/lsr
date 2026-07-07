@@ -10,6 +10,7 @@ from lsr import utils
 
 from ..dump import dump  # noqa: F401
 from .base_coder import Coder
+from .edit_log import EditLog, FallbackTag
 from .editblock_prompts import EditBlockPrompts
 
 
@@ -48,6 +49,8 @@ class EditBlockCoder(Coder):
         self.shell_commands += [edit[1] for edit in shell_edits]
 
         # Process anchor edits - convert them to standard format
+        edit_log = EditLog(self.io)
+        model_name = self.main_model.name if self.main_model else None
         for anchor_edit in anchor_edits:
             filename, _, head_anchor, tail_anchor, updated_text = anchor_edit
             full_path = self.abs_root_path(filename)
@@ -55,11 +58,13 @@ class EditBlockCoder(Coder):
             if Path(full_path).exists():
                 content = self.io.read_text(full_path)
                 # Use anchor replacement
-                from .anchor_replace import anchor_replace
+                from .anchor_replace import anchor_replace_with_tag
 
-                new_content = anchor_replace(
+                new_content, tag = anchor_replace_with_tag(
                     content, head_anchor, tail_anchor, updated_text
                 )
+                outcome = "applied" if new_content else "failed"
+                edit_log.log(full_path, model_name, outcome, tag)
                 if new_content:
                     # Write the result directly
                     if True:  # not dry_run
@@ -68,6 +73,13 @@ class EditBlockCoder(Coder):
                     file_edits.append(
                         (filename, head_anchor[:50] + "...", updated_text[:50] + "...")
                     )
+            else:
+                edit_log.log(
+                    full_path,
+                    model_name,
+                    "failed",
+                    FallbackTag.ANCHOR_HEADTAIL,
+                )
 
         return file_edits
 
@@ -78,6 +90,8 @@ class EditBlockCoder(Coder):
         failed = []
         passed = []
         updated_edits = []
+        edit_log = EditLog(self.io)
+        model_name = self.main_model.name if self.main_model else None
 
         for edit in edits:
             # Check if this is an anchor-based edit
@@ -92,10 +106,11 @@ class EditBlockCoder(Coder):
             path, original, updated = edit
             full_path = self.abs_root_path(path)
             new_content = None
+            tag = None
 
             if Path(full_path).exists():
                 content = self.io.read_text(full_path)
-                new_content = do_replace(
+                new_content, tag = do_replace_with_tag(
                     full_path, content, original, updated, self.fence
                 )
 
@@ -106,7 +121,7 @@ class EditBlockCoder(Coder):
                 # try patching any of the other files in the chat
                 for full_path in self.abs_fnames:
                     content = self.io.read_text(full_path)
-                    new_content = do_replace(
+                    new_content, tag = do_replace_with_tag(
                         full_path, content, original, updated, self.fence
                     )
                     if new_content:
@@ -119,8 +134,15 @@ class EditBlockCoder(Coder):
                 if not dry_run:
                     self.io.write_text(full_path, new_content)
                 passed.append(edit)
+                edit_log.log(full_path, model_name, "applied", tag)
             else:
                 failed.append(edit)
+                edit_log.log(
+                    full_path,
+                    model_name,
+                    "failed",
+                    tag or FallbackTag.EDIT_DISTANCE,
+                )
 
         if dry_run:
             return updated_edits
@@ -180,18 +202,23 @@ def prep(content):
     return content, lines
 
 
-def perfect_or_whitespace(whole_lines, part_lines, replace_lines):
+def perfect_or_whitespace_with_tag(whole_lines, part_lines, replace_lines):
     # Try for a perfect match
     res = perfect_replace(whole_lines, part_lines, replace_lines)
     if res:
-        return res
+        return res, FallbackTag.PERFECT
 
     # Try being flexible about leading whitespace
-    res = replace_part_with_missing_leading_whitespace(
-        whole_lines, part_lines, replace_lines
-    )
+    res = replace_part_with_missing_leading_whitespace(whole_lines, part_lines, replace_lines)
     if res:
-        return res
+        return res, FallbackTag.MISSING_WHITESPACE
+
+    return None, None
+
+
+def perfect_or_whitespace(whole_lines, part_lines, replace_lines):
+    res, _tag = perfect_or_whitespace_with_tag(whole_lines, part_lines, replace_lines)
+    return res
 
 
 # Unicode math/symbol → ASCII mapping for fuzzy matching.
@@ -240,9 +267,7 @@ UNICODE_TO_ASCII = {
 }
 
 # Build a regex pattern for all Unicode chars we want to normalize
-_UNICODE_MAP_RE = re.compile(
-    "(" + "|".join(re.escape(ch) for ch in UNICODE_TO_ASCII) + ")"
-)
+_UNICODE_MAP_RE = re.compile("(" + "|".join(re.escape(ch) for ch in UNICODE_TO_ASCII) + ")")
 
 
 def normalize_unicode_chars(text):
@@ -323,27 +348,18 @@ def replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines):
             if replace_lines:
                 last_replace = replace_lines[-1].rstrip()
                 new_line = before_match + last_replace + after_match + "\n"
-                result = (
-                    whole_lines[:i]
-                    + replace_lines[:-1]
-                    + [new_line]
-                    + whole_lines[i + 1 :]
-                )
+                result = whole_lines[:i] + replace_lines[:-1] + [new_line] + whole_lines[i + 1 :]
             else:
                 result = whole_lines
             return "".join(result)
 
         # Also check if SEARCH block matches exactly (for short lines)
-        chunk_text = " ".join(
-            line.rstrip() for line in whole_lines[i : i + len(part_lines)]
-        )
+        chunk_text = " ".join(line.rstrip() for line in whole_lines[i : i + len(part_lines)])
         chunk_normalized = normalize_for_matching(chunk_text)
 
         if chunk_normalized == part_normalized:
             # Exact match found
-            result = (
-                whole_lines[:i] + replace_lines + whole_lines[i + len(part_lines) :]
-            )
+            result = whole_lines[:i] + replace_lines + whole_lines[i + len(part_lines) :]
             return "".join(result)
 
     # Also try with broader chunk length scanning
@@ -463,18 +479,14 @@ def replace_prefix_match(whole_lines, part_lines, replace_lines):
 
                 if not extra:
                     # Exact match – all lines fully consumed
-                    result = (
-                        whole_lines[:start] + replace_lines + whole_lines[end + 1 :]
-                    )
+                    result = whole_lines[:start] + replace_lines + whole_lines[end + 1 :]
                     return "".join(result)
 
                 # Prefix match with extra content on whole_lines[end]
                 # Compute how much of the SEARCH covers the last file line
                 prior_norm = ""
                 if start < end:
-                    prior_text = " ".join(
-                        whole_lines[j].rstrip() for j in range(start, end)
-                    )
+                    prior_text = " ".join(whole_lines[j].rstrip() for j in range(start, end))
                     prior_norm = normalize_for_matching(prior_text)
 
                 # The part of the SEARCH that should match the last line
@@ -505,9 +517,7 @@ def replace_prefix_match(whole_lines, part_lines, replace_lines):
                 return "".join(result_lines)
 
             # If chunk is already longer and not a prefix match, move on
-            if len(chunk_norm) >= len(part_norm) and not chunk_norm.startswith(
-                part_norm
-            ):
+            if len(chunk_norm) >= len(part_norm) and not chunk_norm.startswith(part_norm):
                 break
 
     return None
@@ -524,50 +534,60 @@ def perfect_replace(whole_lines, part_lines, replace_lines):
             return "".join(res)
 
 
-def replace_most_similar_chunk(whole, part, replace):
-    """Best efforts to find the `part` lines in `whole` and replace them with `replace`"""
+def replace_most_similar_chunk_with_tag(whole, part, replace):
+    """Best efforts to find the `part` lines in `whole` and replace them with `replace`.
+
+    Returns:
+        Tuple of (new_content, fallback_tag).  new_content is None on failure.
+    """
 
     whole, whole_lines = prep(whole)
     part, part_lines = prep(part)
     replace, replace_lines = prep(replace)
 
-    res = perfect_or_whitespace(whole_lines, part_lines, replace_lines)
+    res, tag = perfect_or_whitespace_with_tag(whole_lines, part_lines, replace_lines)
     if res:
-        return res
+        return res, tag
 
     # drop leading empty line, GPT sometimes adds them spuriously (issue #25)
     if len(part_lines) > 2 and not part_lines[0].strip():
         skip_blank_line_part_lines = part_lines[1:]
-        res = perfect_or_whitespace(
+        res, tag = perfect_or_whitespace_with_tag(
             whole_lines, skip_blank_line_part_lines, replace_lines
         )
         if res:
-            return res
+            return res, tag
 
     # Try matching ignoring line breaks (LLM may split long lines)
     res = replace_ignoring_line_breaks(whole_lines, part_lines, replace_lines)
     if res:
-        return res
+        return res, FallbackTag.IGNORE_LINEBREAKS
 
     # Try prefix match (SEARCH block ends mid-line in the file)
     res = replace_prefix_match(whole_lines, part_lines, replace_lines)
     if res:
-        return res
+        return res, FallbackTag.PREFIX
 
     # Try to handle when it elides code with ...
     try:
         res = try_dotdotdots(whole, part, replace)
         if res:
-            return res
+            return res, FallbackTag.EDIT_DISTANCE
     except ValueError:
         pass
 
     # Try fuzzy matching
     res = replace_closest_edit_distance(whole_lines, part, part_lines, replace_lines)
     if res:
-        return res
+        return res, FallbackTag.EDIT_DISTANCE
 
-    return
+    return None, FallbackTag.EDIT_DISTANCE
+
+
+def replace_most_similar_chunk(whole, part, replace):
+    """Best efforts to find the `part` lines in `whole` and replace them with `replace`"""
+    res, _tag = replace_most_similar_chunk_with_tag(whole, part, replace)
+    return res
 
 
 def try_dotdotdots(whole, part, replace):
@@ -594,9 +614,7 @@ def try_dotdotdots(whole, part, replace):
         return
 
     # Compare odd strings in part_pieces and replace_pieces
-    all_dots_match = all(
-        part_pieces[i] == replace_pieces[i] for i in range(1, len(part_pieces), 2)
-    )
+    all_dots_match = all(part_pieces[i] == replace_pieces[i] for i in range(1, len(part_pieces), 2))
 
     if not all_dots_match:
         raise ValueError("Unmatched ... in SEARCH/REPLACE block")
@@ -625,9 +643,7 @@ def try_dotdotdots(whole, part, replace):
     return whole
 
 
-def replace_part_with_missing_leading_whitespace(
-    whole_lines, part_lines, replace_lines
-):
+def replace_part_with_missing_leading_whitespace(whole_lines, part_lines, replace_lines):
     # GPT often messes up leading whitespace.
     # It usually does it uniformly across the ORIG and UPD blocks.
     # Either omitting all leading whitespace, or including only some of it.
@@ -653,12 +669,8 @@ def replace_part_with_missing_leading_whitespace(
         if add_leading is None:
             continue
 
-        replace_lines = [
-            add_leading + rline if rline.strip() else rline for rline in replace_lines
-        ]
-        whole_lines = (
-            whole_lines[:i] + replace_lines + whole_lines[i + num_part_lines :]
-        )
+        replace_lines = [add_leading + rline if rline.strip() else rline for rline in replace_lines]
+        whole_lines = whole_lines[:i] + replace_lines + whole_lines[i + num_part_lines :]
         return "".join(whole_lines)
 
     return None
@@ -756,7 +768,9 @@ def strip_quoted_wrapping(res, fname=None, fence=DEFAULT_FENCE):
     return res
 
 
-def do_replace(fname, content, before_text, after_text, fence=None):
+def do_replace_with_tag(fname, content, before_text, after_text, fence=None):
+    if fence is None:
+        fence = DEFAULT_FENCE
     before_text = strip_quoted_wrapping(before_text, fname, fence)
     after_text = strip_quoted_wrapping(after_text, fname, fence)
     fname = Path(fname)
@@ -767,14 +781,20 @@ def do_replace(fname, content, before_text, after_text, fence=None):
         content = ""
 
     if content is None:
-        return
+        return None, None
 
     if not before_text.strip():
         # append to existing file, or start a new file
         new_content = content + after_text
+        tag = FallbackTag.PERFECT
     else:
-        new_content = replace_most_similar_chunk(content, before_text, after_text)
+        new_content, tag = replace_most_similar_chunk_with_tag(content, before_text, after_text)
 
+    return new_content, tag
+
+
+def do_replace(fname, content, before_text, after_text, fence=None):
+    new_content, _tag = do_replace_with_tag(fname, content, before_text, after_text, fence)
     return new_content
 
 
@@ -925,17 +945,13 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
 
                 # Expect REPLACE marker
                 i += 1
-                if i >= len(lines) or not anchor_replace_pattern.match(
-                    lines[i].strip()
-                ):
+                if i >= len(lines) or not anchor_replace_pattern.match(lines[i].strip()):
                     raise ValueError(f"Expected `{ANCHOR_REPLACE_ERR}`")
 
                 # Collect replacement content
                 updated_text = []
                 i += 1
-                while i < len(lines) and not anchor_tail_pattern.match(
-                    lines[i].strip()
-                ):
+                while i < len(lines) and not anchor_tail_pattern.match(lines[i].strip()):
                     updated_text.append(lines[i])
                     i += 1
 
@@ -943,17 +959,15 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
                 if i >= len(lines) or not anchor_tail_pattern.match(lines[i].strip()):
                     raise ValueError(f"Expected `{ANCHOR_TAIL_ERR}`")
 
-                tail_anchor = (
-                    anchor_tail_pattern.match(lines[i].strip()).group(1).strip()
-                )
+                tail_anchor = anchor_tail_pattern.match(lines[i].strip()).group(1).strip()
 
                 # Expect END marker
                 i += 1
                 if i >= len(lines) or not anchor_end_pattern.match(lines[i].strip()):
                     raise ValueError(f"Expected `{ANCHOR_END_ERR}`")
 
-                # Yield anchor-based edit with special format
-                # We use a special tuple format: (filename, 'ANCHOR', head_anchor, tail_anchor, updated_text)
+                # Yield anchor-based edit with special format:
+                # (filename, 'ANCHOR', head_anchor, tail_anchor, updated_text)
                 yield (
                     filename,
                     "ANCHOR",
@@ -974,9 +988,7 @@ def find_original_update_blocks(content, fence=DEFAULT_FENCE, valid_fnames=None)
                 if i + 1 < len(lines) and divider_pattern.match(lines[i + 1].strip()):
                     filename = find_filename(lines[max(0, i - 3) : i], fence, None)
                 else:
-                    filename = find_filename(
-                        lines[max(0, i - 3) : i], fence, valid_fnames
-                    )
+                    filename = find_filename(lines[max(0, i - 3) : i], fence, valid_fnames)
 
                 if not filename:
                     if current_filename:

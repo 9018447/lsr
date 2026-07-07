@@ -15,6 +15,8 @@ Benefits:
 import re
 from difflib import SequenceMatcher
 
+from .edit_log import FallbackTag
+
 
 def similarity(a, b):
     """Simple similarity score between two strings."""
@@ -23,6 +25,18 @@ def similarity(a, b):
 
 def find_anchor_match(content, head_anchor, tail_anchor):
     """Find the region between head and tail anchors in content."""
+    start, end, _tag = find_anchor_match_with_tag(content, head_anchor, tail_anchor)
+    return start, end
+
+
+def find_anchor_match_with_tag(content, head_anchor, tail_anchor):
+    """Find the region between anchors and return the fallback tag.
+
+    Returns:
+        Tuple of (start, end, fallback_tag).  start/end are None on failure.
+    """
+    tag = FallbackTag.ANCHOR_HEADTAIL
+
     # Find head anchor position
     head_pos = content.find(head_anchor)
     if head_pos == -1:
@@ -38,12 +52,23 @@ def find_anchor_match(content, head_anchor, tail_anchor):
         if best_match and best_score > 0.6:
             head_pos = content.find(best_match[1])
         else:
-            return None, None
+            return None, None, tag
 
     # Find tail anchor position (after head)
-    tail_pos = content.find(tail_anchor, head_pos + len(head_anchor))
+    search_from = head_pos + len(head_anchor)
+    tail_pos = content.find(tail_anchor, search_from)
+    matched_tail = tail_anchor  # whose length defines the replacement end offset
     if tail_pos == -1:
-        # Try fuzzy match
+        # ponytail: LLMs drift trailing/leading whitespace on the tail anchor
+        # (e.g. "Last sentence " vs "Last sentence."). Try a stripped exact match.
+        stripped = tail_anchor.strip()
+        if stripped and stripped != tail_anchor:
+            tail_pos = content.find(stripped, search_from)
+            if tail_pos != -1:
+                matched_tail = stripped
+                tag = FallbackTag.ANCHOR_TAIL_WHITESPACE
+    if tail_pos == -1:
+        # Fuzzy line match (existing behavior preserved).
         lines = content.split("\n")
         best_match = None
         best_score = 0
@@ -55,13 +80,19 @@ def find_anchor_match(content, head_anchor, tail_anchor):
                 best_score = score
                 best_match = (i, line)
         if best_match and best_score > 0.6:
-            tail_pos = content.find(best_match[1], head_pos + len(head_anchor))
+            tail_pos = content.find(best_match[1], search_from)
+        elif tail_anchor not in content:
+            # ponytail: missing-tail fallback -- the tail anchor is absent from
+            # the whole content (not merely before head), so the LLM likely
+            # omitted it. Replace head->EOF. A wrong tail clobbers to end;
+            # acceptable per the PRD missing-tail heuristic.
+            tag = FallbackTag.ANCHOR_MISSING_TAIL
+            return head_pos, len(content), tag
         else:
-            return None, None
+            return None, None, tag
 
-    # tail_pos points to the start of tail_anchor
-    # We want to replace including the tail_anchor
-    return head_pos, tail_pos + len(tail_anchor)
+    # tail_pos points to the start of the matched tail; replace including it.
+    return head_pos, tail_pos + len(matched_tail), tag
 
 
 def anchor_replace(content, head_anchor, tail_anchor, new_content):
@@ -77,10 +108,21 @@ def anchor_replace(content, head_anchor, tail_anchor, new_content):
     Returns:
         New content if successful, None if anchors not found
     """
-    start, end = find_anchor_match(content, head_anchor, tail_anchor)
+    new_content, _tag = anchor_replace_with_tag(content, head_anchor, tail_anchor, new_content)
+    return new_content
+
+
+def anchor_replace_with_tag(content, head_anchor, tail_anchor, new_content):
+    """
+    Replace content between anchors and return the fallback tag.
+
+    Returns:
+        Tuple of (new_content, fallback_tag).  new_content is None on failure.
+    """
+    start, end, tag = find_anchor_match_with_tag(content, head_anchor, tail_anchor)
     if start is None or end is None:
-        return None
-    return content[:start] + new_content + content[end:]
+        return None, tag
+    return content[:start] + new_content + content[end:], tag
 
 
 def parse_anchor_blocks(text):
@@ -107,9 +149,7 @@ def parse_anchor_blocks(text):
         head_anchor = match.group(1).strip()
         new_content = match.group(2).strip()
         tail_anchor = match.group(3).strip()
-        blocks.append(
-            {"head": head_anchor, "tail": tail_anchor, "replacement": new_content}
-        )
+        blocks.append({"head": head_anchor, "tail": tail_anchor, "replacement": new_content})
     return blocks
 
 
@@ -132,9 +172,7 @@ def apply_anchor_edits(file_path, edits):
 
     applied = 0
     for edit in edits:
-        new_content = anchor_replace(
-            content, edit["head"], edit["tail"], edit["replacement"]
-        )
+        new_content = anchor_replace(content, edit["head"], edit["tail"], edit["replacement"])
         if new_content:
             content = new_content
             applied += 1

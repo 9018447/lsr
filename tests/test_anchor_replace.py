@@ -101,6 +101,27 @@ class TestFindAnchorMatch:
         assert start is None
         assert end is None
 
+    def test_tail_whitespace_drift(self):
+        """Tail anchor carries drifted trailing whitespace; stripped match recovers (A3)."""
+        content = "First sentence. Middle content. Last sentence.\n"
+        start, end = find_anchor_match(content, "First sentence.", "Last sentence ")
+        assert start == 0
+        assert content[start:end] == "First sentence. Middle content. Last sentence"
+
+    def test_missing_tail_anchor_eof(self):
+        """Tail anchor genuinely absent -> replace head through end of content (A3)."""
+        content = "First sentence. Middle content. Last sentence.\n"
+        start, end = find_anchor_match(content, "First sentence.", "Nonexistent tail.")
+        assert start == 0
+        assert end == len(content)
+
+    def test_tail_before_head_still_fails(self):
+        """Tail present but before head is an ordering error, not a missing tail -> fail."""
+        content = "Tail here. Middle. Head here."
+        start, end = find_anchor_match(content, "Head here", "Tail here")
+        assert start is None
+        assert end is None
+
 
 class TestAnchorReplace:
     def test_basic_replacement(self):

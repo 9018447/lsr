@@ -13,8 +13,6 @@ import time
 from pathlib import Path
 from typing import Dict
 
-import requests
-
 
 def _cost_per_token(val: str | None) -> float | None:
     """Convert a price string (USD per token) to a float."""
@@ -112,6 +110,8 @@ class OpenRouterModelManager:
         self._cache_loaded = True
 
     def _update_cache(self) -> None:
+        import requests  # deferred: avoid 58ms requests import on lsr.models load
+
         try:
             response = requests.get(self.MODELS_URL, timeout=10, verify=self.verify_ssl)
             if response.status_code == 200:

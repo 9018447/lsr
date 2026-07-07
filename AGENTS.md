@@ -217,3 +217,60 @@ embeddings + torch for semantic repomap), `browser` (streamlit GUI), `playwright
 - **Coverage**: `pytest-cov` is available (`[dev]`); no enforced threshold.
 - **Benchmark** (`benchmark/`, excluded from pytest via `norecursedirs`): Typer
 -  CLI over polyglot-benchmark; requires `AIDER_DOCKER=1`. Not part of the normal test loop.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as local markdown files under `.scratch/<feature-slug>/`. No
+GitHub/GitLab issue tracking; external PRs are not a triage surface.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles with default label strings: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily by
+`/domain-modeling` when terms/decisions get resolved. See `docs/agents/domain.md`.
+
+### Code exploration & execution conventions
+
+- **Explore first** with `codebase-memory-mcp` (`search_graph`, `trace_path`,
+  `get_code_snippet`, `query_graph`) or `semble` (`search`, `find_related`) before
+  falling back to `grep`/`glob`. Use `grep`/`glob` only for string literals, error
+  messages, config values, and non-code files.
+- **Run code** with `context-mode` tools for tests, scripts, and execution steps;
+  avoid ad-hoc shell snippets.
+
+<!-- feature-planning-workflow:index:start -->
+
+## 文档索引
+
+本索引由 `/feature-planning-workflow` 自动维护，涵盖当前仓库的 ADR、PRD 与 Issue。
+
+### 架构决策记录 (ADR)
+
+_暂无 ADR_
+
+### 产品需求文档 (PRD)
+
+- [`.scratch/robust-edits/PRD.md`](.scratch/robust-edits/PRD.md) — PRD: Robust Edits — Edit-Application Pipeline Robustness
+- [`.scratch/runtime-perf/PRD.md`](.scratch/runtime-perf/PRD.md) — PRD: Runtime Performance Profiling & Optimization
+
+### 实现 Issue
+
+- [`.scratch/robust-edits/issues/01-instrument-edit-application.md`](.scratch/robust-edits/issues/01-instrument-edit-application.md) — Issue 01 — Instrument edit-application with fallback tagging
+- [`.scratch/robust-edits/issues/02-failure-distribution-baseline.md`](.scratch/robust-edits/issues/02-failure-distribution-baseline.md) — Issue 02 — Failure-distribution baseline report
+- [`.scratch/robust-edits/issues/03-harden-anchor-headtail.md`](.scratch/robust-edits/issues/03-harden-anchor-headtail.md) — Issue 03 — Harden ANCHOR/REPLACE head/tail matching
+- [`.scratch/runtime-perf/issues/01-build-profiling-harness.md`](.scratch/runtime-perf/issues/01-build-profiling-harness.md) — Issue 01 — Build the runtime profiling harness
+- [`.scratch/runtime-perf/issues/02-baseline-hotspot-report.md`](.scratch/runtime-perf/issues/02-baseline-hotspot-report.md) — Issue 02 — Baseline hotspot report
+- [`.scratch/runtime-perf/issues/03-optimize-startup.md`](.scratch/runtime-perf/issues/03-optimize-startup.md) — Issue 03 — Startup optimization (Phase-3 resurrection)
+- [`.scratch/runtime-perf/issues/04-optimize-chat-firstcall.md`](.scratch/runtime-perf/issues/04-optimize-chat-firstcall.md) — Issue 04 — Reduce chat first-call overhead
+
+<!-- feature-planning-workflow:index:end -->
+
+
+
