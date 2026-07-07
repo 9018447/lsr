@@ -3739,12 +3739,16 @@ class Commands:
         # Load template content: discovered templates are paths to .tex files,
         # built-ins are raw strings.
         template_value = templates[template_name]
+        is_discovered = isinstance(template_value, str) and os.path.isfile(template_value)
         try:
-            if isinstance(template_value, str) and os.path.isfile(template_value):
+            if is_discovered:
                 with open(template_value, "r", encoding="utf-8") as f:
                     content = f.read()
+                template_dir = Path(template_value).parent
+                source_tex_name = Path(template_value).name
             else:
                 content = template_value
+                template_dir = None
         except Exception as e:
             self.io.tool_error(f"Error reading template '{template_name}': {e}")
             return
@@ -3753,12 +3757,50 @@ class Commands:
         if os.path.exists(filename):
             self.io.tool_output(f"Warning: overwriting existing file: {filename}")
 
+        out_path = Path(filename)
         try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
             self.io.tool_output(f"Created {filename} with {template_name} template.")
         except Exception as e:
             self.io.tool_error(f"Error creating template: {e}")
+            return
+
+        # For discovered templates, symlink (or copy) supporting files so the
+        # generated .tex can actually compile.
+        if is_discovered and template_dir:
+            import shutil
+
+            out_dir = out_path.parent
+            linked = []
+            copied = []
+            for item in template_dir.iterdir():
+                if item.name == source_tex_name:
+                    continue
+                dest = out_dir / item.name
+                if dest.exists():
+                    continue
+                try:
+                    rel_target = os.path.relpath(item, out_dir)
+                    if item.is_dir():
+                        os.symlink(rel_target, dest, target_is_directory=True)
+                    else:
+                        os.symlink(rel_target, dest)
+                    linked.append(item.name)
+                except (OSError, NotImplementedError):
+                    try:
+                        if item.is_dir():
+                            shutil.copytree(item, dest)
+                        else:
+                            shutil.copy2(item, dest)
+                        copied.append(item.name)
+                    except Exception as e2:
+                        self.io.tool_error(f"Could not link/copy {item.name}: {e2}")
+            if linked:
+                self.io.tool_output(f"Linked supporting files: {', '.join(linked)}")
+            if copied:
+                self.io.tool_output(f"Copied supporting files: {', '.join(copied)}")
 
     def completions_raw_template(self, document, complete_event):
         """Provide completions for /template.
