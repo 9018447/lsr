@@ -11,7 +11,6 @@ silently regress.
 """
 
 from lsr.coders.base_prompts import CoderPrompts
-from lsr.coders.help_prompts import HelpPrompts
 
 
 class TestScientificWritingPreamble:
@@ -58,5 +57,3 @@ class TestScientificWritingPreamble:
         assert "\\mathbf{x}" in p  # rendered LaTeX (single braces; preamble not .format()-ed)
         assert "SI throughout" in p
 
-    def test_help_mode_disables_preamble(self):
-        assert HelpPrompts.scientific_writing_preamble == ""

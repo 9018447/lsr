@@ -1,21 +1,8 @@
 import os
 import re
 import subprocess
-import sys
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
-
-try:
-    from grep_ast import TreeContext
-except ImportError:
-    TreeContext = None
-
-from lsr.dump import dump  # noqa: F401
-from lsr.run_cmd import run_cmd_subprocess  # noqa: F401
-
-# tree_sitter is throwing a FutureWarning
-warnings.simplefilter("ignore", category=FutureWarning)
 
 
 class Linter:
@@ -24,7 +11,6 @@ class Linter:
         self.root = root
 
         self.languages = dict(
-            python=self.py_lint,
             latex=self.latex_lint,
         )
 
@@ -94,9 +80,6 @@ class Linter:
         res = ""
         for lang, lint_fn in self.languages.items():
             if not cmd or cmd == lang:
-                # Skip Python linting for .tex files
-                if lang == "python" and fname.endswith(".tex"):
-                    continue
                 lintres = lint_fn(fname, rel_fname, code)
                 if lintres:
                     res += "```"
@@ -113,65 +96,6 @@ class Linter:
                 res += "\n"
 
         return res
-
-    def py_lint(self, fname, rel_fname, code):
-        basic_res = basic_lint(rel_fname, code)
-        compile_res = lint_python_compile(fname, code)
-        flake_res = self.flake8_lint(rel_fname)
-
-        text = ""
-        lines = set()
-        for res in [basic_res, compile_res, flake_res]:
-            if not res:
-                continue
-            if text:
-                text += "\n"
-            text += res.text
-            lines.update(res.lines)
-
-        if text or lines:
-            return LintResult(text, lines)
-
-    def flake8_lint(self, rel_fname):
-        fatal = "E9,F821,F823,F831,F406,F407,F701,F702,F704,F706"
-        flake8_cmd = [
-            sys.executable,
-            "-m",
-            "flake8",
-            f"--select={fatal}",
-            "--show-source",
-            "--isolated",
-            rel_fname,
-        ]
-
-        text = f"## Running: {' '.join(flake8_cmd)}\n\n"
-
-        try:
-            result = subprocess.run(
-                flake8_cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                encoding=self.encoding,
-                errors="replace",
-                cwd=self.root,
-            )
-            errors = result.stdout + result.stderr
-        except Exception as e:
-            print(f"Error running flake8: {e}")
-            return
-
-        if not errors.strip():
-            return
-
-        text += errors
-        lines = set()
-        for line in errors.split("\n"):
-            match = re.search(r":(\d+):", line)
-            if match:
-                lines.add(int(match.group(1)))
-
-        return LintResult(text, lines)
 
     def latex_lint(self, fname, rel_fname, code):
         """Basic LaTeX syntax checking."""
@@ -222,39 +146,30 @@ class LintResult:
 
 
 def tree_context(fname, code, lines):
-    if not lines or TreeContext is None:
+    """Show a few lines of context around each reported line."""
+    if not lines:
         return ""
 
-    try:
-        context = TreeContext(fname, code)
-        context.add_lines_of_interest(lines)
-        context.add_context()
-        return context.format()
-    except Exception:
+    line_list = code.splitlines()
+    line_set = set(lines)
+    output = [f"{fname}:"]
+    shown = set()
+
+    for ln in sorted(line_set):
+        if ln < 1 or ln > len(line_list):
+            continue
+        start = max(ln - 2, 1)
+        end = min(ln + 2, len(line_list))
+        for i in range(start, end + 1):
+            if i in shown:
+                continue
+            shown.add(i)
+            prefix = ">>> " if i in line_set else "    "
+            output.append(f"{prefix}{i:4d}: {line_list[i - 1]}")
+
+    if len(output) == 1:
         return ""
+    return "\n".join(output) + "\n"
 
 
-def basic_lint(fname, code):
-    """Basic syntax check using compile."""
-    try:
-        compile(code, fname, "exec")
-    except SyntaxError as e:
-        if e.lineno:
-            return LintResult(
-                f"SyntaxError: {e.msg}\nLine: {e.lineno}\n",
-                [e.lineno],
-            )
-    return None
 
-
-def lint_python_compile(fname, code):
-    """Check Python syntax."""
-    try:
-        compile(code, fname, "exec")
-    except SyntaxError as e:
-        if e.lineno:
-            return LintResult(
-                f"Compile error: {e.msg}\nLine: {e.lineno}\n",
-                [e.lineno],
-            )
-    return None

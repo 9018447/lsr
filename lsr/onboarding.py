@@ -9,12 +9,14 @@ import time
 import webbrowser
 from urllib.parse import parse_qs, urlparse
 
-import requests
 from rich.console import Console
 
-from lsr import urls
 from lsr.io import InputOutput
 from lsr.theme import CatppuccinMocha as Mocha
+
+# Documentation URLs (formerly in lsr.urls)
+_WEBSITE_URL = "https://github.com/your-username/lsr"
+_MODELS_AND_KEYS_URL = "https://github.com/your-username/lsr/blob/main/docs/models.md"
 
 console = Console()
 
@@ -31,6 +33,8 @@ def check_openrouter_tier(api_key):
         Returns True if the check fails.
     """
     try:
+        import requests
+
         response = requests.get(
             "https://openrouter.ai/api/v1/auth/key",
             headers={"Authorization": f"Bearer {api_key}"},
@@ -145,7 +149,7 @@ def select_default_model(args, io):
     if model:
         return model
 
-    io.offer_url(urls.models_and_keys, "Open documentation URL for more info?")
+    io.offer_url(_MODELS_AND_KEYS_URL, "Open documentation URL for more info?")
 
 
 # Helper function to find an available port
@@ -175,6 +179,8 @@ def generate_pkce_codes():
 # Function to exchange the authorization code for an API key
 def exchange_code_for_key(code, code_verifier, io):
     try:
+        import requests
+
         response = requests.post(
             "https://openrouter.ai/api/v1/auth/keys",
             headers={"Content-Type": "application/json"},
@@ -251,14 +257,14 @@ def start_openrouter_oauth_flow(io):
                 else:
                     # Redirect to lsr website if 'code' is missing (e.g., user visited manually)
                     self.send_response(302)  # Found (temporary redirect)
-                    self.send_header("Location", urls.website)
+                    self.send_header("Location", _WEBSITE_URL)
                     self.end_headers()
                     # No need to set server_error, just redirect.
                     # Do NOT shut down the server here; wait for timeout or success.
             else:
                 # Redirect anything else (e.g., favicon.ico) to the main website as well
                 self.send_response(302)
-                self.send_header("Location", urls.website)
+                self.send_header("Location", _WEBSITE_URL)
                 self.end_headers()
                 self.wfile.write(b"Not Found")
 

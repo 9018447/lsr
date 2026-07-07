@@ -19,7 +19,6 @@ from lsr.document_types import LATEX, MARKDOWN, TYPST, get_document_type
 from lsr.editor import pipe_editor
 from lsr.theme import SYMBOLS, CatppuccinMocha as Mocha
 
-from lsr.help import Help, install_help_extra
 from lsr.io import CommandCompletionException
 from lsr.llm import litellm
 from lsr.repo import ANY_VCS_ERROR
@@ -73,7 +72,6 @@ class Commands:
 
         self.verify_ssl = verify_ssl
 
-        self.help = None
         self.editor = editor
 
         # Store the original read-only filenames provided via args.read
@@ -1489,57 +1487,12 @@ class Commands:
             else:
                 self.io.tool_output(f"{cmd} No description available.")
         self.io.tool_output()
-        self.io.tool_output("Use `/help <question>` to ask questions about how to use lsr.")
+        self.io.tool_output("Use `/ask <question>` to ask questions about your documents.")
 
     def cmd_help(self, args):
-        "Ask questions about lsr"
+        "Show available slash commands"
 
-        if not args.strip():
-            self.basic_help()
-            return
-
-        from lsr.coders.base_coder import Coder
-
-        if not self.help:
-            res = install_help_extra(self.io)
-            if not res:
-                self.io.tool_error("Unable to initialize interactive help.")
-                return
-
-            self.help = Help()
-
-        coder = Coder.create(
-            io=self.io,
-            from_coder=self.coder,
-            edit_format="help",
-            summarize_from_coder=False,
-            map_tokens=512,
-            map_mul_no_files=1,
-        )
-        user_msg = self.help.ask(args)
-        user_msg += """
-# Announcement lines from when this session of lsr was launched:
-
-"""
-        user_msg += "\n".join(self.coder.get_announcements()) + "\n"
-
-        coder.run(user_msg, preproc=False)
-
-        if self.coder.repo_map:
-            map_tokens = self.coder.repo_map.max_map_tokens
-            map_mul_no_files = self.coder.repo_map.map_mul_no_files
-        else:
-            map_tokens = 0
-            map_mul_no_files = 1
-
-        raise SwitchCoder(
-            edit_format=self.coder.edit_format,
-            summarize_from_coder=False,
-            from_coder=coder,
-            map_tokens=map_tokens,
-            map_mul_no_files=map_mul_no_files,
-            show_announcements=False,
-        )
+        self.basic_help()
 
     def completions_ask(self):
         raise CommandCompletionException()

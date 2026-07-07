@@ -21,21 +21,18 @@
 - name: gpt-4-turbo-2024-04-09
   edit_format: udiff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
 
 - name: gpt-4-turbo
   edit_format: udiff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
 
 - name: openai/gpt-4o
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -44,7 +41,6 @@
 - name: openai/gpt-4o-2024-08-06
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -52,7 +48,6 @@
 - name: gpt-4o-2024-08-06
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -60,7 +55,6 @@
 - name: gpt-4o-2024-11-20
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -68,7 +62,6 @@
 - name: openai/gpt-4o-2024-11-20
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -76,7 +69,6 @@
 - name: gpt-4o
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -95,7 +87,6 @@
 - name: gpt-4-0125-preview
   edit_format: udiff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -103,44 +94,37 @@
 - name: gpt-4-1106-preview
   edit_format: udiff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
 
 - name: gpt-4-vision-preview
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   reminder: sys
 
 - name: gpt-4-0314
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
 
 - name: gpt-4-0613
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   reminder: sys
 
 - name: gpt-4-32k-0613
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   reminder: sys
 
 - name: claude-3-opus-20240229
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
 
 - name: openrouter/anthropic/claude-3-opus
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
 
 - name: claude-3-sonnet-20240229
   weak_model_name: claude-3-5-haiku-20241022
@@ -148,7 +132,6 @@
 - name: claude-3-5-sonnet-20240620
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -161,7 +144,6 @@
 - name: anthropic/claude-3-5-sonnet-20240620
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -174,7 +156,6 @@
 - name: anthropic/claude-3-5-sonnet-20241022
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -188,7 +169,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -203,7 +183,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -217,7 +196,6 @@
 - name: claude-3-7-sonnet-20250219
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -232,7 +210,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -247,7 +224,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -262,7 +238,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -277,7 +252,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: bedrock_converse/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -292,7 +266,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: bedrock_converse/us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -307,7 +280,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 64000
@@ -319,7 +291,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 64000
@@ -331,7 +302,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -346,7 +316,6 @@
   overeager: true
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -360,7 +329,6 @@
 - name: bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -373,7 +341,6 @@
 - name: anthropic/claude-3-5-sonnet-latest
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -386,7 +353,6 @@
 - name: claude-3-5-sonnet-20241022
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -407,7 +373,6 @@
 - name: anthropic/claude-3-5-haiku-20241022
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   extra_params:
     extra_headers:
       anthropic-beta: prompt-caching-2024-07-31,pdfs-2024-09-25
@@ -416,7 +381,6 @@
 - name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   extra_params:
     extra_headers:
       anthropic-beta: prompt-caching-2024-07-31,pdfs-2024-09-25
@@ -425,7 +389,6 @@
 - name: claude-3-5-haiku-20241022
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     extra_headers:
@@ -435,7 +398,6 @@
 - name: vertex_ai/claude-3-5-haiku@20241022
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   extra_params:
     max_tokens: 4096
 
@@ -450,7 +412,6 @@
 - name: openrouter/anthropic/claude-3.5-sonnet
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -461,7 +422,6 @@
 - name: openrouter/anthropic/claude-3.5-sonnet:beta
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku:beta
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -472,7 +432,6 @@
 - name: vertex_ai/claude-3-5-sonnet@20240620
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -482,7 +441,6 @@
 - name: vertex_ai/claude-3-5-sonnet-v2@20241022
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -492,22 +450,18 @@
 - name: vertex_ai/claude-3-opus@20240229
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
 
 - name: vertex_ai/claude-3-sonnet@20240229
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
 
 - name: command-r-plus
   weak_model_name: command-r-plus
-  use_repo_map: true
 
 - name: command-r-08-2024
   weak_model_name: command-r-08-2024
-  use_repo_map: true
 
 - name: command-r-plus-08-2024
   weak_model_name: command-r-plus-08-2024
-  use_repo_map: true
 
 - name: groq/llama3-70b-8192
   edit_format: diff
@@ -521,34 +475,27 @@
 
 - name: gemini/gemini-1.5-pro-002
   edit_format: diff
-  use_repo_map: true
 
 - name: gemini/gemini-1.5-flash-002
 
 - name: gemini/gemini-1.5-pro
   edit_format: diff-fenced
-  use_repo_map: true
 
 - name: gemini/gemini-1.5-pro-latest
   edit_format: diff-fenced
-  use_repo_map: true
 
 - name: gemini/gemini-exp-1206
   edit_format: diff
-  use_repo_map: true
 
 - name: gemini/gemini-2.0-flash-exp
   edit_format: diff
-  use_repo_map: true
 
 - name: gemini/gemini-2.0-flash
   edit_format: diff
-  use_repo_map: true
 
 - name: openrouter/deepseek/deepseek-r1
   edit_format: diff
   weak_model_name: openrouter/deepseek/deepseek-chat
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -560,7 +507,6 @@
 - name: openrouter/deepseek/deepseek-r1:free
   edit_format: diff
   weak_model_name: openrouter/deepseek/deepseek-r1:free
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -569,7 +515,6 @@
 - name: openrouter/deepseek/deepseek-chat-v3-0324:free
   edit_format: diff
   weak_model_name: openrouter/deepseek/deepseek-chat-v3-0324:free
-  use_repo_map: true
   examples_as_sys_msg: true
   caches_by_default: true
   use_temperature: false
@@ -582,7 +527,6 @@
 - name: deepseek/deepseek-reasoner
   edit_format: diff
   weak_model_name: deepseek/deepseek-chat
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 64000
@@ -593,7 +537,6 @@
 
 - name: deepseek/deepseek-chat
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -603,7 +546,6 @@
 - name: openrouter/deepseek/deepseek-chat:free
   edit_format: diff
   weak_model_name: openrouter/deepseek/deepseek-chat:free
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -614,7 +556,6 @@
 
 - name: deepseek/deepseek-coder
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -623,7 +564,6 @@
 
 - name: deepseek-chat
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -631,7 +571,6 @@
 
 - name: deepseek-coder
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -640,19 +579,16 @@
 
 - name: openrouter/deepseek/deepseek-coder
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
 
 - name: openrouter/deepseek/deepseek-chat
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
 
 - name: openrouter/deepseek/deepseek-chat-v3-0324
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -662,7 +598,6 @@
 - name: openrouter/openai/gpt-4o
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -670,7 +605,6 @@
 
 - name: openai/o1-mini
   weak_model_name: openai/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: openai/gpt-4o
@@ -678,7 +612,6 @@
 
 - name: azure/o1-mini
   weak_model_name: azure/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: azure/gpt-4o
@@ -686,7 +619,6 @@
 
 - name: o1-mini
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: gpt-4o
@@ -695,7 +627,6 @@
 - name: openai/o1-preview
   edit_format: diff
   weak_model_name: openai/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: openai/gpt-4o
@@ -704,7 +635,6 @@
 - name: azure/o1-preview
   edit_format: diff
   weak_model_name: azure/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: azure/gpt-4o
@@ -713,7 +643,6 @@
 - name: azure/o1
   edit_format: diff
   weak_model_name: azure/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: azure/gpt-4o
@@ -723,7 +652,6 @@
 - name: o1-preview
   edit_format: architect
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   editor_model_name: gpt-4o
@@ -731,7 +659,6 @@
 
 - name: openrouter/openai/o1-mini
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   streaming: false
@@ -741,7 +668,6 @@
 - name: openrouter/openai/o1-preview
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   use_system_prompt: false
   use_temperature: false
   streaming: false
@@ -751,7 +677,6 @@
 - name: openrouter/openai/o1
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: openrouter/openai/gpt-4o
@@ -762,7 +687,6 @@
 - name: openai/o1
   edit_format: diff
   weak_model_name: openai/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: openai/gpt-4o
@@ -773,7 +697,6 @@
 - name: o1
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: gpt-4o
@@ -784,14 +707,12 @@
 - name: openrouter/qwen/qwen-2.5-coder-32b-instruct
   edit_format: diff
   weak_model_name: openrouter/qwen/qwen-2.5-coder-32b-instruct
-  use_repo_map: true
   editor_model_name: openrouter/qwen/qwen-2.5-coder-32b-instruct
   editor_edit_format: editor-diff
 
 - name: openrouter/deepseek/deepseek-r1-distill-llama-70b
   edit_format: diff
   weak_model_name: openrouter/deepseek/deepseek-chat
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     max_tokens: 8192
@@ -802,7 +723,6 @@
 
 - name: openrouter/moonshotai/kimi-k2
   edit_format: diff
-  use_repo_map: true
   examples_as_sys_msg: true
   extra_params:
     temperature: 0.6
@@ -810,7 +730,6 @@
 - name: fireworks_ai/accounts/fireworks/models/deepseek-r1
   edit_format: diff
   weak_model_name: fireworks_ai/accounts/fireworks/models/deepseek-v3
-  use_repo_map: true
   use_temperature: false
   streaming: true
   editor_model_name: fireworks_ai/accounts/fireworks/models/deepseek-v3
@@ -821,7 +740,6 @@
 
 - name: fireworks_ai/accounts/fireworks/models/deepseek-v3
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -829,7 +747,6 @@
 
 - name: fireworks_ai/accounts/fireworks/models/deepseek-v3-0324
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
@@ -838,7 +755,6 @@
 - name: openai/o3-mini
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: gpt-4o
   editor_edit_format: editor-diff
@@ -848,7 +764,6 @@
 - name: o3-mini
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: gpt-4o
   editor_edit_format: editor-diff
@@ -858,7 +773,6 @@
 - name: openrouter/openai/o3-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4o
   editor_edit_format: editor-diff
@@ -868,7 +782,6 @@
 - name: openrouter/openai/o3-mini-high
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4o
   editor_edit_format: editor-diff
@@ -878,7 +791,6 @@
 - name: azure/o3-mini
   edit_format: diff
   weak_model_name: azure/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4o
   editor_edit_format: editor-diff
@@ -888,7 +800,6 @@
 - name: gpt-4.5-preview
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -898,7 +809,6 @@
 - name: openai/gpt-4.5-preview
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   lazy: true
   reminder: sys
   examples_as_sys_msg: true
@@ -909,7 +819,6 @@
   reasoning_tag: think
   edit_format: diff
   weak_model_name: fireworks_ai/accounts/fireworks/models/qwen2p5-coder-32b-instruct
-  use_repo_map: true
   editor_model_name: fireworks_ai/accounts/fireworks/models/qwen2p5-coder-32b-instruct
   editor_edit_format: editor-diff
   reminder: user
@@ -923,7 +832,6 @@
   reasoning_tag: think
   edit_format: diff
   weak_model_name: groq/qwen-2.5-coder-32b
-  use_repo_map: true
   editor_model_name: groq/qwen-2.5-coder-32b
   editor_edit_format: editor-diff
   use_temperature: 0.6
@@ -949,50 +857,41 @@
 - name: gemini/gemini-2.5-pro-preview-03-25
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: gemini/gemini-2.0-flash
 
 - name: gemini/gemini-2.5-pro-exp-03-25
   edit_format: diff-fenced
-  use_repo_map: true
   overeager: true
   weak_model_name: gemini/gemini-2.5-flash-preview-04-17
 
 - name: openrouter/google/gemini-2.5-pro-exp-03-25
   edit_format: diff-fenced
   overeager: true
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.0-flash-exp:free
 
 - name: vertex_ai/gemini-2.5-pro-exp-03-25
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
 
 - name: vertex_ai/gemini-2.5-pro-preview-03-25
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
 
 - name: openrouter/openrouter/quasar-alpha
-  use_repo_map: true
   edit_format: diff
   examples_as_sys_msg: true
 
 - name: openrouter/x-ai/grok-3-beta
-  use_repo_map: true
   edit_format: diff
 
 - name: xai/grok-3-beta
-  use_repo_map: true
   edit_format: diff
 
 - name: openrouter/x-ai/grok-3-mini-beta
-  use_repo_map: true
   edit_format: whole
   accepts_settings:
     - reasoning_effort 
@@ -1000,7 +899,6 @@
 - name: openai/o4-mini
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1011,7 +909,6 @@
 - name: openrouter/openai/o4-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1022,7 +919,6 @@
 - name: azure/o4-mini
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
@@ -1031,52 +927,43 @@
   examples_as_sys_msg: true
 
 - name: xai/grok-4
-  use_repo_map: true
   edit_format: diff
   accepts_settings:
     - reasoning_effort
 
 - name: openrouter/x-ai/grok-4
-  use_repo_map: true
   edit_format: diff
   accepts_settings:
     - reasoning_effort
 
 - name: xai/grok-3-mini-beta
-  use_repo_map: true
   edit_format: whole
   accepts_settings:
     - reasoning_effort
 
 - name: openrouter/x-ai/grok-3-fast-beta
-  use_repo_map: true
   edit_format: diff
 
 - name: xai/grok-3-fast-beta
-  use_repo_map: true
   edit_format: diff
 
 - name: openrouter/x-ai/grok-3-mini-fast-beta
-  use_repo_map: true
   edit_format: whole
   accepts_settings:
     - reasoning_effort
 
 - name: xai/grok-3-mini-fast-beta
-  use_repo_map: true
   edit_format: whole
   accepts_settings:
     - reasoning_effort
 
 - name: openrouter/openrouter/optimus-alpha
-  use_repo_map: true
   edit_format: diff
   examples_as_sys_msg: true
   
 - name: gpt-4.1
   edit_format: diff
   weak_model_name: gpt-4.1-mini
-  use_repo_map: true
   reminder: sys # user: 52.x%/96.9%
   examples_as_sys_msg: false # true: 51.6% correct, 95.6% well formed; false: 52.4%/98.2%
   editor_model_name: gpt-4.1-mini
@@ -1084,7 +971,6 @@
 - name: openai/gpt-4.1
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
   editor_model_name: openai/gpt-4.1-mini
@@ -1092,7 +978,6 @@
 - name: azure/gpt-4.1
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
   editor_model_name: azure/gpt-4.1-mini
@@ -1100,32 +985,27 @@
 - name: openrouter/openai/gpt-4.1
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
   editor_model_name: openrouter/openai/gpt-4.1-mini
 
 - name: gpt-4.1-mini
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false # false: 32.x%/92.4% (60+ malformed responses); true: 31.7/90.2/60+
 
 - name: openai/gpt-4.1-mini
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
 
 - name: azure/gpt-4.1-mini
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
 
 - name: openrouter/openai/gpt-4.1-mini
   edit_format: diff
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
 
@@ -1133,7 +1013,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1144,7 +1023,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1154,7 +1032,6 @@
 - name: openai/o4-mini
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1165,7 +1042,6 @@
 - name: openrouter/openai/o4-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1176,7 +1052,6 @@
 - name: azure/o4-mini
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
@@ -1188,7 +1063,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1199,7 +1073,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1209,7 +1082,6 @@
 - name: openai/o4-mini
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1220,7 +1092,6 @@
 - name: openrouter/openai/o4-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1231,7 +1102,6 @@
 - name: azure/o4-mini
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
@@ -1243,7 +1113,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1254,7 +1123,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1264,7 +1132,6 @@
 - name: openai/o4-mini
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1275,7 +1142,6 @@
 - name: openrouter/openai/o4-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1286,7 +1152,6 @@
 - name: azure/o4-mini
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
@@ -1298,7 +1163,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1309,7 +1173,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -1319,7 +1182,6 @@
 - name: openai/o4-mini
   edit_format: diff
   weak_model_name: openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1330,7 +1192,6 @@
 - name: openrouter/openai/o4-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: openrouter/openai/gpt-4.1
   editor_edit_format: editor-diff
@@ -1341,7 +1202,6 @@
 - name: azure/o4-mini
   edit_format: diff
   weak_model_name: azure/gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: azure/gpt-4.1
   editor_edit_format: editor-diff
@@ -1352,7 +1212,6 @@
 - name: o4-mini
   edit_format: diff
   weak_model_name: gpt-4.1-mini
-  use_repo_map: true
   use_temperature: false
   editor_model_name: gpt-4.1
   editor_edit_format: editor-diff
@@ -1362,105 +1221,89 @@
       
 - name: gemini/gemini-2.5-flash-preview-04-17
   edit_format: diff
-  use_repo_map: true
   accepts_settings: ["reasoning_effort", "thinking_tokens"]
 
 - name: gemini-2.5-flash-preview-04-17
   edit_format: diff
-  use_repo_map: true
   accepts_settings: ["reasoning_effort", "thinking_tokens"]
 
 - name: vertex_ai/gemini-2.5-flash-preview-04-17
   edit_format: diff
-  use_repo_map: true
   accepts_settings: ["reasoning_effort", "thinking_tokens"]
 
 - name: openrouter/google/gemini-2.5-pro-preview-03-25
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.0-flash-001
     
 - name: gemini/gemini-2.5-pro-preview-05-06
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: gemini/gemini-2.5-flash-preview-04-17
 
 - name: gemini/gemini-2.5-pro-preview-06-05
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: gemini/gemini-2.5-flash-preview-04-17
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-2.5-flash
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-2.5-flash-preview-09-2025
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini-2.5-flash-preview-09-2025
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-2.5-flash-lite
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini-2.5-flash-lite
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-2.5-flash-lite-preview-09-2025
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini-2.5-flash-lite-preview-09-2025
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-flash-latest
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini-flash-latest
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-2.5-pro
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: gemini/gemini-2.5-flash
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
@@ -1468,20 +1311,17 @@
 - name: gemini/gemini-2.5-flash-lite-preview-06-17
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: vertex_ai/gemini-2.5-pro-preview-05-06
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
 
 - name: vertex_ai/gemini-2.5-pro-preview-06-05
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash-preview-04-17
@@ -1489,7 +1329,6 @@
 
 - name: vertex_ai/gemini-2.5-pro
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash
@@ -1498,47 +1337,40 @@
 - name: vertex_ai/gemini-2.5-flash
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   accepts_settings: ["thinking_tokens"]
 
 - name: openrouter/google/gemini-2.5-pro-preview-05-06
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.0-flash-001
 
 - name: openrouter/google/gemini-2.5-pro-preview-06-05
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.0-flash-001
   accepts_settings: ["thinking_tokens"]
 
 - name: openrouter/google/gemini-2.5-pro
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.5-flash
   accepts_settings: ["thinking_tokens"]
 
 - name: openrouter/google/gemini-2.5-flash
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-3-pro-preview
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: gemini/gemini-2.5-flash
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: vertex_ai/gemini-3-pro-preview
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: vertex_ai/gemini-2.5-flash
   overeager: true
   editor_model_name: vertex_ai/gemini-2.5-flash
@@ -1547,27 +1379,23 @@
 - name: openrouter/google/gemini-3-pro-preview
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   weak_model_name: openrouter/google/gemini-2.5-flash
   accepts_settings: ["thinking_tokens"]
 
 - name: gemini/gemini-3-flash-preview
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["thinking_tokens"]
 
 - name: vertex_ai/gemini-3-flash-preview
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   accepts_settings: ["thinking_tokens"]
 
 - name: openrouter/google/gemini-3-flash-preview
   overeager: true
   edit_format: diff-fenced
-  use_repo_map: true
   accepts_settings: ["thinking_tokens"]
 
 #- name: openrouter/qwen/qwen3-235b-a22b
@@ -1598,7 +1426,6 @@
 - name: claude-sonnet-4-20250514
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1612,7 +1439,6 @@
 - name: anthropic/claude-sonnet-4-20250514
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1626,7 +1452,6 @@
 - name: bedrock/anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1640,7 +1465,6 @@
 - name: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1654,7 +1478,6 @@
 - name: bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1668,7 +1491,6 @@
 - name: bedrock_converse/anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1682,7 +1504,6 @@
 - name: bedrock_converse/us.anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1696,7 +1517,6 @@
 - name: vertex_ai/claude-sonnet-4@20250514
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1707,7 +1527,6 @@
 - name: vertex_ai/claude-sonnet-4@20250514
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1718,7 +1537,6 @@
 - name: openrouter/anthropic/claude-sonnet-4
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1732,7 +1550,6 @@
 - name: anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1746,7 +1563,6 @@
 - name: bedrock_converse/eu.anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/eu.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1760,7 +1576,6 @@
 - name: eu.anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: eu.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1774,7 +1589,6 @@
 - name: us.anthropic.claude-sonnet-4-20250514-v1:0
   edit_format: diff
   weak_model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1788,7 +1602,6 @@
 - name: claude-opus-4-20250514
   edit_format: diff
   weak_model_name: claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1802,7 +1615,6 @@
 - name: anthropic/claude-opus-4-20250514
   edit_format: diff
   weak_model_name: anthropic/claude-3-5-haiku-20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1816,7 +1628,6 @@
 - name: anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1830,7 +1641,6 @@
 - name: bedrock_converse/anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1844,7 +1654,6 @@
 - name: bedrock_converse/us.anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -1859,7 +1668,6 @@
 - name: claude-sonnet-4-6
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1871,7 +1679,6 @@
 - name: claude-opus-4-7
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -1884,7 +1691,6 @@
 - name: claude-opus-4-6
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -1897,7 +1703,6 @@
 - name: claude-sonnet-4-5-20250929
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1909,7 +1714,6 @@
 - name: claude-sonnet-4-5
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1921,7 +1725,6 @@
 - name: claude-haiku-4-5-20251001
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1930,7 +1733,6 @@
 - name: claude-haiku-4-5
   edit_format: diff
   weak_model_name: claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1939,7 +1741,6 @@
 - name: bedrock/anthropic.claude-opus-4-6-v1
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-haiku-4-5-20251001-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -1952,7 +1753,6 @@
 - name: bedrock/anthropic.claude-opus-4-7-v1
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-haiku-4-5-20251001-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -1965,7 +1765,6 @@
 - name: bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-haiku-4-5-20251001-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1977,7 +1776,6 @@
 - name: bedrock/anthropic.claude-haiku-4-5-20251001-v1:0
   edit_format: diff
   weak_model_name: bedrock/anthropic.claude-haiku-4-5-20251001-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -1986,7 +1784,6 @@
 - name: vertex_ai/claude-opus-4-6
   edit_format: diff
   weak_model_name: vertex_ai/claude-haiku-4-5@20251001
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -1999,7 +1796,6 @@
 - name: vertex_ai/claude-opus-4-7
   edit_format: diff
   weak_model_name: vertex_ai/claude-haiku-4-5@20251001
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -2012,7 +1808,6 @@
 - name: vertex_ai/claude-sonnet-4-5@20250929
   edit_format: diff
   weak_model_name: vertex_ai/claude-haiku-4-5@20251001
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -2024,7 +1819,6 @@
 - name: vertex_ai/claude-haiku-4-5@20251001
   edit_format: diff
   weak_model_name: vertex_ai/claude-haiku-4-5@20251001
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -2033,7 +1827,6 @@
 - name: bedrock_converse/eu.anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: bedrock_converse/eu.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -2047,7 +1840,6 @@
 - name: eu.anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: eu.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -2061,7 +1853,6 @@
 - name: us.anthropic.claude-opus-4-20250514-v1:0
   edit_format: diff
   weak_model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -2075,7 +1866,6 @@
 - name: vertex_ai/claude-opus-4@20250514
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 32000
@@ -2086,7 +1876,6 @@
 - name: vertex_ai/claude-opus-4@20250514
   edit_format: diff
   weak_model_name: vertex_ai/claude-3-5-haiku@20241022
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 32000
@@ -2096,13 +1885,11 @@
 
 - name: vertex_ai/gemini-2.5-flash-preview-05-20
   edit_format: diff
-  use_repo_map: true
   accepts_settings: ["reasoning_effort", "thinking_tokens"]
 
 - name: openrouter/anthropic/claude-opus-4
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-3-5-haiku
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     extra_headers:
@@ -2116,7 +1903,6 @@
 - name: openrouter/anthropic/claude-opus-4.6
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -2129,7 +1915,6 @@
 - name: openrouter/anthropic/claude-opus-4.7
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 128000
@@ -2143,7 +1928,6 @@
 - name: openrouter/anthropic/claude-sonnet-4.5
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -2156,7 +1940,6 @@
 - name: openrouter/anthropic/claude-haiku-4.5
   edit_format: diff
   weak_model_name: openrouter/anthropic/claude-haiku-4-5
-  use_repo_map: true
   examples_as_sys_msg: false
   extra_params:
     max_tokens: 64000
@@ -2166,7 +1949,6 @@
 - name: gpt-5
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2175,7 +1957,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-5-mini
-  use_repo_map: true
   editor_model_name: gpt-5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2186,14 +1967,12 @@
 - name: gpt-5-2025-08-07
   edit_format: diff
   weak_model_name: gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.1
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2201,7 +1980,6 @@
 - name: gpt-5.1-2025-11-13
   edit_format: diff
   weak_model_name: gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2209,7 +1987,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-5-mini
-  use_repo_map: true
   editor_model_name: gpt-5.2
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2220,7 +1997,6 @@
 - name: gpt-5.2
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2228,77 +2004,66 @@
 - name: gpt-5.2-2025-12-11
   edit_format: diff
   weak_model_name: gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-mini
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-mini-2025-08-07
   edit_format: diff
   weak_model_name: gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-nano
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-nano-2025-08-07
   edit_format: diff
   weak_model_name: gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-chat
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.1-chat
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.1-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.2-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.3
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2307,7 +2072,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-5-mini
-  use_repo_map: true
   editor_model_name: gpt-5.3
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2318,14 +2082,12 @@
 - name: gpt-5.3-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.4
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2334,7 +2096,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-5-mini
-  use_repo_map: true
   editor_model_name: gpt-5.4
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2345,14 +2106,12 @@
 - name: gpt-5.4-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.5
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -2361,7 +2120,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: gpt-5-mini
-  use_repo_map: true
   editor_model_name: gpt-5.5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2372,28 +2130,24 @@
 - name: gpt-5.5-chat-latest
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5-codex
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.1-codex
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2401,7 +2155,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-5-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2412,105 +2165,90 @@
 - name: azure/gpt-5-2025-08-07
   edit_format: diff
   weak_model_name: azure/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.1
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.1-2025-11-13
   edit_format: diff
   weak_model_name: azure/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.2
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.2-2025-12-11
   edit_format: diff
   weak_model_name: azure/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-mini
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-mini-2025-08-07
   edit_format: diff
   weak_model_name: azure/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-nano
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-nano-2025-08-07
   edit_format: diff
   weak_model_name: azure/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-chat
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.1-chat
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.1-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.2-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.3
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2518,7 +2256,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-5-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-5.3
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2529,14 +2266,12 @@
 - name: azure/gpt-5.3-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.4
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2544,7 +2279,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-5-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-5.4
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2555,14 +2289,12 @@
 - name: azure/gpt-5.4-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: azure/gpt-5.5
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2570,7 +2302,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: azure/gpt-5-mini
-  use_repo_map: true
   editor_model_name: azure/gpt-5.5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2581,14 +2312,12 @@
 - name: azure/gpt-5.5-chat-latest
   edit_format: diff
   weak_model_name: azure/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2596,7 +2325,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2607,21 +2335,18 @@
 - name: openai/gpt-5-2025-08-07
   edit_format: diff
   weak_model_name: openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1-2025-11-13
   edit_format: diff
   weak_model_name: openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2629,7 +2354,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-5.2
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2640,84 +2364,72 @@
 - name: openai/gpt-5.2
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.2-2025-12-11
   edit_format: diff
   weak_model_name: openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-mini
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-mini-2025-08-07
   edit_format: diff
   weak_model_name: openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-nano
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-nano-2025-08-07
   edit_format: diff
   weak_model_name: openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-chat
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1-chat
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.2-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.3
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2725,7 +2437,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-5.3
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2736,14 +2447,12 @@
 - name: openai/gpt-5.3-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.4
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2751,7 +2460,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-5.4
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2762,14 +2470,12 @@
 - name: openai/gpt-5.4-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.5
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2777,7 +2483,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openai/gpt-5.5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2788,14 +2493,12 @@
 - name: openai/gpt-5.5-chat-latest
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2803,7 +2506,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2814,21 +2516,18 @@
 - name: openrouter/openai/gpt-5-2025-08-07
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.1
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.1-2025-11-13
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2836,7 +2535,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-5.2
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2847,84 +2545,72 @@
 - name: openrouter/openai/gpt-5.2
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.2-2025-12-11
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-mini-2025-08-07
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-nano
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-nano-2025-08-07
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano-2025-08-07
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-chat
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.1-chat
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.1-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.2-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.3
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2932,7 +2618,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-5.3
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2943,14 +2628,12 @@
 - name: openrouter/openai/gpt-5.3-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.4
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2958,7 +2641,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-5.4
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2969,14 +2651,12 @@
 - name: openrouter/openai/gpt-5.4-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.5
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
@@ -2984,7 +2664,6 @@
   streaming: false
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-mini
-  use_repo_map: true
   editor_model_name: openrouter/openai/gpt-5.5
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
@@ -2995,28 +2674,24 @@
 - name: openrouter/openai/gpt-5.5-chat-latest
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-4.1-nano
   edit_format: diff
   weak_model_name: gpt-4.1-nano
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
 
 - name: openai/gpt-4.1-nano
   edit_format: diff
   weak_model_name: openai/gpt-4.1-nano
-  use_repo_map: true
   reminder: sys
   examples_as_sys_msg: false
 
 - name: o1-pro
   edit_format: diff
   weak_model_name: gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: gpt-4o
@@ -3028,7 +2703,6 @@
 - name: openai/o1-pro
   edit_format: diff
   weak_model_name: openai/gpt-4o-mini
-  use_repo_map: true
   use_temperature: false
   streaming: false
   editor_model_name: openai/gpt-4o
@@ -3040,7 +2714,6 @@
 - name: gpt-5.2-codex
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3048,7 +2721,6 @@
 - name: gpt-5.3-codex
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3056,7 +2728,6 @@
 - name: openai/gpt-5.2-codex
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3064,7 +2735,6 @@
 - name: openai/gpt-5.3-codex
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3072,35 +2742,30 @@
 - name: gpt-5.1-codex-mini
   edit_format: diff
   weak_model_name: gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1-codex-mini
   edit_format: diff
   weak_model_name: openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: gpt-5.1-codex-max
   edit_format: diff
   weak_model_name: gpt-5.1-codex-mini
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openai/gpt-5.1-codex-max
   edit_format: diff
   weak_model_name: openai/gpt-5.1-codex-mini
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.2-codex
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3108,7 +2773,6 @@
 - name: openrouter/openai/gpt-5.3-codex
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
   overeager: true
@@ -3116,13 +2780,11 @@
 - name: openrouter/openai/gpt-5.1-codex-mini
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5-nano
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]
 
 - name: openrouter/openai/gpt-5.1-codex-max
   edit_format: diff
   weak_model_name: openrouter/openai/gpt-5.1-codex-mini
-  use_repo_map: true
   use_temperature: false
   accepts_settings: ["reasoning_effort"]

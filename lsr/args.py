@@ -241,30 +241,6 @@ def get_parser(default_config_files, vcs_root):
     )
 
     ##########
-    group = parser.add_argument_group("Repomap settings")
-    group.add_argument(
-        "--map-tokens",
-        type=int,
-        default=None,
-        help="Suggested number of tokens to use for repo map, use 0 to disable",
-    )
-    group.add_argument(
-        "--map-refresh",
-        choices=["auto", "always", "files", "manual"],
-        default="auto",
-        help=(
-            "Control how often the repo map is refreshed. Options: auto, always, files, manual"
-            " (default: auto)"
-        ),
-    )
-    group.add_argument(
-        "--map-multiplier-no-files",
-        type=float,
-        default=2,
-        help="Multiplier for map tokens when no files are specified (default: 2)",
-    )
-
-    ##########
     group = parser.add_argument_group("History Files")
     default_input_history_file = (
         os.path.join(vcs_root, ".lsr.input.history") if vcs_root else ".lsr.input.history"
@@ -523,12 +499,6 @@ def get_parser(default_config_files, vcs_root):
         help="Skip the sanity check for the VCS repository (default: False)",
         default=False,
     )
-    group.add_argument(
-        "--watch-files",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable/disable watching files for ai coding comments (default: False)",
-    )
     group = parser.add_argument_group("Fixing and committing")
     group.add_argument(
         "--lint",
@@ -570,38 +540,7 @@ def get_parser(default_config_files, vcs_root):
     )
 
     #########
-    group = parser.add_argument_group("Upgrading")
-    group.add_argument(
-        "--just-check-update",
-        action="store_true",
-        help="Check for updates and return status in the exit code",
-        default=False,
-    )
-    group.add_argument(
-        "--check-update",
-        action=argparse.BooleanOptionalAction,
-        help="Check for new lsr versions on launch",
-        default=True,
-    )
-    group.add_argument(
-        "--show-release-notes",
-        action=argparse.BooleanOptionalAction,
-        help="Show release notes on first run of new version (default: None, ask user)",
-        default=None,
-    )
-    group.add_argument(
-        "--install-main-branch",
-        action="store_true",
-        help="Install the latest version from the main branch",
-        default=False,
-    )
-    group.add_argument(
-        "--upgrade",
-        "--update",
-        action="store_true",
-        help="Upgrade lsr to the latest version from PyPI",
-        default=False,
-    )
+    group = parser.add_argument_group("Version")
     group.add_argument(
         "--version",
         action="version",
@@ -644,12 +583,6 @@ def get_parser(default_config_files, vcs_root):
         "--exit",
         action="store_true",
         help="Do all startup activities then exit before accepting user input (debug)",
-        default=False,
-    )
-    group.add_argument(
-        "--show-repo-map",
-        action="store_true",
-        help="Print the repo map and exit (debug)",
         default=False,
     )
     group.add_argument(

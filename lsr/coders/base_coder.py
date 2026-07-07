@@ -31,8 +31,13 @@ from rich.panel import Panel
 from rich.text import Text
 from lsr.theme import CatppuccinMocha as Mocha
 
-from lsr import __version__, models, prompts, urls, utils
+from lsr import __version__, models, prompts, utils
 from lsr.commands import Commands
+
+# Documentation URLs (formerly in lsr.urls)
+_LARGE_REPOS_URL = "https://github.com/your-username/lsr/blob/main/docs/faq.md#large-repos"
+_TOKEN_LIMITS_URL = "https://github.com/your-username/lsr/blob/main/docs/troubleshooting.md#token-limits"
+_EDIT_ERRORS_URL = "https://github.com/your-username/lsr/blob/main/docs/troubleshooting.md#edit-errors"
 from lsr.exceptions import LiteLLMExceptions
 from lsr.history import ChatSummary
 from lsr.io import ConfirmGroup, InputOutput
@@ -47,11 +52,6 @@ from lsr.reasoning_tags import (
     replace_reasoning_tags,
 )
 from lsr.repo import ANY_VCS_ERROR, Repo
-
-try:
-    from lsr.repomap import RepoMap
-except ImportError:
-    RepoMap = None
 
 from lsr.run_cmd import run_cmd
 from lsr.utils import format_content, format_messages, format_tokens, is_image_file
@@ -131,7 +131,6 @@ class Coder:
     ignore_mentions = None
     chat_language = None
     commit_language = None
-    file_watcher = None
 
     @classmethod
     def create(
@@ -191,7 +190,6 @@ class Coder:
                 ignore_mentions=from_coder.ignore_mentions,
                 total_tokens_sent=from_coder.total_tokens_sent,
                 total_tokens_received=from_coder.total_tokens_received,
-                file_watcher=from_coder.file_watcher,
                 current_plan=from_coder.current_plan,
             )
             use_kwargs.update(update)  # override to complete the switch
@@ -270,26 +268,9 @@ class Coder:
                 lines.append(
                     "Warning: For large repos, consider using --subtree-only and .lsrignore"
                 )
-                lines.append(f"See: {urls.large_repos}")
+                lines.append(f"See: {_LARGE_REPOS_URL}")
         else:
             lines.append("VCS repo: none")
-
-        # Repo-map
-        if self.repo_map:
-            map_tokens = self.repo_map.max_map_tokens
-            if map_tokens > 0:
-                refresh = self.repo_map.refresh
-                lines.append(f"Repo-map: using {map_tokens} tokens, {refresh} refresh")
-                max_map_tokens = self.main_model.get_repo_map_tokens() * 2
-                if map_tokens > max_map_tokens:
-                    lines.append(
-                        f"Warning: map-tokens > {max_map_tokens} is not recommended. Too much"
-                        " irrelevant code can confuse LLMs."
-                    )
-            else:
-                lines.append("Repo-map: disabled because map_tokens == 0")
-        else:
-            lines.append("Repo-map: disabled")
 
         # Files
         for fname in self.get_inchat_relative_files():
@@ -321,7 +302,6 @@ class Coder:
         auto_commits=True,
         dirty_commits=True,
         dry_run=False,
-        map_tokens=1024,
         verbose=False,
         stream=True,
         use_git=True,
@@ -333,11 +313,9 @@ class Coder:
         lint_cmds=None,
         test_cmd=None,
         lsr_commit_hashes=None,
-        map_mul_no_files=8,
         commands=None,
         summarizer=None,
         total_cost=0.0,
-        map_refresh="auto",
         cache_prompts=False,
         num_cache_warming_pings=0,
         suggest_shell_commands=True,
@@ -347,7 +325,6 @@ class Coder:
         ignore_mentions=None,
         total_tokens_sent=0,
         total_tokens_received=0,
-        file_watcher=None,
         auto_accept_architect=True,
         use_cwd=True,  # 新增参数：是否使用当前工作目录作为路径参考点
         current_plan=None,
@@ -366,10 +343,6 @@ class Coder:
         self.ignore_mentions = ignore_mentions
         if not self.ignore_mentions:
             self.ignore_mentions = set()
-
-        self.file_watcher = file_watcher
-        if self.file_watcher:
-            self.file_watcher.coder = self
 
         self.suggest_shell_commands = suggest_shell_commands
         self.detect_urls = detect_urls
@@ -506,29 +479,6 @@ class Coder:
                     self.abs_read_only_fnames.add(abs_fname)
                 else:
                     self.io.tool_warning(f"Error: Read-only file {fname} does not exist. Skipping.")
-
-        if map_tokens is None:
-            use_repo_map = main_model.use_repo_map
-            map_tokens = 1024
-        else:
-            use_repo_map = map_tokens > 0
-
-        max_inp_tokens = self.main_model.info.get("max_input_tokens") or 0
-
-        has_map_prompt = hasattr(self, "gpt_prompts") and self.gpt_prompts.repo_content_prefix
-
-        if use_repo_map and self.repo and has_map_prompt and RepoMap is not None:
-            self.repo_map = RepoMap(
-                map_tokens,
-                self.root,
-                self.main_model,
-                io,
-                self.gpt_prompts.repo_content_prefix,
-                self.verbose,
-                max_inp_tokens,
-                map_mul_no_files=map_mul_no_files,
-                refresh=map_refresh,
-            )
 
         self.summarizer = summarizer or ChatSummary(
             [self.main_model.weak_model, self.main_model],
@@ -763,59 +713,8 @@ class Coder:
 
         return matches
 
-    def get_repo_map(self, force_refresh=False):
-        if not self.repo_map:
-            return
-
-        cur_msg_text = self.get_cur_message_text()
-        mentioned_fnames = self.get_file_mentions(cur_msg_text)
-        mentioned_idents = self.get_ident_mentions(cur_msg_text)
-
-        mentioned_fnames.update(self.get_ident_filename_matches(mentioned_idents))
-
-        all_abs_files = set(self.get_all_abs_files())
-        repo_abs_read_only_fnames = set(self.abs_read_only_fnames) & all_abs_files
-        chat_files = set(self.abs_fnames) | repo_abs_read_only_fnames
-        other_files = all_abs_files - chat_files
-
-        repo_content = self.repo_map.get_repo_map(
-            chat_files,
-            other_files,
-            mentioned_fnames=mentioned_fnames,
-            mentioned_idents=mentioned_idents,
-            force_refresh=force_refresh,
-        )
-
-        # fall back to global repo map if files in chat are disjoint from rest of repo
-        if not repo_content:
-            repo_content = self.repo_map.get_repo_map(
-                set(),
-                all_abs_files,
-                mentioned_fnames=mentioned_fnames,
-                mentioned_idents=mentioned_idents,
-            )
-
-        # fall back to completely unhinted repo
-        if not repo_content:
-            repo_content = self.repo_map.get_repo_map(
-                set(),
-                all_abs_files,
-            )
-
-        return repo_content
-
     def get_repo_messages(self):
-        repo_messages = []
-        repo_content = self.get_repo_map()
-        if repo_content:
-            repo_messages += [
-                dict(role="user", content=repo_content),
-                dict(
-                    role="assistant",
-                    content="Ok, I won't try and edit those files without asking first.",
-                ),
-            ]
-        return repo_messages
+        return []
 
     def get_readonly_files_messages(self):
         readonly_messages = []
@@ -853,9 +752,6 @@ class Coder:
             files_content = self.gpt_prompts.files_content_prefix
             files_content += self.get_files_content()
             files_reply = self.gpt_prompts.files_content_assistant_reply
-        elif self.get_repo_map() and self.gpt_prompts.files_no_full_files_with_repo_map:
-            files_content = self.gpt_prompts.files_no_full_files_with_repo_map
-            files_reply = self.gpt_prompts.files_no_full_files_with_repo_map_reply
         else:
             files_content = self.gpt_prompts.files_no_full_files
             files_reply = "Ok."
@@ -1813,7 +1709,7 @@ class Coder:
 
         res = "".join([line + "\n" for line in res])
         self.io.tool_error(res)
-        self.io.offer_url(urls.token_limits)
+        self.io.offer_url(_TOKEN_LIMITS_URL)
 
     def lint_edited(self, fnames):
         parts = []
@@ -2407,7 +2303,7 @@ class Coder:
             return
 
         self.io.tool_warning("Warning: it's best to only add files that need changes to the chat.")
-        self.io.tool_warning(urls.edit_errors)
+        self.io.tool_warning(_EDIT_ERRORS_URL)
         self.warning_given = True
 
     def prepare_to_edit(self, edits):
@@ -2452,7 +2348,7 @@ class Coder:
             err = err.args[0]
 
             self.io.tool_error("The LLM did not conform to the edit format.")
-            self.io.tool_output(urls.edit_errors)
+            self.io.tool_output(_EDIT_ERRORS_URL)
             self.io.tool_output()
             self.io.tool_output(str(err))
 

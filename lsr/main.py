@@ -9,6 +9,14 @@ import webbrowser
 from dataclasses import fields
 from pathlib import Path
 
+# Documentation URLs (formerly in lsr.urls)
+_DOCS_BASE = "https://github.com/your-username/lsr/blob/main/docs"
+_GIT_INDEX_VERSION_URL = "https://github.com/your-username/lsr/issues/1"
+_MODELS_AND_KEYS_URL = f"{_DOCS_BASE}/models.md"
+_MODEL_WARNINGS_URL = f"{_DOCS_BASE}/llms.md#warnings"
+_EDIT_FORMATS_URL = f"{_DOCS_BASE}/edit-formats.md"
+_INSTALL_PROPERLY_URL = f"{_DOCS_BASE}/troubleshooting.md#imports"
+
 try:
     import git
 except ImportError:
@@ -18,7 +26,7 @@ import importlib_resources
 import shtab
 from dotenv import load_dotenv
 
-from lsr import __version__, urls, utils
+from lsr import __version__, utils
 from lsr.args import get_parser
 from lsr.llm import litellm  # noqa: F401; properly init litellm on launch
 from lsr.repo import ANY_VCS_ERROR
@@ -398,7 +406,7 @@ def sanity_check_repo(repo, io):
         io.tool_error("Aider only works with git repos with version number 1 or 2.")
         io.tool_output("You may be able to convert your repo: git update-index --index-version=2")
         io.tool_output("Or run lsr --no-git to proceed without using git.")
-        io.offer_url(urls.git_index_version, "Open documentation url for more info?")
+        io.offer_url(_GIT_INDEX_VERSION_URL, "Open documentation url for more info?")
         return False
 
     io.tool_error("Unable to read repository, it may be corrupt?")
@@ -474,11 +482,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
     from lsr.models import ModelSettings
     from lsr.onboarding import offer_openrouter_oauth, select_default_model
     from lsr.repo import Repo
-    from lsr.report import report_uncaught_exceptions
-    from lsr.versioncheck import check_version, install_from_main_branch, install_upgrade
-    from lsr.watch import FileWatcher
-
-    report_uncaught_exceptions()
 
     if git is None:
         args.git = False
@@ -659,21 +662,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
         if right_repo_root:
             return main(argv, input, output, right_repo_root, return_coder=return_coder)
 
-    if args.just_check_update:
-        update_available = check_version(io, just_check=True, verbose=args.verbose)
-        return 0 if not update_available else 1
-
-    if args.install_main_branch:
-        success = install_from_main_branch(io)
-        return 0 if success else 1
-
-    if args.upgrade:
-        success = install_upgrade(io)
-        return 0 if success else 1
-
-    if args.check_update:
-        check_version(io, verbose=args.verbose)
-
     if args.git:
         vcs_root = setup_vcs(vcs_root, io)
         if args.gitignore:
@@ -743,7 +731,7 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
             io.tool_error(
                 f"Unable to proceed without an OpenRouter API key for model '{args.model}'."
             )
-            io.offer_url(urls.models_and_keys, "Open documentation URL for more info?")
+            io.offer_url(_MODELS_AND_KEYS_URL, "Open documentation URL for more info?")
             return 1
 
     main_model = models.Model(
@@ -843,7 +831,7 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
             io.tool_output("You can skip this check with --no-show-model-warnings")
 
             try:
-                io.offer_url(urls.model_warnings, "Open documentation url for more info?")
+                io.offer_url(_MODEL_WARNINGS_URL, "Open documentation url for more info?")
                 io.tool_output()
             except KeyboardInterrupt:
                 return 1
@@ -892,20 +880,12 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
         args.max_chat_history_tokens or main_model.max_chat_history_tokens,
     )
 
-    if args.cache_prompts and args.map_refresh == "auto":
-        args.map_refresh = "files"
-
     if not main_model.streaming:
         if args.stream:
             io.tool_warning(
                 f"Warning: Streaming is not supported by {main_model.name}. Disabling streaming."
             )
         args.stream = False
-
-    if args.map_tokens is None:
-        map_tokens = main_model.get_repo_map_tokens()
-    else:
-        map_tokens = args.map_tokens
 
     # Track auto-commits configuration
 
@@ -921,7 +901,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
             auto_commits=args.auto_commits,
             dirty_commits=args.dirty_commits,
             dry_run=args.dry_run,
-            map_tokens=map_tokens,
             verbose=args.verbose,
             stream=args.stream,
             use_git=args.git,
@@ -932,9 +911,7 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
             test_cmd=args.test_cmd,
             commands=commands,
             summarizer=summarizer,
-            map_refresh=args.map_refresh,
             cache_prompts=args.cache_prompts,
-            map_mul_no_files=args.map_multiplier_no_files,
             num_cache_warming_pings=args.cache_keepalive_pings,
             suggest_shell_commands=args.suggest_shell_commands,
             chat_language=args.chat_language,
@@ -946,7 +923,7 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
         )
     except UnknownEditFormat as err:
         io.tool_error(str(err))
-        io.offer_url(urls.edit_formats, "Open documentation about edit formats?")
+        io.offer_url(_EDIT_FORMATS_URL, "Open documentation about edit formats?")
         return 1
     except ValueError as err:
         io.tool_error(str(err))
@@ -954,21 +931,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
 
     if return_coder:
         return coder
-
-    ignores = []
-    if vcs_root:
-        ignores.append(str(Path(vcs_root) / ".gitignore"))
-    if args.lsrignore:
-        ignores.append(args.lsrignore)
-
-    if args.watch_files:
-        file_watcher = FileWatcher(
-            coder,
-            gitignores=ignores,
-            verbose=args.verbose,
-            root=str(Path.cwd()) if args.subtree_only else None,
-        )
-        coder.file_watcher = file_watcher
 
     coder.show_announcements()
 
@@ -1000,12 +962,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
     if args.lint or args.test or args.commit:
         return
 
-    if args.show_repo_map:
-        repo_map = coder.get_repo_map()
-        if repo_map:
-            io.tool_output(repo_map)
-        return
-
     if args.apply:
         content = io.read_text(args.apply)
         if content is None:
@@ -1020,18 +976,6 @@ def main(argv=None, input=None, output=None, force_vcs_root=None, return_coder=F
     if args.apply_clipboard_edits:
         args.edit_format = main_model.editor_edit_format
         args.message = "/paste"
-
-    if args.show_release_notes is True:
-        io.tool_output(f"Opening release notes: {urls.release_notes}")
-        io.tool_output()
-        webbrowser.open(urls.release_notes)
-    elif args.show_release_notes is None and is_first_run:
-        io.tool_output()
-        io.offer_url(
-            urls.release_notes,
-            "Would you like to see what's new in this version?",
-            allow_never=False,
-        )
 
     if vcs_root and Path.cwd().resolve() != Path(vcs_root).resolve():
         io.tool_warning(
@@ -1149,7 +1093,7 @@ def check_and_load_imports(io, is_first_run, verbose=False):
             except Exception as err:
                 io.tool_error(str(err))
                 io.tool_output("Error loading required imports. Did you install lsr properly?")
-                io.offer_url(urls.install_properly, "Open documentation url for more info?")
+                io.offer_url(_INSTALL_PROPERLY_URL, "Open documentation url for more info?")
                 sys.exit(1)
 
             if verbose:
@@ -1176,8 +1120,6 @@ def load_slow_imports(swallow=True):
     try:
         import httpx  # noqa: F401
         import litellm  # noqa: F401
-        import networkx  # noqa: F401
-        import numpy  # noqa: F401
     except Exception as e:
         if not swallow:
             raise e

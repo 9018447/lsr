@@ -16,7 +16,6 @@ class TestCoderCreation:
         model.cache_control = False
         model.edit_format = "diff"
         model.commit_message_models.return_value = []
-        model.use_repo_map = False
         model.max_chat_history_tokens = 1024
         model.weak_model = model
         model.info = {}
@@ -25,7 +24,6 @@ class TestCoderCreation:
         model.reminder = None
         model.system_prompt_prefix = None
         model.get_thinking_tokens.return_value = None
-        model.get_repo_map_tokens.return_value = 0
 
         args = MagicMock()
         args.disable_lsp = False
@@ -43,7 +41,6 @@ class TestCoderCreation:
             commands=commands,
             fnames=[],
             use_git=False,
-            map_tokens=0,
         )
 
         assert isinstance(coder, Coder)

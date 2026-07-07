@@ -122,7 +122,6 @@ class ModelSettings:
     name: str
     edit_format: str = "diff"
     weak_model_name: Optional[str] = None
-    use_repo_map: bool = False
     send_undo_reply: bool = False
     lazy: bool = False
     overeager: bool = False
@@ -198,14 +197,18 @@ class ModelInfoManager:
         self.local_model_metadata = {}
         self.verify_ssl = True
         self._cache_loaded = False
+        self._openrouter_manager = None
 
-        # Manager for the cached OpenRouter model database
-        self.openrouter_manager = OpenRouterModelManager()
+    @property
+    def openrouter_manager(self):
+        if self._openrouter_manager is None:
+            self._openrouter_manager = OpenRouterModelManager()
+        return self._openrouter_manager
 
     def set_verify_ssl(self, verify_ssl):
         self.verify_ssl = verify_ssl
-        if hasattr(self, "openrouter_manager"):
-            self.openrouter_manager.set_verify_ssl(verify_ssl)
+        if self._openrouter_manager is not None:
+            self._openrouter_manager.set_verify_ssl(verify_ssl)
 
     def _load_cache(self):
         if self._cache_loaded:
@@ -509,7 +512,6 @@ class Model(ModelSettings):
     def apply_generic_model_settings(self, model):
         if "/o3-mini" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.use_temperature = False
             self.system_prompt_prefix = "Formatting re-enabled. "
             self.system_prompt_prefix = "Formatting re-enabled. "
@@ -519,14 +521,12 @@ class Model(ModelSettings):
 
         if "gpt-4.1-mini" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = False
             return  # <--
 
         if "gpt-4.1" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = False
             return  # <--
@@ -540,21 +540,18 @@ class Model(ModelSettings):
             return  # <--
 
         if "/o1-mini" in model:
-            self.use_repo_map = True
             self.use_temperature = False
             self.use_system_prompt = False
             return  # <--
 
         if "/o1-preview" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.use_temperature = False
             self.use_system_prompt = False
             return  # <--
 
         if "/o1" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.use_temperature = False
             self.streaming = False
             self.system_prompt_prefix = "Formatting re-enabled. "
@@ -564,14 +561,12 @@ class Model(ModelSettings):
 
         if "deepseek" in model and "v3" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.reminder = "sys"
             self.examples_as_sys_msg = True
             return  # <--
 
         if "deepseek" in model and ("r1" in model or "reasoning" in model):
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.use_temperature = False
             self.reasoning_tag = "think"
@@ -579,27 +574,23 @@ class Model(ModelSettings):
 
         if "deepseek" in model and "v4" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             if "reasoning_effort" not in self.accepts_settings:
                 self.accepts_settings.append("reasoning_effort")
             return  # <--
 
         if ("llama3" in model or "llama-3" in model) and "70b" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.send_undo_reply = True
             self.examples_as_sys_msg = True
             return  # <--
 
         if "gpt-4-turbo" in model or ("gpt-4-" in model and "-preview" in model):
             self.edit_format = "udiff"
-            self.use_repo_map = True
             self.send_undo_reply = True
             return  # <--
 
         if "gpt-4" in model or "claude-3-opus" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.send_undo_reply = True
             return  # <--
 
@@ -609,7 +600,6 @@ class Model(ModelSettings):
 
         if "sonnet-4-" in model or "opus-4-" in model or "haiku-4-" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.examples_as_sys_msg = False
             if "opus-4-" in model:
                 self.use_temperature = False
@@ -623,7 +613,6 @@ class Model(ModelSettings):
 
         if "3-7-sonnet" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.reminder = "user"
             if "thinking_tokens" not in self.accepts_settings:
@@ -632,7 +621,6 @@ class Model(ModelSettings):
 
         if "3.5-sonnet" in model or "3-5-sonnet" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.examples_as_sys_msg = True
             self.reminder = "user"
             return  # <--
@@ -650,13 +638,11 @@ class Model(ModelSettings):
         ):
             self.edit_format = "diff"
             self.editor_edit_format = "editor-diff"
-            self.use_repo_map = True
             return  # <--
 
         if "qwq" in model and "32b" in model and "preview" not in model:
             self.edit_format = "diff"
             self.editor_edit_format = "editor-diff"
-            self.use_repo_map = True
             self.reasoning_tag = "think"
             self.examples_as_sys_msg = True
             self.use_temperature = 0.6
@@ -665,7 +651,6 @@ class Model(ModelSettings):
 
         if "qwen3" in model:
             self.edit_format = "diff"
-            self.use_repo_map = True
             self.use_temperature = 0.7
             if "thinking_budget" not in self.accepts_settings:
                 self.accepts_settings.append("thinking_budget")
@@ -675,7 +660,6 @@ class Model(ModelSettings):
 
         # use the defaults
         if self.edit_format == "diff":
-            self.use_repo_map = True
             return  # <--
 
     def __str__(self):

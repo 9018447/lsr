@@ -1,7 +1,5 @@
 import argparse
 
-from lsr import urls
-
 from .dump import dump  # noqa: F401
 
 
@@ -27,7 +25,7 @@ class DotEnvFormatter(argparse.HelpFormatter):
 # LLM parameters:
 #
 # Include xxx_API_KEY parameters and other params needed for your LLMs.
-# See {urls.llms} for details.
+# See https://github.com/your-username/lsr/blob/main/docs/llms.md for details.
 
 ## OpenAI
 #OPENAI_API_KEY=

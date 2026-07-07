@@ -272,7 +272,6 @@ class InputOutput:
         llm_history_file=None,
         editingmode=EditingMode.EMACS,
         fancy_input=True,
-        file_watcher=None,
         multiline_mode=False,
         root=".",
         notifications=False,
@@ -395,7 +394,6 @@ class InputOutput:
                     "Detected dumb terminal, disabling fancy input and pretty output."
                 )
 
-        self.file_watcher = file_watcher
         self.root = root
 
         # Initialize status bar
@@ -701,8 +699,6 @@ class InputOutput:
 
                     self.interrupted = False
                     if not multiline_input:
-                        if self.file_watcher:
-                            self.file_watcher.start()
                         if self.clipboard_watcher:
                             self.clipboard_watcher.start()
 
@@ -723,13 +719,6 @@ class InputOutput:
                 else:
                     line = input(show)
 
-                # Check if we were interrupted by a file change
-                if self.interrupted:
-                    line = line or ""
-                    if self.file_watcher:
-                        cmd = self.file_watcher.process_changes()
-                        return cmd
-
             except EOFError:
                 raise
             except Exception as err:
@@ -742,8 +731,6 @@ class InputOutput:
                 self.tool_error(str(err))
                 return ""
             finally:
-                if self.file_watcher:
-                    self.file_watcher.stop()
                 if self.clipboard_watcher:
                     self.clipboard_watcher.stop()
 
